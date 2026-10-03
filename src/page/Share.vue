@@ -1,28 +1,33 @@
 
 <template>
   <div class="MatcShareDialog" @keydown.stop @keyup.stop @keypress.stop>
-    <div class="field MatcShareRow">
+    <LanguagePicker @change="setLanguage"  :hasLabel="true"/>
+    <div class="form-group MatcShareRow">
       <label>Test</label>
-      <input type="text" class="input" :value="testLink" @focus="select" />
+      <input type="text" class="form-control" :value="testLink" @focus="select" />
       <a class="MatcShareIcon" :href="testLink" target="_QuantUXTest">
-        <span class="mdi mdi-share" />
+        <QIcon icon="Share"/>
       </a>
     </div>
 
-    <div class="field MatcShareRow">
+    <div class="form-group MatcShareRow">
       <label>Share and Comment</label>
-      <input type="text" class="input" :value="shareLink" @focus="select" />
+      <input type="text" class="form-control" :value="shareLink" @focus="select" />
       <a class="MatcShareIcon" :href="shareLink" target="_QuantUXShare">
-        <span class="mdi mdi-share" />
+        <QIcon icon="Share"/>
       </a>
     </div>
 
-    <div class="field MatcShareRow">
+    <div class="form-group  MatcShareRow">
       <label>Low-Code Token</label>
-      <input type="text" class="input" :value="`${hash}`" @focus="select" ref="hashInput" />
+      <input type="text" class="form-control" :value="`${hash}`" @focus="select" ref="hashInput" />
       <a class="MatcShareIcon" @click="copy" target="_QuantUXShare">
-        <span class="mdi mdi-content-copy" />
+        <QIcon icon="Copy"/>
       </a>
+    </div>
+
+    <div class="MatcMarginTopL MatcShareRow form-group">
+      <CheckBox v-model="doNotStore" label="Do not store test data" />
     </div>
 
     <div class="MatcMarginTop MatcShareRow MatcSharePasswordRow" v-if="hasPassword">
@@ -38,6 +43,13 @@
     </div>
   </div>
 </template>
+
+<style lang="scss">
+  @import "../style/share.scss";
+</style>
+
+
+
 <style scoped>
 .MatcSharePasswordRow {
   display: flex;
@@ -58,6 +70,8 @@
 <script>
 import DojoWidget from "dojo/DojoWidget";
 import CheckBox from "common/CheckBox";
+import LanguagePicker from "page/LanguagePicker";
+import QIcon from "page/QIcon";
 
 export default {
   name: "ShareForm",
@@ -67,11 +81,21 @@ export default {
       isPublic: false,
       needPassword: false,
       hasPassword: false,
+      language: 'en',
+      doNotStore: false,
+      languageOptions: [
+        {value: 'en', label: 'English'},
+        {value: 'de', label: 'German'},
+        {value: 'pt', label: 'Portuguese'},
+        {value: 'cn', label: 'Chinese'}
+      ],
       invitation: "--- Loading ---"
     };
   },
   components: {
-    CheckBox: CheckBox
+    'CheckBox': CheckBox,
+    'LanguagePicker': LanguagePicker,
+    'QIcon': QIcon
   },
   computed: {
     base() {
@@ -95,9 +119,14 @@ export default {
     },
     testLink() {
       let testURL = this.base + "/#/test.html?h=" + this.passwortedHash;
-      if (this.isPublic) {
+      console.debug('testLink', this.doNotStore)
+      if (this.isPublic || this.doNotStore) {
         testURL += "&log=false";
       }
+      if (this.language) {
+         testURL += "&ln=" + this.language;
+      }
+      console.debug(testURL)
       return testURL;
     },
     shareLink() {
@@ -109,6 +138,9 @@ export default {
     }
   },
   methods: {
+    setLanguage (ln) {
+      this.language = ln
+    },
     setInvitation(inv) {
       this.invitation = inv;
     },

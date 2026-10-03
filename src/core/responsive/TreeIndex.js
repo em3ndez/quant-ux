@@ -1,0 +1,263 @@
+import Logger from "../Logger"
+import * as Util from "./ExportUtil"
+import * as Quant2Flat from "./Quant2Flat"
+
+/**
+ * Id of the virtual screen that holds widgets which are not in any screen.
+ */
+export const CANVAS_ID = 'canvas'
+
+/**
+ * Builds a flat Map<ChildId, ParentId> for a model, i.e. for every widget
+ * we determine its parent, either another widget, a group or the screen
+ * it lives on. It also keeps the reverse Map<ParentId, ChildId[]> of direct
+ * children.
+ *
+ * This uses the same logic as ResponsiveLayout.initSelection():
+ *
+ * 1) Quant2Flat.transform() adds virtual "Box" widgets for groups, so that
+ *    groups (and nested groups) show up as regular parents.
+ * 2) Flat2Tree.transformScreenToTree()'s parent detection is then used to
+ *    determine, for every widget (real or virtual group wrapper), its
+ *    direct parent.
+ *
+ * Instead of building a nested tree, this just records the parent id of
+ * each widget/group in a Map.
+ */
+export default class TreeIndex {
+
+    constructor(model) { 
+        this.build(model)
+    }
+
+    update(model) {
+        this.build(model)
+    }
+
+    build(model) {
+        this.model = model
+        this.parents = new Map()
+        this.children = new Map()
+        this.maxZ = this.buildMaxZValue(model.widgets)
+        let start = new Date().getTime()
+        const flatModel = Quant2Flat.transform(model)
+        for (let screenId in flatModel.screens) {
+            const screen = flatModel.screens[screenId]
+            this.buildScreen(screen, flatModel)
+        }
+        this.buildCanvas(flatModel)
+        let end = new Date().getTime()
+        if ((end - start) > 50) {
+            Logger.warn('TreeIndex.build() > SLOW took : ', (end - start))
+        }
+
+        return this.parents
+    }
+
+    buildMaxZValue(widgets) {
+        let max = -10000;
+        let l = 0;
+        for (let id in widgets) {
+            const w = widgets[id];
+            max = Math.max(w.z, max);
+            l++;
+        }
+        if (l > 0) {
+            return max;
+        } else {
+            return 0;
+        }
+    }
+
+    /**
+     * Widgets that are not contained in any screen are mapped to a virtual
+     * screen with the id CANVAS_ID.
+     */
+    buildCanvas(model) {
+        const inScreen = new Set()
+        for (let screenId in model.screens) {
+            model.screens[screenId].children.forEach((id) => inScreen.add(id))
+        }
+        const children = Object.keys(model.widgets || {}).filter((id) => !inScreen.has(id))
+        if (children.length > 0) {
+            this.buildScreen({ id: CANVAS_ID, children }, model)
+        }
+    }
+
+    buildScreen(screen, model) {
+        const widgets = Util.getOrderedWidgets(this.getWidgets(screen, model))
+
+        /**
+         * As we iterate the widgets in z-order, we keep track of the widgets
+         * that could be a parent. We unshift, so that widgets added last
+         * (i.e. rendered on top) are checked first.
+         */
+        const potentialParents = []
+
+        widgets.forEach((widget) => {
+            const parent = this.findParent(potentialParents, widget, model)
+            if (parent && Util.canBeChild(widget, parent)) {
+                this.setParent(widget.id, parent.id)
+            } else {
+                this.setParent(widget.id, screen.id)
+            }
+
+            if (Util.canHaveChildren(widget)) {
+                potentialParents.unshift(widget)
+            }
+        })
+    }
+
+    setParent(childId, parentId) {
+        this.parents.set(childId, parentId)
+        if (!this.children.has(parentId)) {
+            this.children.set(parentId, [])
+        }
+        this.children.get(parentId).push(childId)
+    }
+
+    /**
+     * Find the parent for a widget. First we check if the widget is visually
+     * contained in one of the potential parents. If not, we fall back to the
+     * explicit parentId, e.g. set by a Figma import.
+     */
+    findParent(potentialParents, widget, model) {
+        for (let i = 0; i < potentialParents.length; i++) {
+            const parent = potentialParents[i]
+            if (Util.isContainedInBox(widget, parent, 1)) {
+                return parent
+            }
+        }
+        if (widget.parentId) {
+            return model.widgets[widget.parentId]
+        }
+        return null
+    }
+
+    getWidgets(screen, model) {
+        return screen.children
+            .map((id) => model.widgets[id])
+            .filter((widget) => widget !== undefined)
+    }
+
+    getParent(id) {
+        return this.parents.get(id)
+    }
+    
+    getParentWidget(id, step=0) {
+        const parentID = this.parents.get(id)
+        if (parentID) {
+            if (this.model.groups && this.model.groups[parentID] && step < 100) {
+                return this.getParentWidget(parentID, step+1)
+            }
+            return this.model.widgets[parentID]
+        }
+    }
+
+    getMaxZLevel() {
+        return this.maxZ
+    }
+
+
+    /**
+     * Returns the id of the closest ancestor that is not a group, skipping
+     * over any groups in between. Returns undefined if there is none.
+     */
+    getNonGroupParent(id) {
+        const groups = this.model.groups
+        const visited = new Set([id])
+        let parentID = this.parents.get(id)
+        while (parentID && groups && groups[parentID] && !visited.has(parentID)) {
+            visited.add(parentID)
+            parentID = this.parents.get(parentID)
+        }
+        return parentID
+    }
+
+    hasParent(id) {
+        return this.parents.has(id)
+    }
+
+    /**
+     * Returns the direct children of a widget/group/screen id, i.e. not the
+     * children of children. Returns an empty array if there are none.
+     */
+    getChildren(id) {
+        return this.children.get(id) || []
+    }
+
+    /**
+     * Returns all descendants of a widget/group/screen id (children, their
+     * children, and so on) as an array, in depth-first order. Returns an
+     * empty array if there are none. By default (excludeGroups) group ids are
+     * left out of the result, but their members are still included. Pass
+     * false to include the groups.
+     */
+    getAllChildren(id, excludeGroups = true) {
+        const result = new Set()
+        this.collectChildren(id, result)
+        result.delete(id)
+        const children = [...result]
+        if (excludeGroups && this.model.groups) {
+            return children.filter((childId) => !this.model.groups[childId])
+        }
+        return children
+    }
+
+    collectChildren(id, result) {
+        for (const childId of this.getChildren(id)) {
+            if (!result.has(childId)) {
+                result.add(childId)
+                this.collectChildren(childId, result)
+            }
+        }
+    }
+
+    /**
+     * Groups do not get their own entry in the model. Instead
+     * Quant2Flat.transform() creates a virtual widget with this id to
+     * represent the group in the tree. Use it to look up the parent of a
+     * group, e.g. index.getParent(index.getGroupWrapperId(groupId)).
+     */
+    getGroupWrapperId(groupId) {
+        return `${groupId}`
+    }
+
+    /**
+     * Prints the whole tree, starting at the screens and the virtual canvas,
+     * down through all their (nested) children. Mostly useful for debugging.
+     */
+    print() {
+        const roots = new Set(this.children.keys())
+        for (const id of this.parents.keys()) {
+            roots.delete(id)
+        }
+        for (const rootId of roots) {
+            this.printNode(rootId, 0)
+        }
+    }
+
+    printNode(id, depth) {
+        console.log(`${'  '.repeat(depth)}${this.getLabel(id)}`)
+        this.getChildren(id).forEach((childId) => this.printNode(childId, depth + 1))
+    }
+
+    getLabel(id) {
+        const widget = this.model.widgets && this.model.widgets[id]
+        if (widget) {
+            return `${id} [${widget.type}${widget.name ? ': ' + widget.name : ''}]`
+        }
+        const screen = this.model.screens && this.model.screens[id]
+        if (screen) {
+            return `${id} [Screen: ${screen.name}]`
+        }
+        const group = this.model.groups && this.model.groups[id]
+        if (group) {
+            return `${id} [Group: ${group.name}]`
+        }
+        if (id === CANVAS_ID) {
+            return `${id} [Canvas]`
+        }
+        return id
+    }
+}

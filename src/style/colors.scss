@@ -1,0 +1,20 @@
+@import './variables.scss';
+
+.MactMainGradient{
+     //background-image: linear-gradient(30deg,$primary_color 0%, $primary_color_hover 100%);
+     background-color: $page_color_secondary_dark;
+     background-image: radial-gradient(rgba(#115EFF, 0.1)  0, rgba(151, 71, 255, 0.1) 32%, rgba(55, 135, 242, 0.1) 50%, $page_color_secondary_dark 70%);
+     background-size: 640px 640px;
+     background-repeat: no-repeat;
+     background-position: center;
+     animation: breath;
+     animation-duration: 2s;
+     animation-iteration-count: infinite;
+}
+
+@keyframes breath {
+     0%   {background-size: 640px 640px;}
+     50%  {background-size: 680px 680px;}
+     100% {background-size: 640px 640px}
+}
+   

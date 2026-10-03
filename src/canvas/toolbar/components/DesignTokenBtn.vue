@@ -1,17 +1,20 @@
 
 <template>
     <div class="MatcDesignTokenButton"  @mousedown.stop="" >
-      <span class="mdi mdi-dots-horizontal" v-show="isVisible"/>
-    	<ul class="MatcToolbarPopUp MatcToolbarDropDownButtonPopup MatcDesignTokenButtonPopup" role="menu" data-dojo-attach-point="popup">
+
+      <QIcon v-show="isVisible" :icon="icon"></QIcon>
+
+ 
+    	  <ul class="MatcToolbarPopUp MatcToolbarDropDownButtonPopup MatcDesignTokenButtonPopup" role="menu" data-dojo-attach-point="popup">
 
         <template v-if="!isTemplate">
           <li @mousedown.stop="showCreateDialog" v-show="!hasDesignToken" class="MatcDesignTokenButtonHeader">
-              <span class="MatcToolbarItemIcon mdi mdi mdi-plus-circle"></span>
+              <QIcon icon="Plus"/>
               <label class="MatcToolbarPopUpLabel">Create {{tokenLabel}} Token</label>
 
           </li>
           <li @mousedown.stop="onUnLink" v-show="hasDesignToken" class="MatcDesignTokenButtonHeader">
-              <span class="MatcToolbarItemIcon mdi mdi mdi-minus-circle MatcToolbarPopUpIconDanger"></span>
+              <QIcon icon="Delete"/>
               <label class="MatcToolbarPopUpLabel">Remove Design Token</label>
           </li>
         </template>
@@ -23,7 +26,7 @@
         <!-- add here list and filter -->
         <ul class="MatcDesignTokenButtonPreviews" v-if="!isTemplate">
           <li v-for="designtoken in filteredTokens" :key="designtoken.id" @mousedown="onSelectToken(designtoken)" >
-            <DesignTokenPreview :designtoken="designtoken"/>
+            <DesignTokenPreview :designtoken="designtoken" />
           </li>
         </ul>
 
@@ -41,6 +44,7 @@ import DomBuilder from 'common/DomBuilder'
 import lang from 'dojo/_base/lang'
 import touch from 'dojo/touch'
 import on from 'dojo/on'
+import QIcon from 'page/QIcon.vue'
 
 export default {
     name: 'DesignTokenBtn',
@@ -55,6 +59,7 @@ export default {
            tokenType: '',
            tokenLabel: 'XX',
            tokenLabels: {
+             'tooltip': 'Tooltip',
              'color': 'Color',
              'boxShadow': 'Shadow',
              'stroke': 'Border',
@@ -64,6 +69,12 @@ export default {
         }
     },
     computed: {
+      icon () {
+        if (this.currentDesignToken) {
+          return 'EditPencil'
+        }
+        return 'Plus'
+      },
       filteredTokens () {
         let result = []
         if (this.model && this.model.designtokens) {
@@ -77,7 +88,8 @@ export default {
       }
     },
     components: {
-      'DesignTokenPreview': DesignTokenPreview
+      'DesignTokenPreview': DesignTokenPreview,
+      'QIcon': QIcon
     },
     methods: {
 
@@ -110,7 +122,6 @@ export default {
         this.hideDropDown()
       },
       onSelectToken (designtoken) {
-        console.debug('onSelect', designtoken)
         this.emit('link', designtoken, this.cssProps)
       },
       onUnLink () {
@@ -128,7 +139,7 @@ export default {
         let inputName = db.input("form-control input-lg MatcIgnoreOnKeyPress", this.box.name , "Name of the design token").build(cntr);
 
         let bar = db.div("MatcButtonBar MatcMarginTopXL").build(popup);
-        let write = db.div("MatcButton", "Create").build(bar);
+        let write = db.div("MatcButton MatcButtonPrimary", "Create").build(bar);
         let cancel = db.a("MatcLinkButton ", "Cancel").build(bar);
         dialog.own(on(cancel, touch.press, lang.hitch(dialog, "close")));
         dialog.own(on(inputName, 'keyup', e => {

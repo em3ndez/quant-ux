@@ -1,7 +1,13 @@
 <template>
-     <div class="MatcToolbarLayerList MatcToobarPropertiesSection MatcToolbar">
+     <div class="MatcToolbarLayerList MatcToobarPropertiesSection MatcToolbar" v-show="isVisible" :style="'width:'+ layerListWidth +'px'">
 		<div class="MatcToolbarLayerListCntr" data-dojo-attach-point="cntr">
-			<div class="MatcToolbarLayerListScreenCntr">
+			<div class="MatcToolbarLayerListHeader" v-if="showAiButton">
+				<AIModeButton @change="setLayerListMode"></AIModeButton> 
+			</div>
+		
+
+		
+			<div class="MatcToolbarLayerListScreenCntr" v-show="layerListMode === 'layers'">
 				<div class="MatcLayerListScreens">
 
 						<div class=" MatcToolbarSectionContent" >
@@ -17,14 +23,30 @@
 
 				</div>
 			</div>
+			
+			<AIChat v-show="layerListMode === 'ai'"
+				@settings="onSettings"
+				ref="aiChat" 
+				@agentScreenChunk="onAgentScreenChunk"
+				@agentUnlockScreens="onAgentUnlockScreens"
+				@agentResult="onAgentResult"/>
+			<div ref="aiChatIframe" class="MatcAiChatIFrame"></div>
+			
 		</div>
+	
+		<div class="MatcToolbarLayerListDND" ref="dndHanlde" @mousedown.stop="onResizeStart"></div>
 	</div>
 </template>
 <script>
 import DojoWidget from 'dojo/DojoWidget'
 import Logger from 'common/Logger'
 import Util from 'core/Util'
+import ModelUtil from '../../core/ModelUtil'
 import Tree from 'common/Tree'
+import {onStartDND} from '../../util/DND'
+import * as LayoutContainerUtil from '../../core/LayoutContainerUtil'
+import AIModeButton from './components/AIModeButton'
+import AIChat from './chat/AIChat.vue'
 
 export default {
 	name: 'LayerList',
@@ -32,26 +54,105 @@ export default {
     mixins:[Util, DojoWidget],
     data: function () {
         return {
-					selection: [],
-					screenListeners: {},
-					collapsed: {},
-					openNodes: {},
-					root: {},
-					trees: [],
-					nodes: {}
+			selection: [],
+			screenListeners: {},
+			collapsed: {},
+			openNodes: {},
+			root: {},
+			trees: [],
+			nodes: {},
+			isVisible: true,
+			hasOptions: true,
+			isDebug: false,
+			showAiButton: false,
+			layerListMode: 'layers',
+			layerListWidth: 256, // keep in sync with Toolbar
         }
     },
     components: {
-			'Tree': Tree
+			'Tree': Tree,
+			'AIModeButton': AIModeButton,
+			'AIChat': AIChat
 		},
     methods: {
-      	postCreate (){
-			this.logger = new Logger("LayerList");
-			this.logger.log(-1,"constructor", "entry > " + this.mode);
+		onAgentScreenChunk (chunkResult) {
+			this.logger.log(-1, 'onAgentScreenChunk', 'enter', chunkResult)
+			if (this.controller && this.canvas) {
+				const viewPort = this.canvas.getViewPort()
+				const box = this.controller.addAiResult(chunkResult, viewPort)
+				/**
+				 * Focus only the first screen of a run: the user's attention
+				 * moves to where the app is being built, and the later screens
+				 * then appear next to it without yanking the canvas around
+				 * while the user is already looking at the first one.
+				 */
+				const change = chunkResult.changes && chunkResult.changes[0]
+				const sessionID = change && change.sessionID
+				if (!this.focusedAgentSessions) {
+					this.focusedAgentSessions = new Set()
+				}
+				if (!sessionID || !this.focusedAgentSessions.has(sessionID)) {
+					if (sessionID) {
+						this.focusedAgentSessions.add(sessionID)
+					}
+					this.canvas.zoomToBox(box, true)
+				}
+			}
 		},
+		onAgentUnlockScreens (data) {
+			this.logger.log(-1, 'onAgentUnlockScreens', 'enter', data)
+			if (this.controller && data && data.sessionID) {
+				this.controller.unlockSessionScreens(data.sessionID)
+			}
+		},
+		onAgentResult (result) {
+			this.logger.log(-1, 'onAgentResult', 'enter', result)
+			if (result.isStreamed) {
+				if (this.controller && result.sessionID) {
+					this.controller.unlockSessionScreens(result.sessionID)
+				}
+				return
+			}
+			if (this.controller && this.canvas) {
+				const viewPort = this.canvas.getViewPort()
+				const box = this.controller.addAiResult(result, viewPort)
+				// an update or delete adds no screen: keep the user where they are
+				if (result.changes && result.changes.some(c => c.type === 'addScreen')) {
+					this.canvas.zoomToBox(box, true)
+				}
+			}
+		},
+		onSettings (e) {
+			if (this.toolbar) {
+				this.toolbar.showAISettings(e)
+			}
+		},
+		setLayerListMode (m) {
+			this.layerListMode = m
+			this.$nextTick(() => {
+				if (this.$refs.aiChat) {
+					this.$refs.aiChat.setModel(this.model)
+					this.$refs.aiChat.setSelection(this.selection)
+				}
+			})
+		},
+    
+
+		onResizeStart (e) {
+            const pos = this.layerListWidth
+            onStartDND(e, d => {
+				const width = pos + d.x
+                this.layerListWidth = Math.min(Math.max(196, width), 400)
+				this.emit('onWidthChange', this.layerListWidth)           
+            })
+        },
 
 		setController (c){
 			this.controller = c;
+		},
+
+		setTreeIndex (tree) {
+			this.treeIndex = tree
 		},
 
 		setCanvas (c){
@@ -100,6 +201,9 @@ export default {
 					if (type == "widget") {
 						this.controller.updateWidgetProperties(id, {'hidden': value}, 'props', true, true)
 					}
+					if (type == "group") {
+						this.controller.setGroupHide(id, value)
+					}
 				}
 			}
 		},
@@ -110,76 +214,121 @@ export default {
 		},
 
 		onSelect (ids) {
-			this.logger.log(-1, "onSelect", "entry > ", ids);
-			/**
-			 * FIXME: This will later trigger the select() which causes sometimes jumps
-			 */
+			this.logger.log(1, "onSelect", "entry > ", ids);
+			if (!this.canvas) {
+				return
+			}
+			
 			if (ids.length === 1) {
-				let node = this.nodes[ids[0]]
-				if (node) {
-					if (this.canvas) {
-						let type = node.type
-						if (type === 'widget') {
-							this.canvas.onWidgetSelected(node.id, true, true);
-						}
-						if (type === 'group') {
-							this.canvas.onGroupSelected(node.id, true);
-						}
+				const node = this.nodes[ids[0]]
+				if (node) {	
+					const type = node.type
+					if (type === 'widget') {
+						this.canvas.onWidgetSelected(node.id, true, true);
 					}
+					if (type === 'group') {
+						this.canvas.onGroupSelected(node.id, true);
+					}
+					if (type === 'screen') {
+						this.canvas.setSelectedScreens([node.id]);
+					}
+					if (type === 'svg') {
+						this.canvas.onSVGPathsSelected(node.widgetID, [node.pathID]);
+					}				
 				} else {
 					this.logger.log(-1, "onSelect", "No node > ", ids);
 				}
 			} else {
-				if (this.canvas) {
-					this.canvas.onMutliSelected(ids, true);
-				}
+				const screenIDs = ids.filter(id => {
+					let node = this.nodes[id]
+					return node?.type === 'screen'
+				})
+
+				if (screenIDs.length > 0) {
+					this.canvas.setSelectedScreens(screenIDs);
+				} else {	
+					/**
+					 * Since 5.0.3 multi selections can have groups.
+					 */
+					const explodedIDs = ModelUtil.explodeGroupSelection(this.model, ids, true)					
+					this.canvas.onMutliSelected(explodedIDs, true);					
+				}			
 			}
 		},
 
 		onChangeLabel (id, txt) {
 			this.logger.log(1, "onChangeLabel", "entry > ", id + ': ' + txt);
 			if (this.toolbar && this.controller) {
-				let node = this.nodes[id]
+				const node = this.nodes[id]
 				if (node) {
 					this.toolbar.onModelNameChange(id, node.type, txt);
-					let type = node.type
+					const type = node.type
 					if (type == "widget"){
 						this.controller.setWidgetName(id, txt)
-					} else if (type == "screen"){
+					}  
+					if (type == "screen"){
 						this.controller.setScreenName(id, txt)
-					} else if (type == "group"){
+					}  
+					if (type == "group"){
 						this.controller.setGroupName(id, txt)
+					}  
+					if (type == "svg"){
+						this.controller.setSVGPathProps(node.widgetID, node.pathID, "name", txt)
 					}
+				} else {
+					this.logger.log(-1, "onChangeLabel", "No node > ", id);
 				}
-			} else {
-				this.logger.log(-1, "onChangeLabel", "No node > ", id);
+			}
+		},
+		
+		showError(msg) {
+			if (this.canvas) {
+				this.canvas.showError(msg)
 			}
 		},
 
 		onDnd (from, to) {
-			this.logger.log(-1, "onDnd", "entry > ", from + ' -> ' + to);
+			this.logger.log(1, "onDnd", "entry > ", from + ' -> ' + to);
 
-			let fromNode = this.nodes[from]
-			let toNode = this.nodes[to]
+			const fromNode = this.nodes[from]
+			const toNode = this.nodes[to]
+
+			/**
+			 * Why did I add this?
+			 */
+			// if (fromNode.parentID !== toNode.parentID) {
+			// 	this.logger.warn('onDnd', 'Not same parent', fromNode.parentID, toNode.parentID)
+			// 	this.showError("Widgets can be moved only in the same group or container!")
+			// 	return
+			// }
+
 			if (fromNode && toNode) {
 				if (this.controller) {
-					this.controller.changeLayer({
-						source: fromNode.id,
-						widgetID: fromNode.widgetID,
-						screenID: fromNode.screenID,
-						groupID: fromNode.groupID,
-						type: fromNode.type
-					}, {
-						source: toNode.id,
-						widgetID: toNode.widgetID,
-						screenID: toNode.screenID,
-						groupID: toNode.groupID,
-						type: toNode.type
-					});
+					if (this.isPathDnD(fromNode, toNode)) {
+						this.controller.changeSVGLayer(
+							fromNode.widgetID,
+							fromNode.pathID,
+							toNode.pathID
+						)
+					} else {
+						this.controller.changeLayer({
+							source: fromNode.id,
+							widgetID: fromNode.widgetID,
+							screenID: fromNode.screenID,
+							groupID: fromNode.groupID,
+							type: fromNode.type,
+							selection: this.getSelectedWidgetIds()
+						}, {
+							source: toNode.id,
+							widgetID: toNode.widgetID,
+							screenID: toNode.screenID,
+							groupID: toNode.groupID,
+							type: toNode.type
+						})
+					}
 				} else {
-					console.warn('No controller')
+					this.logger.warn('onDnd', 'No controller')
 				}
-
 				if (fromNode.fixed === true && this.canvas) {
 					setTimeout (() => {
 						this.canvas.showHint('Fixed widgets are always rendered on top.')
@@ -188,25 +337,47 @@ export default {
 			}
 		},
 
+		isPathDnD (fromNode, toNode) {
+			return fromNode.widgetID === toNode.widgetID && fromNode.pathID && toNode.pathID
+		},
+
 		render (model){
-			this.logger.log(2,"render", "render > ", model);
+			this.logger.log(2,"render", "enter > ", model);
 			this.model = model;
 			this.createNestedModel(model);
+			if (this.$refs.aiChat) {
+				this.$refs.aiChat.setModel(model)
+			}
+		},
+
+		renderNodeUpdate (box) {
+			this.logger.log(2,"renderNodeUpdate", "enter > ", box.id);
+
+			let node = this.nodes[box.id]
+			if (!node) {
+				return
+			}
+
+			if (box.type === 'SVGPaths') {
+				node.children = []
+				this.addPathNodes(node, box, node.widgetID, node.screenID, node.groupId)
+			}
 		},
 
 
 		createNestedModel (model){
-			var result = [];
-			let root = {
+			const result = [];
+			const root = {
 				name: "",
 				id: model.id,
 				children: []
 			};
 			this.nodes = {}
+			this.variantTemplates = {}
 
 			// 1) Build group lookup
 			let parentGroups = {}
-			for(let id in model.groups){
+			for (let id in model.groups) {
 				let group = model.groups[id]
 				for (let i=0; i < group.children.length; i++) {
 					let widgetID = group.children[i]
@@ -220,65 +391,34 @@ export default {
 				}
 			}
 
-			//
+
+			if (model.templates) {
+				for (let id in model.templates) {
+					const t = model.templates[id]
+					this.variantTemplates[id] = t.variant
+				}
+			}
+			
+			// canvas children
+			const canvasChildren = ModelUtil
+				.getCanvasWidgets(model)
+				.map(w => w.id)
+			
+			if (canvasChildren.length > 0) {
+				let canvasScreen = {
+					id:'CanvasScreen',
+					type: 'canvas',
+					name: 'Canvas',
+					children: canvasChildren
+				}
+				let tree = this.createTreeForScreen(canvasScreen.id, canvasScreen, model, parentGroups)
+				root.children.push(tree)
+			}
 
 			// build a tree for each screen
 			for(let id in model.screens){
 				let screen = model.screens[id];
-				if (this.openNodes[screen.id] === undefined) {
-					this.openNodes[screen.id] = true
-				}
-				let tree = {
-					name: screen.name,
-					label: screen.name,
-					id: screen.id,
-					css: 'MatcToolbarLayerListScreen',
-					icon: this.getAppTypeIcon(model),
-					closeIcon : this.getCloseIcon(screen),
-					openIcon: this.getOpenIcon(screen),
-					open: this.openNodes[screen.id],
-					children: []
-				};
-				this.nodes[id] = tree
-
-				let groupNodes = {};
-				let masterNodes = {}
-				let sorted = this.getSortedScreenChildren(model, screen)
-				for(let i=0; i< sorted.length; i++){
-					let widget = sorted[i];
-
-					/**
-					 * FIMXE: Make here a extra group for the master widgets
-					 */
-					if (widget.inherited) {
-						if (this.includeMasterNodes) {
-							let masterScreen = model.screens[widget.masterScreen]
-							let master = {
-								id: masterScreen.id,
-								name: masterScreen.name,
-								inherited: true,
-								type: 'Master'
-							}
-							let node = this.createNode(widget, widget.id, screen.id, null, 'widget')
-							let masterNode = this.getOrCreateMaster(master, screen.id, masterNodes, tree, widget)
-							masterNode.children.push(node)
-						}
-					} else {
-
-						/**
-						 * Check if we have a group
-						 */
-						if (parentGroups[widget.id]){
-							let group = parentGroups[widget.id]
-							let node = this.createNode(widget, widget.id, screen.id, group.id, 'widget')
-							let groupNode = this.getOrCreateGroup(group, screen.id, groupNodes, parentGroups, tree, widget)
-							groupNode.children.push(node)
-						} else {
-							let node = this.createNode(widget, widget.id, screen.id, null, 'widget')
-							tree.children.push(node)
-						}
-					}
-				}
+				let tree = this.createTreeForScreen(id, screen, model, parentGroups)
 				root.children.push(tree)
 			}
 
@@ -287,6 +427,148 @@ export default {
 			 */
 			this.trees = result
 			this.root = root
+		},
+
+		createTreeForScreen (id, screen, model, parentGroups) {
+	
+			if (this.openNodes[screen.id] === undefined) {
+				this.openNodes[screen.id] = true
+			}
+			const tree = {
+				name: screen.name,
+				label: screen.name,
+				id: screen.id,
+				domId: this.getScrollId(screen.id),
+				css: 'MatcToolbarLayerListScreen',
+				icon: this.getAppTypeIcon(model, screen),
+				closeIcon : this.getCloseIcon(screen),
+				openIcon: this.getOpenIcon(screen),
+				open: this.openNodes[screen.id],
+				type:'screen',
+				children: []
+			};
+			this.nodes[id] = tree
+
+			if (this.selection && this.selection.indexOf(tree.id) >= 0) {
+				tree.selected = true
+			}
+
+			const groupNodes = {};
+			const masterNodes = {}
+			const layoutContainer = {}
+			const sorted = this.getSortedScreenChildren(model, screen)
+		
+
+			// Since 5.0.24 we build a tree for the layout container
+			// we loop in inverse order to sort out child groups
+			// TODO: This fucks up groups and DND in the tree. But it would be nice...
+			for(let i = sorted.length-1; i>=0; i--){
+				const widget = sorted[i];
+	
+				if (LayoutContainerUtil.isLayoutContainerWidget(widget)) {	
+					const children = this.getLayoutContainerChildren(widget, sorted)
+			
+					for (let id of children){
+						// If the widget is under a group (cheap check for children), we will place
+						// the TOP MOST group (it might be nested itself, e.g. Group2 > Group1 > widget)
+						// in the GridContainer and maintain the group/subgroup child relation.
+						// Attaching the immediate group instead of the top most one would overwrite
+						// the subgroup -> parent group relation set up above.
+						if (parentGroups[id] && parentGroups[id].children){
+							const group = this.getTopMostGroup(parentGroups[id], parentGroups)
+							parentGroups[group.id] = widget
+						} else {
+							// else we place the GridContainer as the parent
+							parentGroups[id] = widget
+						}
+						// Either way, the container itself is nested via parentGroups/getOrCreateGroup
+						// below, so it must not also get a separate top-level node in the main loop,
+						// otherwise we end up with two tree nodes sharing the same id.
+						layoutContainer[widget.id] = true
+					}
+				}
+			}
+
+			for(let i=0; i< sorted.length; i++){
+				const widget = sorted[i];
+
+				/**
+				 * FIMXE: Make here a extra group for the master widgets
+				 */
+				if (widget.inherited) {
+					if (this.includeMasterNodes) {
+						const masterScreen = model.screens[widget.masterScreen]
+						const master = {
+							id: masterScreen.id,
+							name: masterScreen.name,
+							inherited: true,
+							type: 'Master'
+						}
+						const node = this.createNode(widget, widget.id, screen.id, null, 'widget')
+						const masterNode = this.getOrCreateMaster(master, screen.id, masterNodes, tree, widget)
+						masterNode.children.push(node)
+					}
+				} else {
+					if (!layoutContainer[widget.id]) {
+						/**
+						 * Check if we have a group
+						 */
+						if (parentGroups[widget.id]){
+							const group = parentGroups[widget.id]							
+							const node = this.createNode(widget, widget.id, screen.id, group.id, 'widget')
+							const groupNode = this.getOrCreateGroup(group, screen.id, groupNodes, parentGroups, tree, widget)
+							node.parentID = group.id
+							groupNode.children.push(node)						
+						} else {
+							const node = this.createNode(widget, widget.id, screen.id, null, 'widget')
+							tree.children.push(node)			
+						}
+					}
+				}
+			}
+			const lastWidget = sorted[sorted.length-1]
+			const end = this.createEndNode(screen.id, lastWidget?.id)
+			tree.children.push(end)
+			return tree
+		},
+
+		getLayoutContainerChildren(cntr, sorted) {
+			const children = []
+			if (this.treeIndex) {
+				const treeChildren = new Set(this.treeIndex.getAllChildren(cntr.id))
+				for (let w of sorted) {
+					if (treeChildren && treeChildren.has(w.id)) {
+							children.push(w.id)
+					}
+				}
+				return children;
+			}
+			// fall back
+			this.logger.warn('getLayoutContainerChildren', 'No tree index passed')
+			for (let w of sorted) {
+				// check here also for the selected widgets?
+				 if (w.z >= cntr.z && w.id !== cntr.id) {
+					if (LayoutContainerUtil.isFullContained(cntr, w)) {
+						children.push(w.id)
+					}
+				}
+			}
+			return children
+		},
+
+		/**
+		 * Groups can be nested (a group's own id can appear in a parent
+		 * group's "groups" array, see the parentGroups build up in
+		 * createNestedModel()). Walk up that chain to find the outer most
+		 * group, so a layout container always attaches to the top of the
+		 * chain instead of a subgroup in the middle of it.
+		 */
+		getTopMostGroup (group, parentGroups) {
+			let current = group
+			while (parentGroups[current.id] && parentGroups[current.id].children) {
+				current = parentGroups[current.id]
+			}
+			return current
 		},
 
 		getSortedScreenChildren (model, screen) {
@@ -319,6 +601,11 @@ export default {
 			 */
 			if (!groupNodes[group.id]){
 
+				let type = 'group'
+				if (LayoutContainerUtil.isLayoutContainerWidget(group)) {
+					type = 'widget'
+				}
+
 
 				/**
 				 * Check if we have to create parent groups
@@ -326,13 +613,14 @@ export default {
 				if (parentGroups[group.id]) {
 					let parentGroup = parentGroups[group.id]
 
-					let newGroupNode = this.createNode(group, widget.id, screenId, parentGroup.id, 'group');
+					let newGroupNode = this.createNode(group, widget.id, screenId, parentGroup.id, type);
 					groupNodes[group.id] = newGroupNode;
 
 					let parentNode = this.getOrCreateGroup(parentGroup, screenId, groupNodes, parentGroups, tree, widget)
 					parentNode.children.push(newGroupNode)
+					newGroupNode.parentID = parentGroup.id
 				} else {
-					let newGroupNode = this.createNode(group, widget.id, screenId, null, 'group');
+					let newGroupNode = this.createNode(group, widget.id, screenId, null, type); // group must be null, otherwise we will merge on DND
 					groupNodes[group.id] = newGroupNode;
 
 					tree.children.push(newGroupNode);
@@ -341,12 +629,29 @@ export default {
 			return groupNodes[group.id]
 		},
 
-		createNode (box, widgetID, screenID, groupId, type = 'widget', defaultIsOpen = true) {
+		createEndNode (screenID, widgetID) {
+			const node = {
+				id: screenID +'end',
+				type:'end',
+				screenID: screenID,
+				widgetID: widgetID,
+				widgetType: 'box.type',
+				domId: screenID+'End',
+				dndType: 'box',
+				isEnd:true	
+			}
+			this.nodes[node.id] = node
+			return node
+		},
+
+		createNode (box, widgetID, screenID, groupId, type = 'widget', defaultIsOpen = false) {
 			if (this.openNodes[box.id] === undefined) {
 				this.openNodes[box.id] = defaultIsOpen
 			}
-			let node = {
+			const node = {
 				id: box.id,
+				widgetType: box.type,
+				domId: this.getScrollId(box.id),
 				widgetID: widgetID,
 				screenID: screenID,
 				groupID: groupId,
@@ -360,7 +665,10 @@ export default {
 				hidde: false,
 				open: this.openNodes[box.id],
 				inherited: box.inherited,
-				fixed: false
+				fixed: false,
+				z: box.z,
+				dndType: 'box',
+				hasOptions: this.hasOptions
 			}
 
 			if (box.props) {
@@ -368,8 +676,24 @@ export default {
 				node.hidden = box.props.hidden === true
 			}
 
+			if (box.children) {
+				// for groups we compute the hidden property.
+				const allChildren = ModelUtil.getAllGroupChildren(box, this.model)
+				const hiddenChildren = allChildren.filter(childId => {
+					let child = this.model.widgets[childId]
+					if (child) {
+						if (child.props.hidden === true) {
+							return true
+						}
+					}	
+					return false
+				})
+				if (hiddenChildren.length === allChildren.length) {
+					node.hidden = true
+				}
+			}
+
 			if (box.style && box.style.fixed) {
-				node.label += ' (fixed)'
 				node.fixed = true
 			}
 
@@ -381,9 +705,88 @@ export default {
 			if (box.props && box.props.label) {
 				node.hint = box.props.label
 			}
+
+			if (box.isNewTemplateChild) {
+				node.label += ' *' // keep this for debugging
+			}
+
+			if (this.isDebug && node.z !== undefined) {
+				const suffix = box.style.fixed ? '*': ''
+				node.label += ` [${node.z}${suffix}]`
+			}
+			
+			if (box.type === 'SVGPaths') {
+				this.addPathNodes(node, box, widgetID, screenID, groupId, defaultIsOpen)
+			}
+
+			if (this.selection && this.selection.indexOf(node.id) >= 0) {
+				node.selected = true
+			}
+
 			this.nodes[node.id] = node
 			this.lastNode = node
 			return node;
+		},
+
+		addPathNodes (node, box, widgetID, screenID, groupId, defaultIsOpen) {
+			if (!box.props || !box.props.paths) {
+				return
+			}
+			const paths = box.props.paths
+			if (paths.length > 1) {
+				for (let i = paths.length-1; i >= 0; i--) {
+					const p = paths[i]
+					const pathNode = this.createPathNode(box, p, widgetID, screenID, groupId, defaultIsOpen)
+					node.children.push(pathNode)
+				}
+			}
+		},
+
+		createPathNode (box, path, widgetID, screenID, groupId, defaultIsOpen = true) {
+			
+			if (this.openNodes[path.id] === undefined) {
+				this.openNodes[path.id] = defaultIsOpen
+			}
+			const id = this.getPathId(box.id, path.id)
+			let node = {
+				id: id,
+				domId: this.getScrollId(id),
+				widgetID: widgetID,
+				screenID: screenID,
+				groupID: groupId,
+				pathID: path.id,
+				label: path.name, // + ' (' + box.id + ') ' + box.z,
+				icon: this.getPathIcon(path),
+				closeIcon : this.getCloseIcon(box),
+				openIcon: this.getOpenIcon(box),
+				children:[],
+				type: 'svg',
+				locked: false,
+				hidde: false,
+				open: this.openNodes[box.id],
+				inherited: box.inherited,
+				fixed: false,
+				z: box.z,
+				hasOptions: false,
+				dndType: 'svg_' + box.id 
+			}
+
+
+			if (this.selection && this.selection.indexOf(node.id) >= 0) {
+				node.selected = true
+			}
+
+			this.nodes[node.id] = node
+			this.lastNode = node
+			return node;
+		},
+
+		getPathId (boxID, pathID) {
+			return pathID + "@" + boxID
+		},
+
+		getScrollId (id) {
+			return 'layerListItem' + id
 		},
 
 		getCloseIcon (box) {
@@ -400,19 +803,53 @@ export default {
 			return 'mdi mdi-chevron-down MatcTreeIcon'
 		},
 
+		getPathIcon () {
+			//console.debug('getPathIcon', path)
+			return 'mdi mdi-vector-curve'
+		},
+
 
 		getNodeIcon (box, type){
-			if (type === 'screen') {
-				return  this.getAppTypeIcon()
+			
+			if (box.template) {
+				if (box.isRootTemplate) {
+					return "mdi mdi mdi-view-grid  MatcIcon45";
+				} else {
+					return "mdi mdi-view-grid-outline MatcIcon45"; // return "mdi mdi mdi-border-all-variant MatcIcon45";
+				}
 			}
 
-			if (box.template) {
-				return "mdi mdi-puzzle-outline";
+
+			if (box.type === 'SVGPaths') {
+				if (box.props && box.props.paths && box.props.paths.length > 1) {
+					return "mdi mdi-vector-combine"
+				}
+				return 'mdi mdi-vector-curve'
+			}
+
+			if (box.type === 'Image') {
+				return 'mdi mdi-image-outline'
+			}
+
+			if (box.type === 'GridContainer') {
+				return 'GridContainer'		
+			}
+
+			if (box.type === 'FlexContainer') {
+				if (box.style.flexDirection === 'row') {
+					return 'FlexContainerRow'
+				}
+				return 'FlexContainerCol'		
 			}
 
 			if (type === 'group') {
-				return 'mdi mdi-crop-free'
+				if (box.autoGroup) {
+					return 'mdi mdi-grid-large'// 'mdi mdi-vector-link'
+				}
+				return 'mdi mdi-vector-union'
 			}
+
+
 			if (box.type == "Master") {
 				return "mdi mdi-content-duplicate";
 			}
@@ -421,23 +858,29 @@ export default {
 			}
 
 
-			if (box.w > box.h) {
-				// this is funny, but we would need live update...
-				//return "mdi mdi-crop-landscape";
+			if (Math.abs(box.w - box.h) < 10) {
+				if (box?.style?.borderTopLeftRadius > box.w /2) {
+					return 'mdi mdi-circle-outline'
+				}
+				return 'mdi mdi-crop-square'
 			}
-
+			if (box.w > box.h) {
+				return "mdi mdi-crop-landscape";
+			}
 			return "mdi mdi-crop-portrait";
 		},
 
 
-    getAppTypeIcon (model) {
-      if (model.type == "smartphone") {
-        return "mdi mdi-cellphone";
-      } else if (model.type == "tablet") {
-        return "mdi mdi-tablet-ipad";
-      }
-      return "mdi mdi-laptop";
-    },
+		getAppTypeIcon (model, screen) {
+			if (screen.type === 'canvas') {
+				return "mdi mdi-border-none-variant MatcTreeIconRoot";
+			} else if (model.type == "smartphone") {
+				return "mdi mdi-crop-portrait MatcTreeIconRoot";
+			} else if (model.type == "tablet") {
+				return "mdi mdi-crop-landscape MatcTreeIconRoot";
+			}
+			return "mdi  mdi mdi-crop-landscape MatcTreeIconRoot";
+		},
 
 		changeName (box) {
 			let node = this.nodes[box.id]
@@ -459,6 +902,9 @@ export default {
 
 		unSelect () {
 			this.unSelectNodes()
+			if (this.$refs.aiChat) {
+				this.$refs.aiChat.setSelection([])
+			}
 		},
 
 		selectGroup (groupID){
@@ -469,36 +915,119 @@ export default {
 			this.selectNode([widgetID])
 		},
 
+		selectSVGPath (widgetID, pathID) {
+			const id = this.getPathId(widgetID, pathID)
+			this.selectNode([id])
+		},
+
 		selectMulti (ids) {
 			this.selectNode(ids)
 		},
 
-		selectNode (ids, scroll = true) {
+		selectScreen(screenID) {
+			this.selectNode([screenID])
+		},
+
+		selectScreens(screenIDs) {
+			this.selectNode(screenIDs)
+		},
+
+
+		selectNode (ids) {
 			this.unSelectNodes()
-			ids.forEach(id => {
-				let node = this.nodes[id]
-				if (node) {
-					this.$set(node, 'selected', true)
-					this.$set(node, 'scroll', scroll)
-				}
-			})
 			this.selection = ids
+			this.$nextTick(() => {
+				ids.forEach(id => {
+					this.expandIfNeeded(id)
+					const node = this.nodes[id]
+					if (node) {
+						this.$set(node, 'selected', true)
+					} else {
+						this.logger.log(4, 'selectNode', 'No node with id: ' + id)
+					}
+				})
+				this.scrollToSelection(ids)
+				this.$forceUpdate()
+			})			
+			if (this.$refs.aiChat) {
+				this.$refs.aiChat.setSelection(ids)
+			}
+		},
+
+		getSelectedWidgetIds () {
+			const result = new Set()
+			if (this.selection) {
+				this.selection.forEach(id => {
+					let node = this.nodes[id]
+					if (node.type === 'widget') {
+						result.add(node.widgetID)
+					}
+					if (node.type === 'group') {
+						this._getGroupChildren(node, result)
+					}
+				})
+			}
+			return Array.from(result)
+		},
+
+		_getGroupChildren(node, result) {
+			if (node.children) {
+				node.children.forEach(child => {
+		
+					if (child.type === 'widget') {
+						result.add(child.widgetID)
+					}
+					if (child.type === 'group') {
+						this._getGroupChildren(child, result)
+					}
+				})
+			}
+		},
+
+		expandIfNeeded (id) {
+			let node = this.nodes[id]
+			while (node && node.groupID) {
+				this.openNodes[node.groupID] = true
+				node = this.nodes[node.groupID]
+				if (node) {
+					this.$set(node, 'open', true)
+				} 
+			}
+		},
+
+		scrollToSelection(ids) {
+			const id = ids[0]
+
+			if (id) {
+				const element = document.getElementById(this.getScrollId(id))
+				if (element) {
+					element.scrollIntoViewIfNeeded(true)
+				} else {
+					this.logger.log(4,'scrollToSelection', 'No node with id: ' + this.getScrollId(id))
+				}
+			}
 		},
 
 		unSelectNodes () {
 			for (let id in this.nodes) {
 				let node = this.nodes[id]
 				this.$set(node, 'selected', false)
-				this.$set(node, 'scroll', false)
+				//this.$set(node, 'scroll', false)
 			}
 		},
 
-		setSelectedWidget (){
-			console.warn('setSelectedWidget() DEPRCATED', new Error().stack)
+		hide () {
+			this.isVisible = false
 		},
 
-		setSelectedGroup (){
-			console.warn('setSelectedGroup() DEPRCATED', new Error().stack)
+		show () {
+			this.isVisible = true
+		},
+
+		postCreate (){
+			this.logger = new Logger("LayerList");
+			this.logger.log(2,"constructor", "entry > " + this.mode);
+			this.isDebug = location.href.indexOf('debug=true') >= 0
 		}
 	},
 	watch: {
@@ -507,9 +1036,12 @@ export default {
 		}
 	},
   mounted () {
-		if (this.value) {
-			this.render(this.value)
-		}
+	if (this.value) {
+		this.render(this.value)
+	}
+	if (location.href.indexOf('localhost') > 0) {
+		this.showAiButton = true
+	}
   }
 }
 </script>

@@ -2,10 +2,13 @@
 <template>
   <div class="MatcWidgetTypeDropDown MatcWidgetTypeDateDropDown">
     <div data-dojo-attach-point="button" class="MatcWidgetTypeDropDownCntr">
-      <div data-dojo-attach-point="label" class="MatcWidgetTypeDateDropDownLabel"></div>
+      <div  class="MatcWidgetTypeDateDropDownLabel">
+        <span data-dojo-attach-point="label"></span>
+      </div>
     </div>
-
-    <div class="MatcWidgetTypeDropDownPopUp" role="menu" data-dojo-attach-point="popup"></div>
+    <div >
+      <div class="MatcWidgetTypeDropDownPopUp" role="menu" data-dojo-attach-point="popup"></div>
+    </div>
   </div>
 </template>
 <script>
@@ -30,7 +33,7 @@ export default {
   },
   components: {},
   methods: {
-    postCreate: function() {
+    postCreate() {
       this._borderNodes = [this.button];
       this._shadowNodes = [this.button];
       this._backgroundNodes = [this.button];
@@ -39,17 +42,18 @@ export default {
       this._isOpen = false;
     },
 
-    getLabelNode: function() {
+    getLabelNode() {
       return this.label;
     },
 
-    render: function(model, style, scaleX, scaleY) {
+    render(model, style, scaleX, scaleY) {
       this.model = model;
       this.style = style;
       this._scaleX = scaleX;
       this._scaleY = scaleY;
       this.setStyle(style, model);
       this.isRange = model.props.range;
+      this.isModal = model.props.modal
 
       this.showDefaultValue();
 
@@ -61,7 +65,7 @@ export default {
             .build(this.button);
           this.icon = db.span(model.props.icon).build(this.iconCntr);
         }
-        this.icon.style.fontSize = style.fontSize * this._scaleY + "px";
+        this.icon.style.fontSize = Math.round(style.fontSize * this._scaleY) + "px";
         this.iconCntr.style.top = this._getBorderWidth(style.paddingTop) + "px";
         this.iconCntr.style.right =
           this._getBorderWidth(style.paddingRight) + "px";
@@ -70,7 +74,7 @@ export default {
       this.resize(model);
     },
 
-    showDefaultValue: function() {
+    showDefaultValue() {
       if (this.model.props.label) {
         this.setTextContent(this.label, this.model.props.label);
         css.add(this.label, "MatcWidgetTypeDateDropDownDefaultLabel");
@@ -79,9 +83,9 @@ export default {
           if (this.model.props.preselectRange) {
             // var from = this.createNow();
 
-            let now = new Date().getTime();
-            var from = this.convertMillisToQDate(now + 86400000 * 2);
-            var to = this.convertMillisToQDate(now + 86400000 * 4);
+            const now = new Date().getTime();
+            const from = this.convertMillisToQDate(now + 86400000 * 2);
+            const to = this.convertMillisToQDate(now + 86400000 * 4);
 
             this.value = {
               from: from,
@@ -90,7 +94,7 @@ export default {
               defaultValue: false
             };
           } else {
-            let now = this.createNow();
+            const now = this.createNow();
             this.value = {
               from: now,
               to: now,
@@ -104,8 +108,8 @@ export default {
         }
       } else {
         if (this.isRange) {
-          let now = this.createNow();
-          var range = {
+          const now = this.createNow();
+          const range = {
             from: now,
             to: now,
             view: now
@@ -121,49 +125,52 @@ export default {
     /**
      * Overwrite and do nothing
      */
-    resize: function() {},
+    resize() {},
 
     /**
      * Overwrite and do nothing
      */
-    _set_popupBackground: function() {},
+    _set_popupBackground() {},
 
     /**
      * Overwrite and do nothing
      */
-    _set_popupColor: function() {},
+    _set_popupColor() {},
 
-    onOpenPopup: function(e) {
+    onOpenPopup(e) {
       this.stopEvent(e);
       this.emitNoTransitionStateChange("open", "", e);
       this.renderPopup();
       return false;
     },
 
-    renderPopup: function() {
+    renderPopup() {
       if (!this._isOpen) {
+        const popup = this.popup
         // var db = new DomBuilder();
+
+        // FIXME: Should be model on
 
         /**
          * We estimate the size by the fontSize...
          */
-        var w = Math.max(
+        const w = Math.max(
           this.getZoomed(this.style.fontSize * 18, this._scaleX),
           this.model.w
         );
-        var h = this.getZoomed(this.style.fontSize * 18, this._scaleX);
-        this.popup.style.height = h + "px";
-        this.popup.style.width = w + "px";
+        const h = this.getZoomed(this.style.fontSize * 18, this._scaleX);
+        popup.style.height = h + "px";
+        popup.style.width = w + "px";
 
-        var popupModel = lang.clone(this.model);
+        const popupModel = lang.clone(this.model);
         popupModel.h = h;
         popupModel.w = w;
         delete popupModel.props.databinding;
 
-        var datePicker = this.$new(QDate)
+        const datePicker = this.$new(QDate)
         datePicker.mode = this.mode
         datePicker.render(popupModel, this.getPopupStyle(), this._scaleX, this._scaleY);
-        datePicker.placeAt(this.popup);
+        datePicker.placeAt(popup);
         datePicker.setValue(this.value);
 
         css.add(this.domNode, "MatcWidgetTypeDropDownOpen");
@@ -184,8 +191,8 @@ export default {
       }
     },
 
-    getPopupStyle: function() {
-      var popupStyle = lang.clone(this.style);
+    getPopupStyle() {
+      const popupStyle = lang.clone(this.style);
 
       popupStyle.background = this.style.popupBackground;
       popupStyle.color = this.style.popupColor;
@@ -219,7 +226,7 @@ export default {
       return popupStyle;
     },
 
-    onSelect: function(e) {
+    onSelect(e) {
 
       /**
        * we have here two kind of events. The plus or minus button were pressed. In this
@@ -231,7 +238,7 @@ export default {
        * FIXME: Introduce navigate state change in Date.js
        */
       if (e.selection) {
-        let event = {
+        const event = {
           type: "select",
           value: e.value,
           runTransition: true,
@@ -242,16 +249,11 @@ export default {
         this.emit("stateChange", event);
         this.setValue(event.value);
 
-        /**
-         * FIXME: This is hacky shit!!! The player will not like this
-         * and will close at the moment.
-         */
-        var me = this;
-        setTimeout(function() {
-          me.cleanUp();
+        setTimeout(() =>  {
+          this.cleanUp();
         }, 150);
       } else {
-        var event = {
+        const event = {
           type: "navigate",
           value: e.value,
           runTransition: false,
@@ -262,13 +264,13 @@ export default {
       }
     },
 
-    onClose: function(e) {
+    onClose(e) {
       this.stopEvent(e);
       this.emitNoTransitionStateChange("close", "", e);
       this.cleanUp();
     },
 
-    cleanUp: function() {
+    cleanUp() {
       if (this._isOpen) {
         try {
           /**
@@ -297,18 +299,18 @@ export default {
       }
     },
 
-    getValue: function() {
+    getValue() {
       return this.value;
     },
 
     /**
      * Override form DropDown.js!
      */
-    _setDataBindingValue: function(v) {
+    _setDataBindingValue(v) {
       this.setValue(v);
     },
 
-    setValue: function(value, ignoreValidation) {
+    setValue(value, ignoreValidation) {
       if (value) {
         css.remove(this.label, "MatcWidgetTypeDateDropDownDefaultLabel");
 
@@ -353,7 +355,7 @@ export default {
       }
     },
 
-    getState: function() {
+    getState() {
       /**
        * we should have here a composite state..
        */
@@ -363,14 +365,14 @@ export default {
       };
     },
 
-    getStateOptions: function() {
+    getStateOptions() {
       return {
         value: this.value,
         open: this._isOpen
       };
     },
 
-    setState: function(state) {
+    setState(state) {
       if (state) {
         var type = state.type;
         switch (type) {
@@ -418,14 +420,14 @@ export default {
       }
     },
 
-    beforeDestroy: function() {
+    beforeDestroy() {
       this.cleanUp();
     },
 
     /**
      * Copied from QDate
      */
-    _validateValue: function(value) {
+    _validateValue(value) {
       var validation = this.model.props.validation;
       if (validation) {
         if (this.isRange) {
@@ -462,7 +464,7 @@ export default {
       return true;
     },
 
-    isValid: function(showError) {
+    isValid(showError) {
       return this.validate(this.value, showError);
     }
   },

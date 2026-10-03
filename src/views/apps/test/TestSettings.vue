@@ -20,7 +20,7 @@
                   <td>
                     <template v-if="task.flow && task.flow.length > 0">
                       <div class="StepCntr">
-                          <div v-for="(step, i) in getTaskSteps(task)" :key="i" class="Step">
+                          <div v-for="(step, i) in getTaskSteps(task)" :key="i" :class="'Step ' + step.type">
                             <span class="mdi mdi-arrow-right" v-if="i > 0"/>
                             <div class="StepDetails">{{shorten(step.label, 20)}}  </div>
                          </div>
@@ -31,14 +31,21 @@
                     <span class="MatcHint" v-else>No steps </span>
                   </td>
                   <td class=" action">
-                    <a class=" button " @click="onEditTask(task, i, $event)">Edit</a>
-                    <a class=" button is-danger" @click="onDelete(task, i, $event)"><span class=" mdi mdi-close"></span></a>
+                    <div style="min-width: 100px; width:100%; ">
+                    <a class="MatcButton MatcButtonXXS MatcButtonSecondary" @click="onEditTask(task, i, $event)"><QIcon icon="EditSquare" tooltip="Edit" attachToParent="true"/></a>
+                    <a class="MatcButton MatcButtonXXS MatcButtonSecondary" @click="onCopyTask(task, i, $event)"><QIcon icon="Paste" tooltip="Duplicate" attachToParent="true"/></a>
+                    <a class="MatcButton MatcButtonXXS MatcButtonDanger MatcButtonSecondary" @click="onDelete(task, i, $event)"><QIcon icon="DeleteTrash" tooltip="Delete" attachToParent="true"/></a>
+                    </div>
                   </td>
                 </tr>
             </tbody>
           </table>
           <div class="form-group mb-32">
             <CheckBox :value="test.showTaskInTest" :label="getNLS('testSettingsShowTaskInTest')" @change="onShowTaskChange"/>
+              </div>
+
+          <div class="form-group" v-if="test.showTaskInTest" >
+            <CheckBox :value="test.showSuccessInTest" :label="getNLS('testSettingsShowSuccessInTest')" @change="onShowSuccessInTest"/>
           </div>
 
           </div>
@@ -47,13 +54,13 @@
           </p>
         </div>
 
-        <a data-nls="testSettingsAddTask" @click="showCreateDialog" class="button is-primary">Add task</a>
+        <a data-nls="testSettingsAddTask" @click="showCreateDialog" class="MatcButton MatcButtonXS">Add task</a>
 
 
   </div>
 </template>
 <style lang="scss">
-  @import '../../../style/scss/task_create_dialog.scss';
+  @import '../../../style/components/task_create_dialog.scss';
 </style>
 <script>
 import DojoWidget from "dojo/DojoWidget";
@@ -67,6 +74,7 @@ import DomBuilder from "common/DomBuilder";
 import CheckBox from "common/CheckBox";
 import Util from "core/Util";
 import Plan from "page/Plan";
+import QIcon from "page/QIcon";
 import Services from "services/Services";
 import TaskRecorder from "views/apps/analytics/TaskCreateDialog";
 
@@ -83,7 +91,8 @@ export default {
     };
   },
   components: {
-    'CheckBox': CheckBox
+    'CheckBox': CheckBox,
+    'QIcon':QIcon
   },
   computed: {
     pub() {
@@ -124,7 +133,8 @@ export default {
 
     createStep (event) {
       return {
-        label: this.getEventLabel(event.type) + ' - ' + (event.widget ? this.getWidgetName(event.widget) + ' @ ' + this.getScreenName(event.screen): this.getScreenName(event.screen))
+        label: (event.widget ? this.getWidgetName(event.widget) : this.getScreenName(event.screen)),
+        type: event.widget ? 'widget' : 'screen'
       }
     },
 
@@ -167,6 +177,10 @@ export default {
       this.save();
     },
 
+    onShowSuccessInTest (value) {
+      this.test.showSuccessInTest = value
+      this.save();
+    },
 
     showCreateDialog () {
       var d = new Dialog();
@@ -184,6 +198,8 @@ export default {
       d.own(on(d, "close", function() { s.destroy(); }));
       d.own(on(s, "close", function() { d.close(); }));
       d.own(on(s, "save", lang.hitch(this, "createNewTask", s, d)));
+      s.focus()
+
     },
 
     async createNewTask(s, dialog) {
@@ -204,6 +220,25 @@ export default {
       this.save();
     },
 
+    onCopyTask (task, i, e) {
+
+      const copy = lang.clone(task)
+      copy.name += ' (Copy)'
+
+      var d = new Dialog();
+      var dialog = document.createElement("div");
+      css.add(dialog, "MatchTaskRecorderDialog");
+      var s = this.$new(TaskRecorder, { model: this.app, hash: this.hash, ignoreFirstEvent: true});
+      s.setValue(copy)
+      s.placeAt(dialog);
+      d.popup(dialog, e.target);
+      d.own(on(d, "close", function() { s.destroy(); }));
+      d.own(on(s, "close", function() { d.close(); }));
+      d.own(on(s, "save", lang.hitch(this, "createNewTask", s, d)));
+      s.focus()
+
+    },
+
     onEditTask(task, i, e) {
       var d = new Dialog();
       var dialog = document.createElement("div");
@@ -215,6 +250,8 @@ export default {
       d.own(on(d, "close", function() { s.destroy(); }));
       d.own(on(s, "close", function() { d.close(); }));
       d.own(on(s, "save", lang.hitch(this, "updateTask", s, d)));
+      s.focus()
+
     },
 
     updateTask(s, dialog) {
@@ -237,12 +274,12 @@ export default {
 
     onDelete (task, i, e) {
       var name = task.name ? task.name : task.label;
-      var div = this.db.div("box MatcDeleteDialog").build();
+      var div = this.db.div("MatcDeleteDialog").build();
       this.db.h3("title is-4", this.getNLS("testSettingTaskDeleteTitle")).build(div);
-      this.db.p('', this.getNLS("testSettingTaskDelete1") + name + this.getNLS("testSettingTaskDelete2")).build(div)
-      var bar = this.db.div("buttons").build(div);
-      var write = this.db.a("button is-danger", this.getNLS("btn.delete")).build(bar);
-      var cancel = this.db.a("button is-text", this.getNLS("btn.cancel")).build(bar);
+      this.db.p('MatcMarginBottomXL', this.getNLS("testSettingTaskDelete1") + name + this.getNLS("testSettingTaskDelete2")).build(div)
+      var bar = this.db.div("MatcButtonBar").build(div);
+      var write = this.db.a("MatcButton MatcButtonDanger", this.getNLS("btn.delete")).build(bar);
+      var cancel = this.db.a("MatcLinkButton", this.getNLS("btn.cancel")).build(bar);
       var d = new Dialog();
       d.own(on(write, touch.press, lang.hitch(this, "removeTask", i, d)));
       d.own(on(cancel, touch.press, lang.hitch(d, "close")));

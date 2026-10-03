@@ -5,41 +5,49 @@ import css from 'dojo/css'
 import win from 'dojo/_base/win'
 import ModelUtil from 'core/ModelUtil'
 
+
 export default {
-    name: 'Add',
-    mixins:[],
-    data: function () {
-        return {
-            addNDropOffSet: 10,
-            zoomOnLineAdd: false
-        }
-    },
-    components: {},
-    methods: {
-      addMultiThemedScreens (params){
+	name: 'Add',
+	mixins: [],
+	data: function () {
+		return {
+			addNDropOffSet: 10,
+			zoomOnLineAdd: false
+		}
+	},
+	components: {},
+	methods: {
+		addMultiThemedScreens(params) {
+			let z = this.getZoomFactor();
 
-			var z = this.getZoomFactor();
+			let screens = params.obj;
+			let clonedScreens = []
 
-			var screens = params.obj;
-			var clonedScreens = []
-
-			var pos = this.getCanvasMousePosition(params.event);
+			let pos = this.getCanvasMousePosition(params.event);
 			pos = this.getUnZoomedBox(pos, this.zoom, this.zoom);
-			for(var i=0; i< screens.length;i++){
+			for (let i = 0; i < screens.length; i++) {
 				/**
 				 * FIXME: Do something with rows???
 				 */
-				var screen = screens[i];
-				var clonedScreen = this.getZoomedBox(lang.clone(screen),z,z);
+				let screen = screens[i];
+				let clonedScreen = this.getZoomedBox(lang.clone(screen), z, z);
 				clonedScreens.push(clonedScreen);
-				clonedScreen.x = pos.x + (this.model.screenSize.w + this.getZoomed(100,this.zoom)) * i;
+				clonedScreen.x = pos.x + (this.model.screenSize.w + this.getZoomed(100, this.zoom)) * i;
 				clonedScreen.y = pos.y;
 			}
 			this.controller.addMultiScreens(clonedScreens, true);
 		},
 
-		addRestObject (params){
-			this.logger.log(1,"addRestObject", "enter");
+		addScriptObject(params) {
+			this.logger.log(1, "addScriptObject", "enter");
+
+			this._createAddCommand("addScriptObject", params);
+
+			this._addWidget(params, params.obj, "addScript");
+		},
+
+		addRestObject(params) {
+			this.logger.log(1, "addRestObject", "enter");
 
 			this._createAddCommand("addRestObject", params);
 
@@ -47,8 +55,8 @@ export default {
 		},
 
 
-		addLogicGroup (params){
-			this.logger.log(0,"addLogicGroup", "enter");
+		addLogicGroup(params) {
+			this.logger.log(0, "addLogicGroup", "enter");
 
 			this._createAddCommand("addLogicGroup", params);
 
@@ -57,7 +65,7 @@ export default {
 		},
 
 
-		addClonedWidget (zoomedModel, e){
+		addClonedWidget(zoomedModel, e) {
 
 			/**
 			 * Same as adding themed widget. Just we do not change mode
@@ -65,70 +73,75 @@ export default {
 			 * on mouse up!
 			 */
 			var params = {
-				obj : this.getUnZoomedBox(zoomedModel, this.zoom, this.zoom),
-				event : e,
-				mouseup : true
+				obj: this.getUnZoomedBox(zoomedModel, this.zoom, this.zoom),
+				event: e,
+				mouseup: true
 			};
 			this.addThemedWidget(params, "distance");
 		},
+
+
+		addImportedApp(params) {
+			this.logger.log(1, "addThemedScreenAndWidgets", "enter", params);
+			this._createAddCommand("addImportedApp", params);
+			this._addScreensAndWidgets(params, params.obj, 'MatcImportBox');
+		},
+
 
 		/**********************************************************************
 		 * Add  from Theme. Themes are essentially the same as templates, but we
 		 * do not assume there is a template defined in the model. Instead, there
 		 * is an external theme and we will copy all styles
 		 **********************************************************************/
-		addThemedWidget (params, mode){
-			this.logger.log(1,"addThemedWidget", "enter");
+		addThemedWidget(params, mode) {
+			this.logger.log(1, "addThemedWidget", "enter");
 			this._createAddCommand("addThemedWidget", params);
 			this._addWidget(params, params.obj, mode);
 		},
 
 
-		addThemedScreen (params){
-			this.logger.log(1,"addThemedScreen", "enter");
+		addThemedScreen(params) {
+			this.logger.log(1, "addThemedScreen", "enter");
 			this._createAddCommand("addThemedScreen", params);
 			this._addScreen(params, params.obj);
 		},
 
-		addThemedScreenAndWidgets (params){
-			this.logger.log(-1,"addThemedScreenAndWidgets", "enter", params);
+		addThemedScreenAndWidgets(params) {
+			this.logger.log(-1, "addThemedScreenAndWidgets", "enter", params);
 			this._createAddCommand("addThemedScreenAndWidgets", params);
 			this._addScreensAndWidgets(params, params.obj);
 		},
 
 
-		addThemedGroup (params){
-			this.logger.log(1,"addThemedGroup", "enter");
-
+		addThemedGroup(params) {
+			this.logger.log(1, "addThemedGroup", "enter");
 			this._createAddCommand("addThemedGroup", params);
+			const group = params.obj;
+			const z = this.getZoomFactor();
 
-			var group = params.obj;
-
-			var z = this.getZoomFactor();
-
+	
 			/**
 			 * create div
 			 */
-			var boundingBox = this.getBoundingBoxByBoxes(group.children);
-			boundingBox = this.getZoomedBox(boundingBox,z,z);
+			let boundingBox = this.getBoundingBoxByBoxes(group.children);
+			boundingBox = this.getZoomedBox(boundingBox, z, z);
 
-			var div = this.createBox(boundingBox);
+			const div = this.createBox(boundingBox);
 			css.add(div, "MatcAddBox")
 
-			var children = group.children;
-			for(var i=0; i< children.length; i++){
-				var child = children[i];
+			const children = group.children;
+			for (let i = 0; i < children.length; i++) {
+				const child = children[i];
 				/**
 				 * Create a copy and resize it...Otherwise
 				 * the zoomed model arrives in the controller..
 				 */
-				var widget = this.getZoomedBox(lang.clone(child),z,z);
-				var widgetDIV = this.createWidget(widget);
+				const widget = this.getZoomedBox(lang.clone(child), z, z);
+				const widgetDIV = this.createZoomedWidget(widget);
 				div.appendChild(widgetDIV);
-
 			}
 
-			if(!this._alignmentToolInited){
+			if (!this._alignmentToolInited) {
 				this.alignmentStart("boundingbox", boundingBox, "All");
 			}
 
@@ -139,8 +152,8 @@ export default {
 		},
 
 
-		_onThemedGroupAdd (pos, group){
-			this.logger.log(0,"_onThemedGroupAdd", "enter");
+		_onThemedGroupAdd(pos, group) {
+			this.logger.log(0, "_onThemedGroupAdd", "enter");
 
 			this.controller.addGroupByTheme(group, pos);
 
@@ -155,16 +168,17 @@ export default {
 		 * Add Template
 		 **********************************************************************/
 
-		addTemplatedWidget (params){
-			this.logger.log(1,"addTemplatedWidget", "enter > " + params.id);
+		addTemplatedWidget(params) {
+			this.logger.log(1, "addTemplatedWidget", "enter > " + params.id);
 
 			this._createAddCommand("addTemplatedWidget", params);
 
 			/**
 			 * check what kind of template this is.
 			 */
-			var widget = this.factory.createTemplatedModel(params);
+			const widget = this.factory.createTemplatedModel(params);
 			ModelUtil.inlineBoxDesignToken(widget, this.model)
+
 			/**
 			 * Render drag and drop!
 			 */
@@ -173,15 +187,15 @@ export default {
 
 
 
-		addTemplatedScreen (params){
-			this.logger.log(0,"addTemplatedScreen", "enter");
+		addTemplatedScreen(params) {
+			this.logger.log(0, "addTemplatedScreen", "enter");
 
 			this._createAddCommand("addTemplatedScreen", params);
 
 		},
 
-		addTemplatedGroup (params){
-			this.logger.log(-1,"addTemplatedGroup", "enter > XXX");
+		addTemplatedGroup(params) {
+			this.logger.log(-1, "addTemplatedGroup", "enter > XXX");
 
 			this._createAddCommand("addTemplatedGroup", params);
 
@@ -190,37 +204,38 @@ export default {
 			this._addTemplatedGroup(params, group, "_onTemplateGroupAdd");
 		},
 
-		_addTemplatedGroup (params, group, callback){
+		_addTemplatedGroup(params, group, callback) {
 
 			this.setMode("add");
 
-			var z = this.getZoomFactor();
+			const z = this.getZoomFactor();
 
 			/**
 			 * create div
 			 */
-			var boundingBox = this.getBoundingBox(group.children);
-			boundingBox = this.getZoomedBox(boundingBox,z,z);
-			var div = this.createBox(boundingBox);
+			let boundingBox = this.getBoundingBox(group.children);
+			boundingBox = this.getZoomedBox(boundingBox, z, z);
+			const div = this.createBox(boundingBox);
 			css.add(div, "MatcAddBox")
 
-			var children = this.getTemplateGroupOrderChildren(group);
-			for(var i=0; i< children.length; i++){
-				var child = children[i];
-				var widget = this.factory.createTemplatedModel(child);
-				widget = this.getZoomedBox(widget,z,z);
-				var widgetDIV = this.createZoomedWidget(widget);
+			const children = this.getTemplateGroupOrderChildren(group);
+			for (var i = 0; i < children.length; i++) {
+				const child = children[i];
+				let widget = this.factory.createTemplatedModel(child);
+				widget = this.getZoomedBox(widget, z, z);
+				this._addSetZToMax(widget, i)
+				const widgetDIV = this.createZoomedWidget(widget);
 				div.appendChild(widgetDIV);
 			}
 
-			if(!this._alignmentToolInited){
+			if (!this._alignmentToolInited) {
 				this.alignmentStart("boundingbox", boundingBox, "All");
 			}
 			this._onAddNDropStart(div, group, params.event, callback);
 			this.setState(3);
 		},
 
-		_onTemplateGroupAdd (pos, group){
+		_onTemplateGroupAdd(pos, group) {
 			this.controller.addGroupByTemplate(group, pos);
 			this._onAddDone();
 			this.setState(0);
@@ -232,7 +247,7 @@ export default {
 		 **********************************************************************/
 
 
-		addScreen (params){
+		addScreen(params) {
 			this.logger.warn("addScreen", "DEPRECATED");
 
 			var screen = this.factory.createScreenModel(params);
@@ -241,16 +256,16 @@ export default {
 			this._addScreen(params, screen);
 		},
 
-		_addScreen (params, screen){
+		_addScreen(params, screen) {
 
-			if(!this._alignmentToolInited){
+			if (!this._alignmentToolInited) {
 				var zoomedModel = this.getZoomedBox(lang.clone(screen), this.getZoomFactor(), this.getZoomFactor());
 				this.alignmentStart("screen", zoomedModel, "All");
 			}
-			this.setMode("add");
+			this.setMode("addScreen");
 
 			var z = this.getZoomFactor();
-			var zoomedScreen = this.getZoomedBox(lang.clone(screen),z,z);
+			var zoomedScreen = this.getZoomedBox(lang.clone(screen), z, z);
 			var div = this.createScreen(zoomedScreen);
 			css.add(div, "MatcAddBox")
 			this.renderFactory.setStyle(div, zoomedScreen);
@@ -258,7 +273,7 @@ export default {
 			this.setState(3);
 		},
 
-		onScreenAdded (pos, model){
+		onScreenAdded(pos, model) {
 			this.controller.addScreen(model, pos);
 			this._onAddDone();
 			this.setState(0);
@@ -267,30 +282,35 @@ export default {
 		/**********************************************************************
 		 * Add Screens && Widget
 		 **********************************************************************/
-		_addScreensAndWidgets (params, app) {
+		_addScreensAndWidgets(params, app, cls) {
 
-			let screens = Object.values(app.screens)
+			const screens = Object.values(app.screens)
 			if (screens.length !== 1) {
 				this.logger.warn("_addScreensAndWidgets", "Not 1 screen!!");
 				return
 			}
-			let screen = screens[0]
-			if(!this._alignmentToolInited){
+			const screen = screens[0]
+			if (!this._alignmentToolInited) {
 				var zoomedModel = this.getZoomedBox(lang.clone(screen), this.getZoomFactor(), this.getZoomFactor());
 				this.alignmentStart("screen", zoomedModel, "All");
 			}
 			this.setMode("add");
 
-			var z = this.getZoomFactor();
-			var zoomedScreen = this.getZoomedBox(lang.clone(screen),z,z);
-			var div = this.createScreen(zoomedScreen);
+			const z = this.getZoomFactor();
+			const zoomedScreen = this.getZoomedBox(lang.clone(screen), z, z);
+			const div = this.createScreen(zoomedScreen);
 			css.add(div, "MatcAddBox")
-			this.renderFactory.setStyle(div, zoomedScreen);
+			if (cls) {
+				css.add(div, 'MatcImportBox')
+			} else {
+				this.renderFactory.setStyle(div, zoomedScreen);
+			}
+
 			this._onAddNDropStart(div, app, params.event, "onScreensAndWidgetsAdded");
 			this.setState(3);
 		},
 
-		onScreensAndWidgetsAdded (pos, model) {
+		onScreensAndWidgetsAdded(pos, model) {
 			this.logger.log(-1, "onScreensAndWidgetsAdded", "enter", pos, model);
 			this.controller.addScreensAndWidgets(model, pos);
 			this._onAddDone();
@@ -301,15 +321,15 @@ export default {
 		 * Add Widget
 		 **********************************************************************/
 
-		addWidget (params){
+		addWidget(params) {
 			console.warn("addWidget() > DEPRECATED");
-			this.logger.log(1,"addWidget", "enter");
+			this.logger.log(1, "addWidget", "enter");
 
 			/**
 			 * create temp widget for rendering
 			 */
 			var widget = this.factory.createWidgetModel(params);
-			widget.id ="_tempWidget";
+			widget.id = "_tempWidget";
 
 			/**
 			 * Render drag and drop!
@@ -317,10 +337,10 @@ export default {
 			this._addWidget(params, widget);
 		},
 
-		_addWidget (params, widget, mode){
-			this.logger.log(-1,"_addWidget", "enter", widget);
+		_addWidget(params, widget, mode) {
+			this.logger.log(-1, "_addWidget", "enter", widget);
 
-			if(mode){
+			if (mode) {
 				this.setMode(mode);
 			} else {
 				this.setMode("add");
@@ -330,21 +350,23 @@ export default {
 			 * Zoom. We create a copy because we want to pass the original object to
 			 * the controller
 			 */
-			var z = this.getZoomFactor();
-			var zoomedWidget = this.getZoomedBox(lang.clone(widget),z,z);
+			const z = this.getZoomFactor();
+			const zoomedWidget = this.getZoomedBox(lang.clone(widget), z, z);
+
+			this._addSetZToMax(zoomedWidget)
 
 			/**
 			 * Call after setMode() because the might trigger a redraw and would
 			 * remove the GridRuler
 			 */
-			if(!this._alignmentToolInited){
+			if (!this._alignmentToolInited) {
 				this.alignmentStart("widget", zoomedWidget, "All");
 			}
 
 			/**
 			 * add addNDrop div
 			 */
-			var div = this.createZoomedWidget(zoomedWidget);
+			const div = this.createZoomedWidget(zoomedWidget);
 			css.add(div, "MatcAddBox")
 
 			/**
@@ -352,15 +374,22 @@ export default {
 			 */
 			this._onAddNDropStart(div, widget, params.event, "onWidgetAdded", params.mouseup);
 			this.setState(3);
-			this.logger.log(2,"_addWidget", "exit");
+			this.logger.log(2, "_addWidget", "exit");
 		},
 
-		onWidgetAdded (pos, model){
-			this.logger.log(0,"onWidgetAdded", "enter");
+		_addSetZToMax(widget, offset=0) {
+			const max = this.treeIndex?.getMaxZLevel()
+			widget.z = max + 1 + offset		
+		},
 
-			var newWidget = this.controller.addWidget(model, pos);
-			if(newWidget){
-				requestAnimationFrame( () => {
+
+
+		onWidgetAdded(pos, model) {
+			this.logger.log(-1, "onWidgetAdded", "enter");
+
+			const newWidget = this.controller.addWidget(model, pos, false);
+			if (newWidget) {
+				requestAnimationFrame(() => {
 					this.onWidgetSelected(newWidget.id, true);
 				})
 			}
@@ -384,40 +413,40 @@ export default {
 		 * 3) the user select the end screen (onLineEndSelected)
 		 **********************************************************************/
 
-		addLineAtSelected (e, isLineDndStarted = false) {
-			this.logger.log(-1,"addLineAtSelected", "enter > isLineDnd: " + isLineDndStarted);
+		addLineAtSelected(e, isLineDndStarted = false) {
+			this.logger.log(-1, "addLineAtSelected", "enter > isLineDnd: " + isLineDndStarted);
 
+			const selectedWidget = this.getSelectedWidget()
 
-
-			if (this._selectWidget && this._lastMouseMoveEvent) {
+			if (selectedWidget && this._lastMouseMoveEvent) {
 
 				/**
 				 * Check if there is a line
 				 */
-				if (!ModelUtil.isLogicWidget(this._selectWidget)) {
-						let lines = this.getFromLines(this._selectWidget)
-						if (lines.length > 0) {
-							this.logger.log(-1,"addLineAtSelected", "EXIT because line exists");
-							this.showError('The widget has already a link')
-							return
-						}
+				if (!ModelUtil.isLogicWidget(selectedWidget)) {
+					let lines = this.getFromLines(selectedWidget)
+					if (lines.length > 0) {
+						this.logger.log(-1, "addLineAtSelected", "EXIT because line exists");
+						this.showError('The widget has already a link')
+						return
+					}
 				}
 
 				this.addLine({
-					from : this._selectWidget.id,
-					event:this._lastMouseMoveEvent
+					from: selectedWidget.id,
+					event: this._lastMouseMoveEvent
 				})
 			}
-			if (this._selectedScreen && this._lastMouseMoveEvent) {
+			if (this.getSelectedScreen() && this._lastMouseMoveEvent) {
 				this.addLine({
-					from : this._selectedScreen.id,
-					event:this._lastMouseMoveEvent
+					from: this.getSelectedScreen().id,
+					event: this._lastMouseMoveEvent
 				})
 			}
-			if (this._selectGroup && this._lastMouseMoveEvent) {
+			if (this.getSelectedGroup() && this._lastMouseMoveEvent) {
 				this.addLine({
-					from : this._selectGroup.id,
-					event:this._lastMouseMoveEvent
+					from: this.getSelectedGroup().id,
+					event: this._lastMouseMoveEvent
 				})
 			}
 
@@ -428,8 +457,8 @@ export default {
 			this._addLineIsDndStarted = isLineDndStarted
 		},
 
-		addLine (params){
-			this.logger.log(-1,"addLine", "enter " + params.from +  " " + params.animation);
+		addLine(params) {
+			this.logger.log(-1, "addLine", "enter " + params.from + " " + params.animation);
 
 			/**
 			 * Set extra mode to also work with the
@@ -445,52 +474,77 @@ export default {
 
 			this._addLineParams = params;
 
+
+			this._addLineStartedFromTemplate = false // this.isLineStartedFromTemplate(params)
+
+			/**
+			 * Store all other widget where a line can go to
+			 */
 			this._addLineActionTargets = []
 			for (let id in this.model.widgets) {
 				let widget = this.model.widgets[id]
-				if (widget.type === "Rest") {
-					this._addLineActionTargets.push(widget)
-				}
-				if (widget.type === "LogicOr") {
-					this._addLineActionTargets.push(widget)
+				if (this._addLineStartedFromTemplate) {
+					/**
+					 * FIXME: Make sure there is no other templates link from some other widget>
+					 */
+					if (widget.template) {
+						let parent = this.getParentScreen(widget, this.model)
+						if (!parent) {
+							this.logger.log(-1, "addLine", "addTemplate", widget.name);
+							this._addLineActionTargets.push(widget)
+						}
+					}
+				} else {
+					if (widget.type === "Rest") {
+						this._addLineActionTargets.push(widget)
+					}
+					if (widget.type === "LogicOr") {
+						this._addLineActionTargets.push(widget)
+					}
+					if (widget.type === "Script") {
+						this._addLineActionTargets.push(widget)
+					}
+					if (widget.type === "AudioLogic") {
+						this._addLineActionTargets.push(widget)
+					}
 				}
 			}
 
-			if (params.from){
+			if (params.from) {
 
 				let widget = this.model.widgets[params.from];
 				if (widget) {
-					this.logger.log(1,"addLine", "draw widget line");
-					this.onLineStartSelected(params.from, null, null, params.event );
+					this.logger.log(1, "addLine", "draw widget line");
+					this.onLineStartSelected(params.from, null, null, params.event);
 					this._updateAddLineMove(params.event);
 				} else {
 					let screen = this.model.screens[params.from];
 					if (screen) {
-						this.logger.log(0,"addLine", "draw screen line");
-						this.onLineStartSelected(params.from, null, null, params.event );
+						this.logger.log(0, "addLine", "draw screen line");
+						this.onLineStartSelected(params.from, null, null, params.event);
 						this._updateAddLineMove(params.event);
 					} else if (this.model.groups) {
 						let group = this.model.groups[params.from];
-						if (group){
-							this.logger.log(1,"addLine", "draw group line");
-							this.onLineStartSelected(params.from, null, null, params.event );
+						if (group) {
+							this.logger.log(1, "addLine", "draw group line");
+							this.onLineStartSelected(params.from, null, null, params.event);
 							this._updateAddLineMove(params.event);
 						} else {
-							this.logger.log(0,"addLine", "No element with id ", params.from);
+							this.logger.log(0, "addLine", "No element with id ", params.from);
 						}
 					}
 				}
 
 			} else {
-				this.logger.log(0,"addLine", "No start passed...");
+				this.logger.log(0, "addLine", "No start passed...");
 				this.setBoxClickCallback("onLineStartSelected");
 
 				/**
 				 * fade out all widgets that have an transition
 				 */
-				for(let i=0; i< this.model.widgets.length; i++){
+				for (let i = 0; i < this.model.widgets.length; i++) {
 					let widget = this.model.widgets[i];
-					if(this.hasLine(widget)){
+					if (this.hasLine(widget)) {
 						var div = this.widgetDivs[widget.id];
 						css.add(div, "");
 					}
@@ -500,8 +554,41 @@ export default {
 			}
 		},
 
-		onLineStartSelected (id, div, pos,e){
-			this.logger.log(1,"onLineStartSelected", "enter > " +id);
+		isLineStartedFromTemplate(params) {
+			if (params.from) {
+				const widget = this.model.widgets[params.from];
+				if (this.isTemplatedWidgetOnCanvas(widget)) {
+					return true
+				}
+
+				const group = this.model.groups[params.from];
+				if (group && group.template) {
+					this.logger.warn("isLineStartedFromTemplate", "groups not supported");
+					const children = group.children
+					for (let i = 0; i < children.length; i++) {
+						let id = children[i]
+						const widget = this.model.widgets[id];
+						if (this.isTemplatedWidgetOnCanvas(widget)) {
+							return true
+						}
+					}
+				}
+			}
+			return false
+		},
+
+		isTemplatedWidgetOnCanvas(widget) {
+			if (widget && widget.template) {
+				const parent = this.getParentScreen(widget, this.model)
+				if (!parent) {
+					return true
+				}
+			}
+			return false
+		},
+
+		onLineStartSelected(id, div, pos, e) {
+			this.logger.log(1, "onLineStartSelected", "enter > " + id);
 
 
 			var line = this.factory.createLineModel();
@@ -517,12 +604,9 @@ export default {
 			this._addLineStartPos = this._getMousePosition(e);
 			this._addLineStartId = id
 			this._addLineModel = line;
-			this._addLinePoints=[];
+			this._addLinePoints = [];
 			this._addLineIsPaused = false;
-			this._addNDropMove = on(win.body(),"mousemove", lang.hitch(this,"_updateAddLineMove"));
-
-			//this.setBoxClickCallback("onLineEndSelected");
-			//this.setCanvasClickCallback("onLinePointSelected");
+			this._addNDropMove = on(win.body(), "mousemove", lang.hitch(this, "_updateAddLineMove"));
 
 			this.showHint("Select the screen where the click should go to. You can also set some way points in the middle to make it look nicer!");
 
@@ -530,62 +614,87 @@ export default {
 		},
 
 
-		onLinePointSelected (e){
-			this.logger.log(1,"onLinePointSelected", "enter >  ");
+		onLinePointSelected(e) {
+			this.logger.log(1, "onLinePointSelected", "enter >  ");
 
-			if(!this._addLineStartPos){
+			if (!this._addLineStartPos) {
 				this._onAddCleanup();
 			}
 
-			let pos = this.getCanvasMousePosition(e);
+			const pos = this.getCanvasMousePosition(e);
 			pos.w = 1;
 			pos.h = 1;
 
-			let point = this.drawPoint(pos);
+			const point = this.drawPoint(pos);
 			this.dndContainer.appendChild(point);
 			this._addLinePoints.push(point);
 
 			this._addLineModel.points.push(pos);
 		},
 
-		onLineEndSelected (id, e){
-			this.logger.log(0,"onLineEndSelected", "enter > "+ id);
-			/**
-			 * check if we clicked on a screen or widget
-			 */
-			var screen = this.model.screens[id];
-			if (!screen){
-				let widget = this.model.widgets[id];
-				screen = this.getParentScreen(widget);
-			}
+		onLineEndSelected(id, e) {
+			this.logger.log(-1, "onLineEndSelected", "enter > " + id);
 
-			if (screen) {
-				let model = this._addLineModel;
-				model.to = screen.id;
-				this.controller.addLine(model,e);
-				this._onAddDone();
+			if (this._addLineStartedFromTemplate) {
+				let widget = this.model.widgets[id];
+				if (this.isTemplatedWidgetOnCanvas(widget)) {
+					let parentGroup = this.getParentGroup(id)
+					/**
+					 * Check somehow if the group is templated??
+					 */
+					let model = this._addLineModel;
+					model.isTemplateTransition = true
+					if (parentGroup) {
+						model.to = parentGroup.id;
+						model.isGroup = true
+					} else {
+						model.to = widget.id;
+					}
+
+					this.controller.addLine(model, e);
+					this._onAddDone();
+
+				} else {
+					this.showError("You have to select a component on the canvas!");
+				}
 			} else {
 				/**
-				 * Check if we have clicked on LogicElement
+				 * check if we clicked on a screen or widget
 				 */
-				let widget = this.model.widgets[id];
-				if(this.hasLogic(widget)){
-					let fromWidget = this.model.widgets[this._addLineModel.from];
-					if(!this.hasLogic(fromWidget)){
+				var screen = this.model.screens[id];
+				if (!screen) {
+					let widget = this.model.widgets[id];
+					screen = this.getParentScreen(widget);
+				}
+
+				if (screen) {
+					let model = this._addLineModel;
+					model.to = screen.id;
+					this.controller.addLine(model, e);
+					this._onAddDone();
+				} else {
+					/**
+					 * Check if we have clicked on LogicElement
+					 */
+					let widget = this.model.widgets[id];
+					if (this.hasLogic(widget)) {
+						//let fromWidget = this.model.widgets[this._addLineModel.from];
+						//if(!this.hasLogic(fromWidget)){
+						let model = this._addLineModel;
+						model.to = widget.id;
+						this.controller.addLine(model, e);
+						this._onAddDone();
+						//} else {
+						//	this.showError("You cannot connect two logic nodes!");
+						//}
+					} else if (this.hasRest(widget) || this.hasScript(widget) || this.hasAudio(widget)) {
 						let model = this._addLineModel;
 						model.to = widget.id;
 						this.controller.addLine(model, e);
 						this._onAddDone();
 					} else {
-						this.showError("You cannot connect two logic nodes!");
+						this.showError("You have to select a screen, logic or cloud element!");
 					}
-				} else if (this.hasRest(widget)) {
-					let model = this._addLineModel;
-					model.to = widget.id;
-					this.controller.addLine(model, e);
-					this._onAddDone();
-				} else {
-					this.showError("You have to select a screen, logic or cloud element!");
 				}
 			}
 
@@ -595,7 +704,13 @@ export default {
 			this.setState(0);
 		},
 
-		_updateAddLineMove (e){
+		onLineSuggestEnd(e) {
+			this.logger.log(-1, "onLineSuggestEnd", "enter > ", e);
+			// TODO: add here some cool "create new element" stuff?
+		},
+
+		_updateAddLineMove(e) {
+
 			/**
 			 * Pressing space will pause this operation!
 			 * The canvas DnD handler will instead move the
@@ -606,82 +721,115 @@ export default {
 			}
 			this.stopEvent(e);
 
-			if(!this._addLineStartPos){
+			if (!this._addLineStartPos) {
 				this._onAddCleanup();
 			}
 
-			//var from = this.model.widgets[this._addLineModel.from];
-			var from = this.getFromBox(this._addLineModel);
-			var to = this.getCanvasMousePosition(e);
+			const from = this.getFromBox(this._addLineModel);
+			let to = this.getCanvasMousePosition(e);
 			to.h = 2;
 			to.w = 2;
+
+			if (this._addLineTargetDiv) {
+				css.remove(this._addLineTargetDiv, "MatcLineTarget")
+			}
+
 
 			/**
 			 * check if we are hovering over anything
 			 */
-			var screen = this.getHoverScreen(to);
-			if(screen){
-				/**
-				 * Do not snapp to same screen
-				 */
-				let startWidget = this.model.widgets[this._addLineStartId]
-				if (startWidget) {
-					let startParent = this.getParentScreen(startWidget);
-					if (!startParent || startParent.id !== screen.id) {
-						to = screen;
-					}
-				} else {
+			const screen = this.getHoverScreen(to);
+			if (screen && !this._addLineStartedFromTemplate) {
+
+				const startParent = this.getAddLineStartScreen()
+				if (!startParent || startParent.id !== screen.id) {
 					to = screen;
+					const dndDiv = this.screenDivs[screen.id];
+					if (dndDiv) {
+						css.add(dndDiv, "MatcLineTarget")
+						this._addLineTargetDiv = dndDiv
+					}
 				}
 
 			} else {
+				/**
+				 * Check for all the smart widgets, if we can snapp
+				 */
 				if (this._addLineActionTargets) {
-					for (let i=0; i < this._addLineActionTargets.length; i++) {
-						let action = this._addLineActionTargets[i]
+					for (let i = 0; i < this._addLineActionTargets.length; i++) {
+						const action = this._addLineActionTargets[i]
 						if (this._isContainedInBox(to, action)) {
 							to = action
+							const dndDiv = this.widgetDivs[action.id];
+							if (dndDiv) {
+								css.add(dndDiv, "MatcLineTarget")
+								this._addLineTargetDiv = dndDiv
+							}
 							break;
 						}
 					}
 				}
 			}
 
-			var layoutedLine = this.layoutLine(from, to, this._addLineModel);
 
-			if(!this._addLineSVG){
-				this._addLineSVG = this.drawLine(this._addLineModel.id, layoutedLine);
+			const layoutedLine = this.layoutLine(from, to, this._addLineModel);
+
+			if (!this._addLineSVG) {
+				this._addLineSVG = this.drawLine(this._addLineModel.id, layoutedLine, this._addLineModel.databinding);
 			} else {
 				this._addLineSVG.attr("d", this.lineFunction(layoutedLine));
 			}
 
 		},
 
-		cancelAddLine (){
-			this.logger.log(0,"cancelAddLine", "enter");
+		getAddLineStartScreen() {
+			const startWidget = this.model.widgets[this._addLineStartId]
+			if (startWidget) {
+				let startParent = this.getParentScreen(startWidget);
+				return startParent
+			}
+
+			const startGroup = this.model.groups[this._addLineStartId]
+			if (startGroup) {
+				const groupChilden = this.getAllGroupChildren(startGroup)
+				if (groupChilden.length > 0) {
+					const fristGroupWidget = this.model.widgets[groupChilden[0]]
+					if (fristGroupWidget) {
+						let groupParent = this.getParentScreen(fristGroupWidget);
+						return groupParent
+					}
+				}
+			}
+		},
+
+
+		cancelAddLine() {
+			this.logger.log(0, "cancelAddLine", "enter");
 
 			this.cleanUpAddLine();
 			this._onAddDone();
 		},
 
 
-		cleanUpAddLine (){
-			this.logger.log(0,"cleanUpAddLine", "enter");
-
+		cleanUpAddLine() {
+			this.logger.log(0, "cleanUpAddLine", "enter");
 			this.cleanUpClickCallbacks();
 			delete this._addLineParams;
 			this._addLinePoints = null;
 			this._addLineModel = null;
 			this._addLineIsPaused = false;
 			this._addLineActionTargets = null;
-			if(this._addLineSVG){
+			this._addLineStartedFromTemplate = false;
+			if (this._addLineSVG) {
 				this._addLineSVG.remove();
 			}
 			this._addLineSVG = null;
+			if (this._addLineTargetDiv ) {
+				css.remove(this._addLineTargetDiv, "MatcLineTarget")
+			}
+			delete this._addLineTargetDiv
 			this._onAddCleanup();
-
 			this.setState(0);
-
-
 			return true;
 		},
 
@@ -689,7 +837,7 @@ export default {
 		/**********************************************************************
 		 * AddNDropMethods
 		 **********************************************************************/
-		_onAddNDropStart (div, model, e, onEndCallback , mouseup){
+		_onAddNDropStart(div, model, e, onEndCallback, mouseup) {
 
 			this.setCanvasCancelCallback("_onAddCancel");
 
@@ -712,33 +860,33 @@ export default {
 			/**
 			 * append node to domNode
 			 */
-			css.add(this._addNDropNode,"");
-			css.add(this._addNDropNode,"MatcCanvasAddNDropNode");
+			css.add(this._addNDropNode, "");
+			css.add(this._addNDropNode, "MatcCanvasAddNDropNode");
 			this._addNDropUpDateUI();
 			this.dndContainer.appendChild(this._addNDropNode);
 
 			/**
 			 * register mouse move and release listener, mazbe also esc listener
 			 */
-			this._addNDropMove = on(win.body(),"mousemove", lang.hitch(this,"_onAddNDropMove"));
+			this._addNDropMove = on(win.body(), "mousemove", lang.hitch(this, "_onAddNDropMove"));
 
 			this.setDragNDropActive(false);
-			if(mouseup === true){
-				this._addNDropUp = on(win.body(),"mouseup", lang.hitch(this,"_onAddNDropUp"));
+			if (mouseup === true) {
+				this._addNDropUp = on(win.body(), "mouseup", lang.hitch(this, "_onAddNDropUp"));
 			} else {
-				this._addNDropUp = on(win.body(),"mousedown", lang.hitch(this,"_onAddNDropUp"));
+				this._addNDropUp = on(win.body(), "mousedown", lang.hitch(this, "_onAddNDropUp"));
 			}
 		},
 
 
-		_onAddNDropMove (e){
+		_onAddNDropMove(e) {
 			this.stopEvent(e);
 
 			/**
 			 * Sometimes there might be still a listener.
 			 * We stop that now.
 			 */
-			if(!this._addNDropNode){
+			if (!this._addNDropNode) {
 				this._onAddCleanup();
 				return;
 			}
@@ -755,26 +903,26 @@ export default {
 			this._addNDropNodePos.h = this.getZoomed(this._addNDropModel.h, this.getZoomFactor());
 			this._addNDropNodePos = this.allignPosition(this._addNDropNodePos, e);
 
-			if(!window.requestAnimationFrame){
+			if (!window.requestAnimationFrame) {
 				console.warn("No requestAnimationFrame()");
 				this._addNDropUpDateUI();
 			} else {
 				var callback = lang.hitch(this, "_addNDropUpDateUI");
-					requestAnimationFrame(callback);
+				requestAnimationFrame(callback);
 			}
 			return false;
 		},
 
 
-		_addCorrectOffset (box){
+		_addCorrectOffset(box) {
 			box.x -= this.addNDropOffSet;
 			box.y -= this.addNDropOffSet;
 			return box;
 		},
 
 
-		_addNDropUpDateUI ( ){
-			if(!this._addNDropNode || !this._addNDropNodePos){
+		_addNDropUpDateUI() {
+			if (!this._addNDropNode || !this._addNDropNodePos) {
 				this._onAddCleanup();
 				return;
 			}
@@ -784,18 +932,18 @@ export default {
 		},
 
 
-		_onAddNDropUp (e){
+		_onAddNDropUp(e) {
 			this.stopEvent(e);
 
 			var pos = this._addNDropNodePos;
-			if(pos.x > 0 && pos.y >0 && pos.x < this.getZoomed(this.canvasPos.w, this.zoom) && pos.y < this.getZoomed(this.canvasPos.h, this.zoom)){
+			if (pos.x > 0 && pos.y > 0 && pos.x < this.getZoomed(this.canvasPos.w, this.zoom) && pos.y < this.getZoomed(this.canvasPos.h, this.zoom)) {
 				var model = this._addMDropModel;
 				var callback = this._addNDropEndCallback;
-				try{
-					if(this[callback]){
+				try {
+					if (this[callback]) {
 						this[callback](this._addNDropNodePos, model, e);
 					}
-				} catch(e){
+				} catch (e) {
 					this.logger.error("_onAddNDropUp", "Could not indluce callback.", e);
 				}
 			} else {
@@ -807,15 +955,15 @@ export default {
 
 		},
 
-		_onAddCleanup (){
+		_onAddCleanup() {
 
-			if(this._addNDropNode){
-				css.remove(this._addNDropNode,"MatcCanvasAddNDropNode");
+			if (this._addNDropNode) {
+				css.remove(this._addNDropNode, "MatcCanvasAddNDropNode");
 			}
 
 			this._addNDropMoveCallback = null;
 			this._addNDropEndCallback = null;
-			this._addNDropClickCallback=null;
+			this._addNDropClickCallback = null;
 			this._addMDropModel = null;
 			this._addNDropNewPos = null;
 			this._addLineStartId = null
@@ -823,13 +971,13 @@ export default {
 			delete this._addNDropModel;
 			delete this._addLineIsDndStarted
 
-			if(this._addNDropMove)
+			if (this._addNDropMove)
 				this._addNDropMove.remove();
-			if(this._addNDropUp)
+			if (this._addNDropUp)
 				this._addNDropUp.remove();
 			this._addNDropStarted = false;
 
-			if (this._addNDropNode && this._addNDropNode.parentNode){
+			if (this._addNDropNode && this._addNDropNode.parentNode) {
 				this._addNDropNode.parentNode.removeChild(this._addNDropNode);
 			}
 
@@ -839,45 +987,45 @@ export default {
 			this.cleanUpAlignment();
 		},
 
-		_onAddCancel (){
+		_onAddCancel() {
 			this._onAddDone();
 			return true;
 		},
 
-		_createAddCommand (method, params){
-			if(!this._addCurrentCommand){
+		_createAddCommand(method, params) {
+			if (!this._addCurrentCommand) {
 
 				this._addCurrentCommand = {
-					m : method,
-					p : params
+					m: method,
+					p: params
 				};
 			}
 		},
 
-		_onAddDone (){
+		_onAddDone() {
 			/**
 			 * The add was complete or canceled. We can delete the command!
 			 */
-			if(this._addCurrentCommand){
+			if (this._addCurrentCommand) {
 				delete this._addCurrentCommand;
 			}
 			this.setMode("edit", true);
 		},
 
-		renderAddCommand (){
+		renderAddCommand() {
 			/**
 			 * If there is a current add going on, we
 			 * should continue doing it...
 			 */
-			if(this._addCurrentCommand){
-				this.logger.log(3,"renderAddCommand", "enter > " + this._addCurrentCommand.m);
+			if (this._addCurrentCommand) {
+				this.logger.log(3, "renderAddCommand", "enter > " + this._addCurrentCommand.m);
 				var method = this._addCurrentCommand.m;
-				if(this[method]){
+				if (this[method]) {
 					/**
 					 * Set the last mouse move event as the event, to make sure we
 					 * continue add the same position with the add dnd.
 					 */
-					var params =this._addCurrentCommand.p;
+					var params = this._addCurrentCommand.p;
 					params.event = this._lastMouseMoveEvent;
 					this[method](params);
 				}
@@ -885,11 +1033,11 @@ export default {
 			}
 		},
 
-		cleanUpAddNDrop (){
+		cleanUpAddNDrop() {
 			this._onAddCleanup();
 		}
-    },
-    mounted () {
-    }
+	},
+	mounted() {
+	}
 }
 </script>

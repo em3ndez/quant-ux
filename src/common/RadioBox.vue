@@ -15,6 +15,7 @@ import on from 'dojo/on'
 export default {
     name: 'RadioBox',
     mixins:[ DojoWidget],
+	props: ['selected'],
     data: function () {
         return {
             value: false
@@ -22,15 +23,15 @@ export default {
     },
     components: {},
     methods: {
-        postCreate: function(){		
+        postCreate (){		
 			this.own(on(this.domNode, touch.press, lang.hitch(this, "onChange")));
 		},		
 
-		getValue:function(){
+		getValue (){
 			return this.value;
 		},
 		
-		setValue:function(value){
+		setValue (value){
 			this.value = value;
 			if(value){
 				css.add(this.domNode,"VommondRadioBoxChecked") ;
@@ -39,16 +40,23 @@ export default {
 			}
 		},
 		
-		setLabel:function(){
-			//this.label.innerHTML=label;	
+		setLabel (){
 		},
 		
-		onChange:function(){
+		onChange(){
 			this.setValue(!this.value);
 			this.emit("change", this.value );
 		}
     }, 
+	watch: {
+		selected (v) {
+			this.setValue(v)
+		}
+	},
     mounted () {
+		if (this.selected) {
+			this.setValue(this.selected)
+		}
     }
 }
 </script>

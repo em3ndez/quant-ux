@@ -5,7 +5,9 @@
             <a @click="tab='images'" :class="{'MatcToolbarTabActive': tab === 'images'}">{{ getNLS('dialog.import.tab-images')}}</a>
             <a @click="tab='figma'" :class="{'MatcToolbarTabActive': tab === 'figma'}">{{ getNLS('dialog.import.tab-figma')}}</a>
             <a @click="tab='zip'" :class="{'MatcToolbarTabActive': tab === 'zip'}">{{ getNLS('dialog.import.tab-zip')}}</a>
-            <a @click="tab='swagger'" :class="{'MatcToolbarTabActive': tab === 'swagger'}" v-if="hasSwagger">{{ getNLS('dialog.import.tab-open-api')}}</a>
+            <a @click="tab='swagger'" :class="{'MatcToolbarTabActive': tab === 'swagger'}" v-if="hasSwagger">{{ getNLS('dialog.import.')}}</a>
+            <a @click="tab='openai'" :class="{'MatcToolbarTabActive': tab === 'openai'}" v-if="hasOpenAI">{{ getNLS('dialog.import.tab-open-ai')}}</a>
+ 
         </div>
         <div v-if="isPublic">
              <div class="MatchImportDialogCntr">
@@ -39,18 +41,20 @@
 
                     <div v-if="!figmaPages">
 
-                        <div class="field ">
+                        <div class="form-group ">
                             <label>{{ getNLS('dialog.import.figma-key')}}
-                            <a  target="figma" href="https://www.figma.com/developers/api#access-tokens">
+                            <a target="figma" href="https://www.figma.com/developers/api#access-tokens">
                                 <span class="mdi mdi-help-circle"></span>
                             </a>
                             </label>
-                            <input type="text" class="input" v-model="figmaAcccessKey" />
+                            <form autocomplete="off">
+                                <input type="password" autocomplete="off" class="form-control" v-model="figmaAcccessKey" />
+                            </form>
                         </div>
 
-                        <div class="field">
+                        <div class="form-group">
                             <label>{{ getNLS('dialog.import.figma-url')}}</label>
-                            <input type="text" class="input" v-model="figmaUrl" />
+                            <input type="text" class="form-control" v-model="figmaUrl" />
                         </div>
 
                     </div>
@@ -65,6 +69,30 @@
                 </div>
             </div>
 
+            <div v-if="tab=== 'swagger'">
+                <div class="MatchImportDialogCntr">
+                      <div class="form-group">
+                            <label>{{ getNLS('dialog.import.open-api-url')}}</label>
+                            <input type="text" class="form-control" v-model="swaggerURL" />
+                        </div>
+                </div>
+            </div>
+
+            <div v-if="tab=== 'openai'">
+                <div class="MatchImportDialogCntr">
+                      <div class="form-group">
+                            <label>{{ getNLS('dialog.import.open-ai-prompt')}}</label>
+                            <textarea type="text" class="form-control" v-model="openAIPrompt">
+                            </textarea>
+                        </div>
+
+                        <div class=" MatcButtonBar MatcMarginTop">
+                            <a class="MatcButton MatcButtonPrimary"
+                                @click.stop="onContinueFigma">{{ getNLS('dialog.import.open-ai-generate')}}
+                            </a>
+                        </div>
+                </div>
+            </div>
 
             <div v-if="tab=== 'progress'">
                 <div class="MatchImportDialogCntr">
@@ -76,37 +104,23 @@
                     </span>
                 </div>
             </div>
-
-
-            <div v-if="tab=== 'swagger'">
-                <div class="MatchImportDialogCntr">
-                      <div class="field">
-                            <label>{{ getNLS('dialog.import.open-api-url')}}</label>
-                            <input type="text" class="input" v-model="swaggerURL" />
-                        </div>
-                </div>
-            </div>
-
-
         </div>
-
 
         <div class="MatcError">
             {{errorMSG}}
         </div>
 
         <div class=" MatcButtonBar MatcMarginTop">
-            <a class=" MatcButton" v-if="hasContinue" @click.stop="onContinueFigma">{{ getNLS('btn.continue')}}</a>
-            <a class=" MatcButton" v-if="!isPublic && !hasContinue" @click.stop="onSave">{{ getNLS('btn.import')}}</a>
+            <a class=" MatcButton MatcButtonPrimary" v-if="hasContinue" @click.stop="onContinueFigma">{{ getNLS('btn.continue')}}</a>
+            <a class=" MatcButton MatcButtonPrimary" v-if="!isPublic && !hasContinue" @click.stop="onSave">{{ getNLS('btn.import')}}</a>
             <a class=" MatcLinkButton" @click.stop="onCancel">{{ getNLS('btn.cancel')}}</a>
         </div>
-
 
 
 	</div>
 </template>
 <style lang="scss">
-    @import '../../../style/import_dialog.scss';
+    @import '../../../style/components/import_dialog.scss';
 </style>
 <script>
 import DojoWidget from 'dojo/DojoWidget'
@@ -117,6 +131,7 @@ import RadioBoxList from 'common/RadioBoxList'
 
 import ZipSevice from 'services/ZipService'
 import FigmaService from 'services/FigmaService'
+import SwaggerService from 'services/SwaggerService'
 
 export default {
     name: 'ImportDialog',
@@ -140,7 +155,9 @@ export default {
             figmaSelectedPage: null,
             swaggerURL: '',
             isPublic: false,
-            hasSwagger: false
+            hasSwagger: false,
+            hasOpenAI: false,
+            openAIPrompt: ''
         }
     },
     components: {
@@ -204,12 +221,26 @@ export default {
             if (this.tab === 'swagger') {
                 await this.loadSwagger()
             }
+            if (this.tab === 'openai') {
+                await this.importOpenAI()
+            }
         },
 
+        async importOpenAI () {
+            this.logger.log(-1, 'loadSwagger', 'enter', this.openAIPrompt)
+        },
         async loadSwagger () {
             this.logger.log(-1, 'loadSwagger', 'enter', this.swaggerURL)
             if (this.swaggerURL) {
-                console.debug()
+                localStorage.setItem('quxSwaggerURL', this.swaggerURL)
+                try {
+                    const swaggerService = new SwaggerService()
+                    const [items, schemas] = await swaggerService.parseURL(this.swaggerURL)
+                    console.debug(items, schemas)
+                } catch (err) {
+                    this.errorMSG = this.getNLS('dialog.import.error-swagger-wrong_url') + ` (${err.message})`
+                }
+             
             } else {
                 this.errorMSG = this.getNLS('dialog.import.error-swagger-no-url')
             }
@@ -235,7 +266,7 @@ export default {
                 this.errorMSG = this.getNLS('dialog.import.error-figma-url')
                 return false
             }
-            if (this.figmaUrl.indexOf('https://www.figma.com/file/') !== 0) {
+            if (this.figmaUrl.indexOf('https://www.figma.com') !== 0) {
                 this.errorMSG = this.getNLS('dialog.import.error-figma-url')
                 return false
             }
@@ -247,7 +278,7 @@ export default {
         },
 
         getFigmaFileKey (url) {
-            let parts = url.split('/')
+            const parts = url.split('/')
             if (parts.length >= 5) {
                 return parts[4]
             }
@@ -272,6 +303,7 @@ export default {
             localStorage.setItem('quxFigmaAccessKey', accessKey)
             localStorage.setItem('quxFigmaUrl', url)
             let fileId = this.getFigmaFileKey(url)
+            console.debug(fileId)
 
             try {
                 this.setProgress(0, 'dialog.import.figma-progress-file')
@@ -306,7 +338,7 @@ export default {
                 console.debug(err.stack)
                 this.logger.error('importFigma', 'Cannot import figma')
                 this.logger.sendError(err)
-                this.errorMSG = this.getNLS('dialog.import.error-figma-load')
+                this.errorMSG = this.getNLS('dialog.import.error-figma-load') + ` (${err.message})`
                 this.tab = 'figma'
             }
         },
@@ -634,6 +666,12 @@ export default {
         this.logger = new Logger("ImportDialog");
         this.figmaAcccessKey = localStorage.getItem('quxFigmaAccessKey')
         this.figmaUrl = localStorage.getItem('quxFigmaUrl')
+        this.swaggerURL = localStorage.getItem('quxSwaggerURL')
+        if (location.href.indexOf('localhost') > 0) {
+            //this.hasSwagger = true
+            //this.tab = 'swagger'
+        }
+
     }
 }
 </script>

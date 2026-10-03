@@ -2,6 +2,7 @@ import Logger from '../../core/Logger'
 import * as CollabUtil from './CollabUtil'
 import { v4 as uuidv4 } from 'uuid';
 import * as MergeUtil from './MergeUtil'
+
 export default class CollabService {
 
     constructor(appId ='OhOh'){
@@ -32,7 +33,7 @@ export default class CollabService {
     }
 
     applyEvent (model, event) {
-      Logger.log(-1, 'CollabService.applyEvent() > enter', event)
+      Logger.log(1, 'CollabService.applyEvent() > enter', event)
       /**
        * Should we clone???
        */
@@ -47,11 +48,9 @@ export default class CollabService {
        * in useless changes
        */
       if (this.events.find(e => e.id === event.id) !== undefined) {
-        Logger.log(-1,'CollabService.applyEvent() > Event ignored, because it was already added')
+        Logger.log(1,'CollabService.applyEvent() > Event ignored, because it was already added')
         return model
       }
-
-      console.debug('before', model.templates)
 
       try {
         let changes = event.changes
@@ -68,9 +67,7 @@ export default class CollabService {
         Logger.error('CollabService.applyEvent() > Opoops', event.changes)        
       }
 
-      console.debug('after', model.templates)
-
-
+     
       this.pushEvent(event)
 
 
@@ -94,7 +91,19 @@ export default class CollabService {
          * For some values we support isInc function!
          */
         if (value._isInc && value.inc) {
-          model[change.id] = model[change.id]  + value.inc
+          const o = model[change.id] * 1
+          const v = value.inc * 1
+          if (!isNaN(v) && !isNaN(o)) {
+            model[change.id] = o  + v
+            Logger.log(-2, 'CollabService.applyInRoot() >  inc ' + change.id, o  + v)
+          } else {
+            Logger.error('CollabService.applyInRoot() > Something wrong with INC > ' + value + " + " + model[change.id] )
+            if (value.value) {
+              model[change.id] = value.value
+            } else {
+              Logger.error('CollabService.applyInRoot() > INC is complete messed')
+            }
+          }
         } else {
           model[change.id] = change.value
         }
@@ -124,8 +133,8 @@ export default class CollabService {
         Logger.log(1, 'CollabService.applyInParent() >  update', change)
         if (parent[change.id]) {
 
-          let oldValue = parent[change.id]
-          let newValue = MergeUtil.applyDelta(oldValue, change.value)
+          const oldValue = parent[change.id]
+          const newValue = MergeUtil.applyDelta(oldValue, change.value)
           parent[change.id] = newValue
 
         } else {

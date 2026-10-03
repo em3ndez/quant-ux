@@ -7,6 +7,10 @@ import HelpService from './HelpService'
 import ImageService from './ImageService'
 import WebSocketService from './WebSocketService'
 import KeyCloakService from './KeyCloakService'
+import CommandService from './CommandService'
+import NotificationService from './NotificationService'
+import AISimService from './AISimService'
+import UploadService from './UploadService'
 
 class Services {
 
@@ -55,6 +59,17 @@ class Services {
         return ImageService
     }
 
+    getUploadService() {
+        UploadService.setToken(this.getUserService().getToken())
+        return UploadService
+    }
+
+    getNotificationService() {
+        NotificationService.setToken(this.getUserService().getToken())
+        NotificationService.setUser(this.getUserService().getUser())
+        return NotificationService
+    }
+
     getWebSocketService (modelId, token, user) {
         if (this.config.websocket) {
             let ws = new WebSocketService(this.config.websocket, modelId, token, user)
@@ -62,6 +77,13 @@ class Services {
         }
         return null
     }
+
+    getAISimService () {
+        const aiSimService = new AISimService()
+        aiSimService.setToken(UserService.getToken())
+        return aiSimService   
+    }
+    
 
     getUserService () {
         if (this.config.auth === 'keycloak') {
@@ -97,6 +119,11 @@ class Services {
     getCommentService () {
         CommentService.setToken(this.getUserService().getToken())
         return CommentService
+    }
+
+    getCommandService () {
+        CommandService.setToken(this.getUserService().getToken())
+        return CommandService
     }
 
 }

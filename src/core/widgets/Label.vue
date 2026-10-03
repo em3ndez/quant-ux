@@ -5,8 +5,6 @@
 <script>
 import DojoWidget from "dojo/DojoWidget";
 import lang from "dojo/_base/lang";
-import on from "dojo/on";
-import touch from "dojo/touch";
 import UIWidget from "core/widgets/UIWidget";
 
 export default {
@@ -29,13 +27,19 @@ export default {
     },
 
     wireEvents () {
-      this.own(
-        this.addClickListener(this.domNode, lang.hitch(this, "onClick"))
-      );
-      this.own(
-        on(this.domNode, touch.over, lang.hitch(this, "onDomMouseOver"))
-      );
-      this.own(on(this.domNode, touch.out, lang.hitch(this, "onDomMouseOut")));
+      this.own(this.addClickListener(this.domNode, lang.hitch(this, "onClick")));
+      this.wireHover()
+    },
+
+    onSimulatoStarted () {
+      this.isSimulatorStarted = true
+      if (this.isAnimated()) {
+        if (this.isChatAnimation()) {
+          this.startChatAnimation(this.model.props.label, this.animDuration)          
+        } else {
+          this.startNumberAnimation(this.animMax)
+        }
+      }
     },
 
     getLabelNode () {
@@ -48,9 +52,17 @@ export default {
       this._scaleX = scaleX;
       this._scaleY = scaleY;
 
+      if (this.isAnimated()) {
+        this.animCurrent = model.props.min
+        this.animMax = model.props.max
+        this.animDuration = model.props.duration * 1
+      }
+
       this.setStyle(style, model);
       if (model.props && model.props.label) {
         this.setValue(model.props.label);
+      } else {
+        this.setValue('');
       }
     },
 
@@ -77,26 +89,120 @@ export default {
     _setDataBindingValue (v) {
       if (this.isQDate(v)) {
         v = this.convertQDateToString(v);
-      }
-      if (this.model.props && this.model.props.label) {
-        var label = this.model.props.label;
-        if (label.indexOf("{0}") >= 0) {
-          v = label.replace("{0}", v);
+      } else if (this.isQDateRange(v)) {
+        v = this.convertQDateToString(v.from) + ' - ' + this.convertQDateToString(v.to);
+      } else if (typeof v === 'object' && !Array.isArray(v) && v !== null) {
+        try {
+          v = JSON.stringify(v, '  ', 2)
+        } catch (err) {
+          console.warn('Label._setDataBindingValue() Cannot convert JSON', v)
         }
       }
+      this.animIsRunning = false
+      if (this.isAnimated() && this.isChatAnimation()) {
+        this.startChatAnimation(v, this.animDuration, false)
+        return
+      }
+      if (this.isAnimated() && !isNaN(v)) {
+        this.startNumberAnimation(v)
+        return
+      }
+      if (this.model.props && this.model.props.label) {
+        const label = this.getLabelValue()
+        v = this.replaceVaribale(label, v)
+      }
       this.setValue(v);
+    },
+
+    getLabelValue () {
+      return this.model.props && this.model.props.label
+    },
+
+    replaceVaribale (label, value) {
+        if (label.indexOf("{0}") >= 0) {
+           return label.replace("{0}", value);
+        }
+        if (label.indexOf("{value}") >= 0) {
+           return label.replace("{value}", value);
+        }
+        return value
     },
 
     getValue () {
       return this.value;
     },
 
-    setValue (value) {
+    setValue (value) {  
       value += "";
       if (this.value != value) {
         this.value = value;
         this.setInnerHTML(this.domNode, value);
       }
+    },
+
+    startChatAnimation (txt, animDuration) {
+      //console.debug('Label.startChatAnimation() > enter', txt, animDuration, repeat)
+      let durationPerChar = 1 / (animDuration * 3);
+      const length = txt.length
+      const frames = Math.round(durationPerChar * length * 30)
+      const framesPerChar = frames / length
+      clearTimeout(this.animationRepeat)
+
+      this.animSteps = []
+      for (let i = 0; i < frames; i++) {
+        const end = Math.floor(i / framesPerChar)
+        this.animSteps.push(txt.slice(0, end))
+      }
+      this.animSteps.push(txt)
+
+      this.animIsRunning = true
+      this.runLabelAnimation("", txt)     
+    },
+
+    startNumberAnimation (to) {
+      const label = this.getLabelValue()
+      const diff = to - this.animCurrent
+      const frames = (this.animDuration * 30)
+      const step = diff / frames
+      this.animSteps = []
+ 
+      let x = this.animCurrent
+      for (let i = 0; i < frames; i++) {
+        this.animSteps.push(Math.round(x))
+        x += step
+      } 
+      this.animSteps.push(to)
+      this.animIsRunning = true
+      this.runLabelAnimation(label, to)
+
+    },
+
+    runLabelAnimation (label, to, callback) {
+        if (!this.animIsRunning) {
+          this.animCurrent = to
+          return
+        }
+        if (this.animSteps.length > 0) {
+          let value = this.animSteps.shift()
+          value = this.replaceVaribale(label, value)
+          this.setTextContent(this.domNode, value + "");
+          requestAnimationFrame(() => {
+              this.runLabelAnimation(label, to, callback)
+          })
+        } else {
+          this.animCurrent = to
+          if (callback) {
+            callback()
+          }
+        }
+    },
+
+    isAnimated () {
+      return this.model && this.model.props.animated
+    },
+
+    isChatAnimation () {
+      return this.model && this.model.props.animation === 'chat'
     },
 
     getState () {
@@ -124,6 +230,12 @@ export default {
       }
     },
 
+    _set_color (parent, style) {
+      if (style.color) {
+        this._set_gradient_color(parent, style)
+      }
+    },
+
     _set_fontSize (parent, style) {
       if (style.fontSize === "Auto" || this.style.fontSize === "a") {
         parent.style.fontSize = Math.round(this.model.h * 0.95) + "px";
@@ -139,7 +251,16 @@ export default {
     onClick (e) {
       this.stopEvent(e);
       this.emitClick(e);
+    },
+
+    beforeDestroy () {
+      this._isDestroyed = true
+      this.animIsRunning = false
+      clearTimeout(this.animationRepeat)
     }
+
+  
+   
   },
   mounted() {}
 };

@@ -77,12 +77,20 @@ export class ModelService extends AbstractService{
         return this._get(`/rest/commands/${id}.json`)
     }
 
+    saveCommands (id, stack) {
+        return this._post(`/rest/commands/${id}.json`, stack)
+    }
+
     addCommand (model, command) {
         return this._post(`/rest/commands/${model.id}/add`, command)
     }
 
     deleteCommand (model, count) {
         return this._delete(`/rest/commands/${model.id}/pop/${count}`)
+    }
+
+    shiftStack (model, count) {
+        return this._delete(`/rest/commands/${model.id}/shift/${count}`)
     }
 
     undoCommand (model, command) {
@@ -145,6 +153,10 @@ export class ModelService extends AbstractService{
 
     deleteEventsBySession (id, session) {
         return this._delete(`/rest/events/${id}/${session}.json`)
+    }
+
+    updateEvent (appID, event) {
+        return this._post(`/rest/events/${appID}/${event.id}.json`, event)
     }
 
     /**

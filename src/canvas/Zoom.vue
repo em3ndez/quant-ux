@@ -71,9 +71,9 @@ export default {
 
 			this.stopEvent(e);
 
-			var now = new Date().getTime();
-			if(this.mouseWheelMode === "zoom" || e.metaKey || e.ctrlKey) {
-				if (Math.abs(this.lastMouseWheel -  now) > 10) {
+			const now = new Date().getTime();
+			if(e.metaKey || e.ctrlKey) {
+				if (Math.abs(this.lastMouseWheel -  now) > 5) {
 
 					this._preZoomRelPos = this.getRelCanvasMousePosition(e)
 					this._preZoomAbsPos = this.getCanvasMousePosition(e);
@@ -86,6 +86,15 @@ export default {
 					this.lastMouseWheel = now;
 				}
 
+			} else if (e.shiftKey) {
+				if (Math.abs(this.lastMouseWheel - now) > 1 ){
+					this.canvasPos.x -= Math.round(delta.pixelY / 2);
+					if(delta.pixelX){
+						this.canvasPos.y -= Math.round(delta.pixelX / 2);
+					}
+					this.setContainerPos()
+					this.lastMouseWheel = now;
+				}
 			} else {
 				if (Math.abs(this.lastMouseWheel - now) > 1 ){
 					this.canvasPos.y -= Math.round(delta.pixelY / 2);
@@ -127,6 +136,7 @@ export default {
 			this._setCenterPos();
 			this.zoom = Math.round((this.zoom - 0.05) * 100)
 			this.zoom -= this.zoom % 5
+			this.zoom = Math.max(2, this.zoom)
 			this.zoom /= 100
 			this.onZoomChange();
 		},
@@ -159,10 +169,27 @@ export default {
 				this.renderZoom()
 			}
 			this._lastZoom = this.zoom;
+			this.onViewportChange()
+			this.onZoomListener()
+		},
+
+		setZoomListener(listener) {
+			this._zoomListener = listener
+		},
+
+		clearZoomListener() {
+			delete this._zoomListener;
+		},
+
+		onZoomListener(zoom) {
+			if (this._zoomListener && this[this._zoomListener]){
+				this[this._zoomListener](zoom)
+			}
 		},
 
 
 		cleanUpZoom () {
+			this.clearZoomListener()
 		},
 
 		setZoomedContainerPosition (){

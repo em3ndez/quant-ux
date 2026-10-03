@@ -4,7 +4,7 @@
 
       <label>Endpoint</label>
       <div class="MatcToolbarRestSettingsHeader">
-            <DropDownButton :options="methods" v-model="rest.method" style="width:50px" @change="onChange"/>
+            <DropDownButton :options="methods" v-model="rest.method" style="width:100px" @change="onChange"/>
 
             <input v-model="rest.url" class="form-control" @change="onChange" placeholder="https://server.com/${databinding}.json"/>
 
@@ -46,7 +46,7 @@
                 <div class="form-group">
                     <label>Auth Token</label>
                     <div class="MatcToolbarRestAuth">
-                        <DropDownButton :options="authMethods" v-model="rest.authType" style="width:40px"/>
+                        <DropDownButton :options="authMethods" v-model="rest.authType"/>
                         <input v-model="rest.token" class="form-control" @change="onChange" placeholder="Enter auth token if needed"/>
                     </div>
                 </div>
@@ -93,7 +93,7 @@
 
                     <div class="form-group"  v-if="rest.method === 'POST' || rest.method === 'PUT'" >
                         <label>{{ rest.method }} Type</label>
-                        <SegmentButton :options="inputTypes" v-model="rest.input.type" style="width:300px" @change="onChange"/>
+                        <SegmentButton :options="inputTypes" v-model="rest.input.type" style="width:400px" @change="onChange"/>
                     </div>
 
                     <div class="form-group" v-if="(rest.method === 'POST' || rest.method === 'PUT') && rest.input.type === 'JSON' " >
@@ -105,7 +105,7 @@
                             @init="editorInit"
                             lang="json"
                             theme="chrome"
-                            width="740"
+                            width="800"
                             height="180"></Ace>
 
                         <p class="MatcHint">
@@ -122,20 +122,15 @@
                             @init="editorInit"
                             lang="text"
                             theme="chrome"
-                            width="740"
+                            width="800"
                             height="180"></Ace>
 
                         <p class="MatcHint">
-                            Use the ${databinding} notation to send data from the prototype.
+                            Insert a list of line separated key:value pairs. Use the ${databinding} notation to send data from the prototype.
                         </p>
                     </div>
 
-                    <div class="form-group" v-if="(rest.method === 'POST' || rest.method === 'PUT') && rest.input.type === 'FORM' " >
-                        <p class="MatcHint">
-                            Form data will send all databings collected so far.
-                        </p>
-                    </div>
-
+             
                     <div class="form-group" v-if="(rest.method === 'POST' || rest.method === 'PUT') && rest.input.type === 'FILE' " >
                         <div class="form-group"  v-if="rest.method === 'POST' || rest.method === 'PUT'" >
                             <label>File DataBinding</label>
@@ -163,9 +158,10 @@
                                 v-model="databingValues[key]"
                                 class="form-control"
                                 ref="dbInputs"
-                                v-if="rest.input.type === 'JSON'" />
+                                v-if="rest.input.type === 'JSON' || rest.input.type === 'FORM'" />
+
                             <FileButton
-                                v-if="rest.input.type === 'JSON'"
+                                v-if="rest.input.type === 'JSON' || rest.input.type === 'FORM'"
                                 class="MatcToolbarRestDataBindingIcon"
                                 @change="onDataBingingFileChange(key, $event)"
                                 icon="mdi mdi-cloud-upload"/>
@@ -375,7 +371,6 @@ export default {
                 this.rest.headers = []
             }
             this.rest.headers.splice(i, 1);
-            console.debug(this.rest.headers)
         },
         onDataBingingFileChange (key, file) {
             this.$set(this.databingValues, key, file)

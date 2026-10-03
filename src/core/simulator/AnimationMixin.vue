@@ -20,7 +20,7 @@ export default {
 				return;
 			}
 
-			var anim = this.renderFactory.createWidgetAnimation(e);
+			const anim = this.renderFactory.createWidgetAnimation(e);
 			if(anim){
 				anim.run()
 				this.log("Animation",screenID, widgetID, null, {animation : anim.event});
@@ -88,7 +88,7 @@ export default {
 		runOnLoadedScreenAnimation (screenID,line, endCallback){
 			this.logger.log(1,"runOnLoadedScreenAnimation","enter >  sreen:" + screenID);
 			if (this.doNotRunOnLoadAnimation || this.isDestroyed){
-				this.logger.warn("runOnLoadedScreenAnimation","exit because do not run!");
+				this.logger.log(1,"runOnLoadedScreenAnimation","exit because do not run!");
 				return;
 			}
 			var screen = this.model.screens[screenID];

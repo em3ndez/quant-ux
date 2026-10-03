@@ -37,9 +37,24 @@ export default {
 
     setValue: function(value) {
       if (value != null && value != undefined && this.value != value) {
-        if (Array.isArray(value)) {
-          value = value.join(',')
+         if (typeof value === 'object' && !Array.isArray(value) && value !== null) {
+          try {
+            value = JSON.stringify(value, null, 2)
+          } catch (err) {
+            console.warn('TextArea._setDataBindingValue() Cannot convert JSON', value)
+          }
         }
+        if (Array.isArray(value)) {
+          if (value.length > 0) {
+            let first = value[0]
+            if (typeof first === 'object' || Array.isArray(first)) {
+              value = JSON.stringify(value, null, 2)
+            } else {
+              value = value.join(',')
+            }
+          }
+        }
+       
         this.value = value;
         css.remove(this.input, "MatcWidgetTypeTextBoxInputPlaceholder");
         if (this.mode == "simulator") {

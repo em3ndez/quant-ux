@@ -17,7 +17,7 @@ export default {
     components: {},
     methods: {
 
-    registerDragOnDrop (node, id, startCallback, moveCallback, endCallback, clickCallback, targetNode){
+    	registerDragOnDrop (node, id, startCallback, moveCallback, endCallback, clickCallback, targetNode){
 
 			// new method overload. We can attach the start event to a different node, then to one to be moved!
 			if (!targetNode) {
@@ -77,7 +77,7 @@ export default {
 
 				if (this[this._dragnDropStartCallback]){
 					try {
-						var modelPos = this[this._dragnDropStartCallback](this._dragnDropID, this._dragNDropNode, this._dragNDropStartPos,e);
+						const modelPos = this[this._dragnDropStartCallback](this._dragnDropID, this._dragNDropNode, this._dragNDropStartPos,e);
 
 						if(modelPos){
 							this._dragNDropStartPos = modelPos;
@@ -113,7 +113,7 @@ export default {
 			try {
 				this.stopEvent(e);
 
-				var now = new Date().getTime();
+				const now = new Date().getTime();
 				/**
 				 * We prevent any dnd action for the first 250 ms to avoid unwanted
 				 * movements that can happen due to the touchpad
@@ -131,15 +131,11 @@ export default {
 					return;
 				}
 
-
-				var pos = this._getMousePosition(e);
-
-				var difX = pos.x - this._dragnDropMousePos.x;
-				var difY = pos.y - this._dragnDropMousePos.y;
-				var x = this._dragNDropStartPos.x + difX;
-				var y = this._dragNDropStartPos.y + difY;
-
-
+				const pos = this._getMousePosition(e);
+				const difX = pos.x - this._dragnDropMousePos.x;
+				const difY = pos.y - this._dragnDropMousePos.y;
+				const x = this._dragNDropStartPos.x + difX;
+				const y = this._dragNDropStartPos.y + difY;
 
 				/**
 				 * Only start DND if there was a real mouse movement.
@@ -165,24 +161,12 @@ export default {
 				/**
 				 * compute new model(!!!) position
 				 */
-				var newPos = {
+				let newPos = {
 					x: x,
 					y: y,
 					h: this._dragNDropStartPos.h,
 					w: this._dragNDropStartPos.w
 				};
-
-
-				/**
-				 * Alt Key will ensure that we move on one line!
-				 */
-				if(e.altKey){
-					if(Math.abs(difX) > Math.abs(difY)){
-						newPos.y = this._dragNDropStartPos.y;
-					} else {
-						newPos.x = this._dragNDropStartPos.x;
-					}
-				}
 
 				/**
 				 * calculate new position on
@@ -195,7 +179,7 @@ export default {
 				/**
 				 * calculate the dif now based on the corrected value
 				 */
-				var dif = {
+				const dif = {
 					x : difX - (x-newPos.x),
 					y : difY - (y-newPos.y)
 				};
@@ -203,11 +187,11 @@ export default {
 				/**
 				 * if there a callback check if the move is ok.
 				 */
-				var isInArea = true;
+				let isInArea = true;
 				if (this[this._dragnDropMoveCallback]){
 					try {
 						//console.debug("move callback", this._dragnDropMoveCallback)
-						isInArea = this[this._dragnDropMoveCallback](this._dragnDropID, this._dragNDropNode, newPos, dif);
+						isInArea = this[this._dragnDropMoveCallback](this._dragnDropID, this._dragNDropNode, newPos, dif, e);
 					} catch (e) {
 						if(this.logger){
 							this.logger.error("onDragMove", "Error invoking " + this._dragnDropMoveCallback, e);
@@ -218,12 +202,12 @@ export default {
 					}
 				}
 
-				if(isInArea !== false){
+				if (isInArea !== false){
 					/**
 					 * we have a render queue, and have to put a new
 					 * job in the queue
 					 */
-					var job = {
+					const job = {
 						div : this._dragNDropNode,
 						pos : newPos,
 						id : this._dragnDropID
@@ -253,8 +237,6 @@ export default {
 			this._dragNDropRenderJobs[job.id] = job;
 		},
 
-
-
 		/**
 		 * runs async as requestAnimationFrame...
 		 */
@@ -268,14 +250,14 @@ export default {
 			/**
 			 * update all
 			 */
-			var updateResizeHandlers = false;
+			let updateResizeHandlers = false;
 			for(let id in this._dragNDropRenderJobs){
-				var job = this._dragNDropRenderJobs[id];
-				var div = job.div;
-				var pos = job.pos;
+				const job = this._dragNDropRenderJobs[id];
+				const div = job.div;
+				const pos = job.pos;
 				if(div){
 					this.domUtil.setPos(div, pos)
-					/**
+					/**addDragNDropRenderJob
 					 * check if have to update also the resize handlers
 					 */
 					//console.debug(this._resizeHandlerBox.id, id)
@@ -310,27 +292,27 @@ export default {
 					this.onDragCleanup();
 					return;
 				}
-				var pos = this._getMousePosition(e);
-				var difX = pos.x - this._dragnDropMousePos.x;
-				var difY = pos.y - this._dragnDropMousePos.y;
-				var x = this._dragNDropStartPos.x + difX;
-				var y = this._dragNDropStartPos.y + difY;
+				const pos = this._getMousePosition(e);
+				const difX = pos.x - this._dragnDropMousePos.x;
+				const difY = pos.y - this._dragnDropMousePos.y;
+				const x = this._dragNDropStartPos.x + difX;
+				const y = this._dragNDropStartPos.y + difY;
 
 				/**
 				 * Take the last dnd position, in because otherwise
 				 * the aligner might make trouble
 				 */
-				var newPos = this._dragNDropLastPos;
+				let newPos = this._dragNDropLastPos;
 				if(!newPos){
 					newPos = {
 						x: x,
 						y: y,
 						h: this._dragNDropStartPos.h,
-						w:this._dragNDropStartPos.w
+						w: this._dragNDropStartPos.w
 					};
 				}
 
-				var dif = {
+				const dif = {
 					x : difX - (x-newPos.x),
 					y : difY - (y-newPos.y)
 				};
@@ -417,15 +399,7 @@ export default {
 				}
 				this._dragNDropListeners = null;
 			}
-		},
-
-		// stopEvent (e){
-		//	if(e){
-		//		event.stop(e);
-		//		e.preventDefault();
-		//		e.stopPropagation();
-		//	}
-		//}
+		}
     }
 }
 </script>

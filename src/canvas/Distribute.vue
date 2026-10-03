@@ -1,9 +1,6 @@
 <script>
-// import on from 'dojo/on'
-// import lang from 'dojo/_base/lang'
-// import domStyle from 'dojo/domStyle'
 import css from 'dojo/css'
-// import * as DistributionUtil from 'core/DistributionUtil'
+import * as DistributionUtil from 'core/DistributionUtil'
 
 export default {
     name: 'Distribute',
@@ -32,49 +29,49 @@ export default {
 		},
 
 		onDistributeStart () {
-			this.logger.log(3,"onDistributeStart", "enter");
+            const matrix = DistributionUtil.getDistributionMatrix(this.model, this.getMultiSelection(), false)
+			this.logger.log(-3,"onDistributeStart", "enter", matrix);
 			css.add(this.container, "MatcCanvasModeAlign");
+            if (matrix.horizontal <= 1) {
+                css.add(this.container, "MatcCanvasModeAlignNoVertical");
+            }
+            if (matrix.vertical <= 1) {
+                css.add(this.container, "MatcCanvasModeAlignNoHorizontal");
+            }
             this._distributeEnabled = true;
-            // if (this._selectMulti){
-            //    let lines = DistributionUtil.getLines(this.model, this._selectMulti)
-            //    this.distibutionHandlers = []
-            //    let xLines = lines.xLines
-            //    for (let x in xLines) {
-            //        console.debug('x', x)
-            //        this.renderDistrubutionHandler()
-            //    }
-            // }
         },
 
-        renderDistrubutionHandler (icon) {
+        // renderDistrubutionHandler (icon) {
 
-            var l = (this.resizeButtonSize *2) +1;
+        //     var l = (this.resizeButtonSize *2) +1;
 
-            var div = document.createElement("div");
-            div.style.width = l + "px";
-            div.style.height = l + "px";
-            this._addSizeHandlerTouch(div)
-            css.add(div, "MatcCutsomerHandler " + icon);
-            // var listener = on(div,"mousedown", lang.hitch(this,"onCustomHandlerStart", widget, uiWidget, div, handler));
+        //     var div = document.createElement("div");
+        //     div.style.width = l + "px";
+        //     div.style.height = l + "px";
+        //     this._addSizeHandlerTouch(div)
+        //     css.add(div, "MatcCutsomerHandler " + icon);
+        //     // var listener = on(div,"mousedown", lang.hitch(this,"onCustomHandlerStart", widget, uiWidget, div, handler));
 
-            this.dndContainer.appendChild(div);
-            this.distibutionHandlers.push({
-                div: div
-                // handler: handler,
-                // listener: listener,
-                // widget: widget
-            })
-        },
+        //     this.dndContainer.appendChild(div);
+        //     this.distibutionHandlers.push({
+        //         div: div
+        //         // handler: handler,
+        //         // listener: listener,
+        //         // widget: widget
+        //     })
+        // },
 
 		onDistributeEnd (){
 			this.logger.log(4, "onDistributeEnd", "enter");
 			css.remove(this.container, "MatcCanvasModeAlign");
+             css.remove(this.container, "MatcCanvasModeAlignNoVertical")
+            css.remove(this.container, "MatcCanvasModeAlignNoHorizontal")
             this._distributeEnabled = false;
             this.cleanUpDistributionHandlers()
         },
 
 
-         cleanUpDistributionHandlers () {
+        cleanUpDistributionHandlers () {
             if (this.distibutionHandlers) {
                 let list = this.distibutionHandlers
                 delete this.distibutionHandlers

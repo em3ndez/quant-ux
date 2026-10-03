@@ -14,8 +14,8 @@
         <div class="MatcButton" @click="addFont">Add</div>
 	</div>
 </template>
-<style>
- @import url('../../../style/CustomFonts.css');
+<style lang="scss">
+ @import '../../../style/canvas/CustomFonts.scss';
 </style>
 
 <script>

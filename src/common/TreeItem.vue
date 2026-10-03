@@ -1,30 +1,31 @@
 
 <template>
 <!-- :xScroll="scrollToItem()" Add this to enbale scrolling...  HSould be fixed to only tricker when seelction was changes from canvas-->
-	<ul :class="[{'MatcTreeItemDragOver': isDragOver}, {'MatcTreeItemSelected': isSelected && !isEditable}, 'MatcTreeItem']" :xScroll="scrollToItem()"  >
-    <li :class="'MatcTreeItemLevel' + level">
+	<ul :class="[{'MatcTreeItemDragOver': isDragOver}, {'MatcTreeItemDragOverError': isDragError},{'MatcTreeItemEnd': value.isEnd}, {'MatcTreeItemSelected': isSelected && !isEditable}, 'MatcTreeItem', 'MatcTreeItemLevel' + level]" :xScroll="scrollToItem()"  >
+    <li >
         <div
             :class="'MatcTreeItemRow ' + rowStyle"
-            @click.stop="onClick($event)"
+            @mousedown="onClick($event)"
             @dragstart="onDragStart"
             @dragover="onDragOver"
             @dragleave="onDragLeave"
             @dblclick.stop="onDoubleClick"
             @drop="onDrop"
+            :id="value.domId"
             ref="row"
             :draggable="!isEditable"
           >
           <template v-if="hasChildren">
-            <span :class="expandIcon" @click.stop="toggleOpen"></span>
+            <span :class="expandIcon(value.open)" @click.stop="toggleOpen"></span>
           </template>
           <template v-else>
             <span class="MatcTreeIcon"  @click.stop=""></span>
           </template>
 
-          <span v-if="nodeIcon" :class="nodeIcon"></span>
+
+          <QIcon class="MatcTreeTypeIcon" v-if="nodeIcon" :icon="nodeIcon" width="14" height="14"></QIcon>
 
          <label class="MatcTreeItemLabel" v-if="!isEditable" ref="lblNode" >
-           <!-- add here         {{value.hint}} -->
             {{hintAndLabel}}
           </label>
           <input class="MatcTreeItemLabel MatcIgnoreOnKeyPress"
@@ -34,14 +35,14 @@
             ref="lblNode"
             @keydown.enter="onBlur" :value="value.label"/>
 
-          <div class="MatcTreeItemOptions" v-if="hasOptions">
-            <span :class="lockIcon" @click.stop="toggleLocked"></span>
-            <span :class="hiddenIcon" @click.stop="toggleHidden"></span>
+          <div class="MatcTreeItemOptions" v-if="value.hasOptions">
+            <QIcon :icon="lockIcon" @click.stop="toggleLocked" v-if="hasLock"></QIcon>
+            <QIcon :icon="hiddenIcon" @click.stop="toggleHidden" ></QIcon>
           </div>
 
 
         </div>
-        <ul v-if="isOpen">
+        <ul v-if="value.open">
           <TreeItem v-for="child in value.children" :key="child.id"
             :value="child"
             @dnd="onChildDnd"
@@ -58,6 +59,9 @@
 </template>
 <script>
 
+import Logger from '../core/Logger'
+import TreeDND from './TreeDND'
+import QIcon from 'page/QIcon'
 
 export default {
   name: "TreeItem",
@@ -65,10 +69,14 @@ export default {
   mixins: [],
   data: function() {
     return {
+      hasLock: false,
       hasOptions: false,
-      isOpen: true,
-      isDragOver: false
+      isDragOver: false,
+      isDragError: false
     };
+  },
+  components: {
+    'QIcon': QIcon
   },
   computed: {
     customCSS () {
@@ -83,7 +91,7 @@ export default {
           let hint  = this.unStripHTML(this.value.hint)
           return this.short(hint) + ' (' + this.value.label + ')'
         }
-        return this.value.label
+        return this.short(this.value.label)
       }
       return ''
     },
@@ -110,7 +118,7 @@ export default {
       if (this.value && this.value.icon) {
         return this.value.icon
       }
-      return 'mdi mdi-crop-portrait MatcTreeIcon'
+      return false
     },
     lockIcon () {
       if (this.value && this.value.locked) {
@@ -120,12 +128,14 @@ export default {
     },
     hiddenIcon () {
       if (this.value && this.value.hidden) {
-        return 'mdi mdi-eye-off-outline'
+        return 'Hidden'
       }
-      return 'mdi mdi-eye-outline'
-    },
-    expandIcon () {
-      if (this.isOpen) {
+      return 'Visible'
+    }
+  },
+  methods: {
+    expandIcon (open) {
+      if (open) {
         if (this.value && this.value.openIcon) {
           return this.value.openIcon + ' MatcTreeToggleChildrenIcon'
         }
@@ -135,13 +145,10 @@ export default {
          return this.value.closeIcon + ' MatcTreeToggleChildrenIcon'
       }
       return 'mdi mdi-folder MatcTreeIcon MatcTreeToggleChildrenIcon'
-    }
-  },
-  components: {},
-  methods: {
+    },
     unStripHTML:function(s) {
 			if(!s){
-				s="";
+				s = '';
 			}
       s = s.replace(/(\r\n|\n|\r)/gm, '')
       s = s.replace(/<br>/g, "");
@@ -149,7 +156,7 @@ export default {
 			s = s.replace(/\$perc;/g, "%");
 			return s;
 		},
-    short (s, maxLendth = 20) {
+    short (s, maxLendth = 50) {
       s = this.unStripHTML(s)
       if (s.length > maxLendth) {
         return s.substring(0, maxLendth) + '...'
@@ -173,8 +180,9 @@ export default {
       this.$emit('hidden', this.value.id, !this.value.hidden)
     },
     toggleOpen () {
-      this.isOpen = !this.isOpen
-      this.$emit('open', this.value.id, this.isOpen )
+      const open = !this.value.open
+      this.$set(this.value, "open", open)
+      this.$emit('open', this.value.id, open )
     },
     onClick (e) {
       let expand = e.ctrlKey || e.metaKey || e.shiftKey
@@ -183,25 +191,55 @@ export default {
       }
     },
     onDragStart (e) {
+      if (this.value.hasDND === false) {
+        e.preventDefault()
+        return
+      }
       if (this.value && !this.value.disabled) {
         e.dataTransfer.setData("text", this.value.id)
+        e.dataTransfer.effectAllowed = 'move';
+        TreeDND.start(this.value)
       } else {
         e.preventDefault()
       }
     },
     onDragOver (e) {
+
+      const source = TreeDND.get()
+      if (source && source.dndType !== this.value.dndType) {
+        this.isDragError = true
+        this.isDragOver = false;
+        return
+      }
+      /**
+       * This is causing group dnd to not work
+       */
+      // if (source.parentID !== this.value.parentID) {
+      //   this.isDragOver = false;
+      //   this.isDragError = true
+      //   return
+      // }
       e.preventDefault()
+      this.isDragError = false
       this.isDragOver = true
     },
     onDragLeave (e) {
       e.preventDefault()
       this.isDragOver = false
+      this.isDragError = false
     },
     onDrop (e) {
       e.preventDefault()
-      let id = e.dataTransfer.getData('text')
+      const source = TreeDND.get()
+      const id = e.dataTransfer.getData('text')
       this.isDragOver = false
-      this.$emit('dnd', id, this.value.id, 'top')
+      this.isDragError = false
+      TreeDND.end()
+      if (source && source.dndType === this.value.dndType) {
+        this.$emit('dnd', id, this.value.id, 'top')
+      } else {
+        Logger.log(-1, 'TreeItem.onDrop() > ignore')
+      }
     },
     onChildDnd (from, to, position) {
       this.$emit('dnd', from, to, position)
@@ -228,7 +266,7 @@ export default {
     },
     getInlineTxt (){
       if (this.$refs.lblNode){
-        var txt = this.$refs.lblNode.value;
+        let txt = this.$refs.lblNode.value;
         txt = txt.replace(/(\r\n|\n|\r)/gm, '')
         txt = txt.replace(/<br>/g, "");
         txt = txt.replace(/&nbsp;/g, " ");
@@ -240,8 +278,11 @@ export default {
       // somehow not called
       if (this.value.editable) {
         setTimeout(() => {
-          this.$refs.lblNode.select()
-          this.$refs.lblNode.focus()
+          if (this.$refs.lblNode) {
+            this.$refs.lblNode.select()
+            this.$refs.lblNode.focus()
+          }
+  
         }, 100)
       }
     },
@@ -256,13 +297,9 @@ export default {
   watch: {
     value (v) {
       this.value = v
-      this.isOpen = this.value.open
     }
   },
   mounted() {
-    if (this.value) {
-      this.isOpen = this.value.open
-    }
   }
 };
 </script>

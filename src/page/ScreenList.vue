@@ -1,6 +1,6 @@
 
 <template>
-  <div class="MatcAppList">
+  <div :class="'MatcScreenList ' + screenType">
     <div class="MatcAppListContainer" data-dojo-attach-point="container"></div>
   </div>
 </template>
@@ -10,6 +10,7 @@ import css from "dojo/css";
 import Util from "core/Util";
 import AppList from "page/AppList";
 import Preview from "page/Preview";
+import {iconDOM} from "page/QIconUtil";
 import Services from "services/Services";
 
 export default {
@@ -18,16 +19,27 @@ export default {
   props:['app', 'pub'],
   data: function() {
     return {
+      model: null,
       add: false,
       hasSearch:false,
       popoverButtonLabel: "Design",
       maxElementsToRender: 20,
       resizePreview: false,
       isPublic: false,
-      hasStackView: false
+      hasStackView: false,
+      animate: false
     };
   },
   components: {},
+  computed: {
+    screenType () {
+
+      if (this.model) {
+        return this.model.type
+      }
+      return ""
+    },
+  },
   methods: {
     /**
      * Is called from parent mounted
@@ -40,20 +52,25 @@ export default {
         console.warn('ScreenList.load() > No app')
       }
     },
-    setValue: function(value) {
+    setValue (value) {
       this.model = value;
       this.value = this.getScreens();
+      // if (this.model.type === 'desktop') {
+      //   this.colWidth = 320;
+      // }
+    
       if (this.value.length == 0) {
         this.add = true;
       }
       this.render(this.value, this.animate);
+      
     },
 
-    setInvitation: function(h) {
+    setInvitation (h) {
       this.hash = h;
     },
 
-    setMethod: function(phone, screen) {
+    setMethod (phone, screen) {
       if (this.pub) {
         phone.href = "#/examples/" + this.model.id + "/design/" + screen.id + ".html";
       } else {
@@ -61,42 +78,40 @@ export default {
       }
     },
 
-    onTest: function(id, e) {
+    onTest (id, e) {
       this.stopEvent(e);
       this.emit("test", id);
     },
 
-    onRenderAdd: function(item) {
-      css.add(item, " MatcContentBox MatcAppListBox ");
+    renderDefault () {
 
-      var phone = document.createElement("a");
+      const item = document.createElement("a");
+      css.add(item, "MatcAppListItem MatcContentBox MatcAppListBox");
+     
+      const wrapper = document.createElement("div");
+      css.add(wrapper, "MatcPreviewWrapper MatcPreviewWrapperLoadable");
+      item.appendChild(wrapper)
+      this.setPreviewWrapperSize(wrapper);
 
-      css.add(phone, "MatcPointer");
-      item.appendChild(phone);
-
-      var wrapper = document.createElement("div");
-      css.add(wrapper, " ");
-      phone.appendChild(wrapper);
-
-      var add = document.createElement("div");
-      css.add(add, "MatcApplListAdd");
+      const add = document.createElement("div");
+      css.add(add, "MatcAppListAdd");
       wrapper.appendChild(add);
 
-      var span = document.createElement("span");
-      css.add(span, "glyphicon glyphicon-pencil");
-      add.appendChild(span);
+      const span = document.createElement("span");
+      css.add(span, "mdi mdi-border-color");
+      add.appendChild(iconDOM('Plus', '', 64, 64));
 
-      var p = document.createElement("p");
-      css.add(p, "MatcHint MatcCenter MatcListItemDescription");
+      // const p = document.createElement("p");
+      // css.add(p, "MatcHint MatcCenter MatcListItemDescription");
+      // p.innerHTML = "";
+      // add.appendChild(p)
 
-      p.innerHTML = "Click here to edit the prototype ";
-      phone.href = "#/apps/" + this.model.id + "/design.html";
-
-      item.appendChild(p);
+      item.href = "#/apps/" + this.model.id + "/design/start.html";
+      return item
     },
 
-    createScreenWidget: function() {
-      var heatmap = this.$new(Preview);
+    createScreenWidget () {
+      const heatmap = this.$new(Preview);
       heatmap.isFillBackground = true
       heatmap.setJwtToken(this.jwtToken);
       heatmap.setPublic(this.pub)
@@ -106,16 +121,16 @@ export default {
       return heatmap;
     },
 
-    renderDescription: function(app, item) {
-      var des = this.getDescription(app);
-      var p = document.createElement("p");
+    renderDescription (app, item) {
+      let des = this.getDescription(app);
+      let p = document.createElement("p");
       p.innerHTML = des;
       css.add(p, "MatcListItemDescription");
       item.appendChild(p);
     },
 
-    getDescription: function(screen) {
-      var des = "";
+    getDescription (screen) {
+      let des = "";
       if (screen.name) {
         des += screen.name;
       } else {
@@ -124,13 +139,18 @@ export default {
       return des;
     },
 
-    onRenderDone: function() {
-      for (var i = 0; i < this.value.length; i++) {
-        var screen = this.value[i];
-        if (this.widgets[i]) {
-          this.widgets[i].setModel(this.model, screen.id);
+    onRenderDone () {
+      try {
+        for (let i = 0; i < this.value.length; i++) {
+          const scrn = this.value[i];
+          if (this.widgets[i]) {
+            this.widgets[i].setModel(this.model, scrn?.id);
+          }
         }
+      } catch (e) {
+        console.error(e)
       }
+     
     }
   },
   mounted() {}

@@ -1,4 +1,4 @@
-import Grouping from 'common/Grouping'
+import Grouping from './Grouping'
 
 export default class DataFrame {
 
@@ -19,6 +19,15 @@ export default class DataFrame {
 		}
 	}
 
+	as_dict(key) {
+		const arr = this.as_array()
+		const result = {}
+		arr.forEach(row => {
+			result[row[key]] = row
+		})
+		return result
+	}
+
 	push(row) {
 		if (this.data.push) {
 			this.data.push(row);
@@ -30,10 +39,20 @@ export default class DataFrame {
 
 	select(column, operator, value) {
 
-		var result = [];
+		const result = [];
+		let inLookup = null
+		if (operator === 'in') {
+			if (Array.isArray(value)) {
+				inLookup = {}
+				value.forEach(v => {
+					inLookup[v] = true
+				})				
+			}
+		}
+
 		this.foreach(function (row) {
 
-			var v = row[column];
+			const v = row[column];
 
 			switch (operator) {
 				case "==":
@@ -67,7 +86,9 @@ export default class DataFrame {
 					}
 					break;
 				case "in":
-					if (value.indexOf(v) >= 0) {
+					if (inLookup && inLookup[v]) {
+						result.push(row);
+					} else if (value.indexOf(v) >= 0) {
 						result.push(row);
 					}
 					break;
@@ -90,8 +111,6 @@ export default class DataFrame {
 		}
 		return new DataFrame(result);
 	}
-
-
 
 	shape() {
 		var l = this.size();
@@ -181,7 +200,7 @@ export default class DataFrame {
 
 		}
 	}
-
+	
 	col(column) {
 		var result = [];
 		this.foreach(function (value, id) {
@@ -377,7 +396,7 @@ export default class DataFrame {
 	}
 
 	median(column) {
-		var list = []
+		let list = []
 		this.foreach(function (value) {
 			list.push(value)
 		}, column);
@@ -391,13 +410,16 @@ export default class DataFrame {
 	}
 
 	mean(column) {
-		var sum = this.sum(column);
+		const sum = this.sum(column);
+		if (this.size() === 0) {
+			return 0
+		}
 		return sum * 1.0 / this.size();
 	}
 
 
 	max(column) {
-		var max = Number.MIN_VALUE;
+		let max = Number.MIN_VALUE;
 		this.foreach(function (value) {
 			max = Math.max(max, value);
 		}, column);
@@ -406,7 +428,7 @@ export default class DataFrame {
 
 
 	min(column) {
-		var min = Number.MAX_VALUE;
+		let min = Number.MAX_VALUE;
 		this.foreach(function (value) {
 			min = Math.min(min, value);
 		}, column);
@@ -689,6 +711,15 @@ export default class DataFrame {
 			}
 			return 0;
 		}, column)
+	}
+
+	merge (other) {
+		if (Array.isArray(this.data) && Array.isArray(other.data)) {
+			let newData = this.data.concat(other.data)
+			return new DataFrame(newData)
+		}
+		console.error('DataFrame.merge() > Cannot merge to object frames')
+		return new DataFrame([])
 	}
 
 }

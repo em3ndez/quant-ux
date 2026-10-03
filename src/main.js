@@ -6,13 +6,13 @@ import VueI18n from 'vue-i18n'
 import Services from 'services/Services'
 
 
-
 async function start() {
   await Services.initConfig()
   let conf = await Services.getConfig()
   if (conf.auth === 'keycloak') {
     const keycloakService = Services.getUserService()
-    await keycloakService.init(conf)
+    await keycloakService.setConf(conf)
+    await keycloakService.init();
   }
 
   Vue.use(VueI18n)
@@ -29,6 +29,8 @@ async function start() {
         'en-us': require('./nls/en.json'),
         'cn': require('./nls/cn.json'),
         'de': require('./nls/de.json'),
+        'pt-br': require('./nls/pt_br.json'),
+        'pt': require('./nls/pt_br.json')
       }
     }),
     render: h => h(App)

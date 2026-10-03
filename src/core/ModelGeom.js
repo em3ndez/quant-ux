@@ -1,22 +1,25 @@
+
 /**
  * A class that should in the long run contain all the geometric functions
  * that are somehow scattered around, Core.js and Util.vue
  */
+const FLEX_CONTAINER_MARGIN = 0.1
+
 class ModelGeom {
 
 
     getBoundingBox (ids, model) {
-        // console.debug('ModelGeom.getBoundingBox', ids, model)
-        var result = { x: 100000000, y: 100000000, w: 0, h: 0 };
-
-        for (var i = 0; i < ids.length; i++) {
-            var id = ids[i];
-            var box = this.getBoxById(id, model);
+        const result = { x: 100000000, y: 100000000, w: 0, h: 0 , isBoundingBox: true, ids: ids, z:100000000};
+     
+        for (let i = 0; i < ids.length; i++) {
+            const id = ids[i];
+            const box = this.getBoxById(id, model);
             if (box) {
                 result.x = Math.min(result.x, box.x);
                 result.y = Math.min(result.y, box.y);
                 result.w = Math.max(result.w, box.x + box.w);
                 result.h = Math.max(result.h, box.y + box.h);
+                result.z = Math.min(result.z, box.z)
             } else {
                 console.warn("getBoundingBox() > No box with id", id);
             }
@@ -27,20 +30,40 @@ class ModelGeom {
     }
 
     getBoundingBoxByBoxes (boxes) {
-        var result = { x: 100000000, y: 100000000, w: 0, h: 0 };
+        const result = { x: 100000000, y: 100000000, w: 0, h: 0, isBoundingBox: true, z:100000000};
 
-        for (var i = 0; i < boxes.length; i++) {
-            var box = boxes[i];
+        for (let i = 0; i < boxes.length; i++) {
+            const box = boxes[i];
             result.x = Math.min(result.x, box.x);
             result.y = Math.min(result.y, box.y);
             result.w = Math.max(result.w, box.x + box.w);
             result.h = Math.max(result.h, box.y + box.h);
+            result.z = Math.min(result.z, box.z)
         }
 
         result.h -= result.y;
         result.w -= result.x;
 
         return result;
+    }
+
+    getMinZValueByIDs(ids, model) {
+        let min = 100000;
+        let l = 0;
+        ids.forEach(id => {
+            const w = model.widgets[id];
+            if (w) {
+                min = Math.min(w.z, min);
+                l++;
+            } else {
+                console.debug('getMinZValueByIDs() > cannot find', id)
+            }
+        })
+        if (l > 0) {
+            return min;
+        } else {
+            return 0;
+        }
     }
 
     getBoxById (id, model) {
@@ -110,11 +133,11 @@ class ModelGeom {
     }
 
     getParentScreen (widget, model) {
-        for (var id in model.screens) {
-            var screen = model.screens[id];
-            var i = screen.children.indexOf(widget.id);
+        for (let id in model.screens) {
+            const screen = model.screens[id];
+            const i = screen.children.indexOf(widget.id);
             if (i > -1) {
-            return screen;
+                return screen;
             }
         }
         return null;
@@ -127,8 +150,8 @@ class ModelGeom {
         if (!box.h) {
             box.h = 0;
         }
-        for (var id in model.screens) {
-            var screen = model.screens[id];
+        for (let id in model.screens) {
+            const screen = model.screens[id]
             if (this._isBoxChild(box, screen)) {
                 return screen;
             }
@@ -155,6 +178,56 @@ class ModelGeom {
         let _s = JSON.stringify(obj)
         return JSON.parse(_s)
     }
+
+    getChildWidgetsIDs (model, cntr) {
+        const result = []
+        for (let id in model.widgets) {
+            const w = model.widgets[id]
+            // check here also for the selected widgets?
+            if (w.z >= cntr.z && w.id !== cntr.id) {
+                if (this.isFullContained(cntr, w)) {
+                    result.push(w.id)
+                }
+            }
+		}
+        return result
+    }
+
+    /**
+     * Same as getChildWidgetsIDs(), but instead of scanning all widgets
+     * in the model, we first narrow down to the widgets of the screen
+     * the container is on (screen.children), since every widget is
+     * flatly registered there regardless of nesting depth.
+     */
+    getChildWidgetsIDsFast (model, cntr) {
+        const screen = this.getHoverScreen(cntr, model)
+        if (!screen) {
+            return this.getChildWidgetsIDs(model, cntr)
+        }
+
+        // snapping can nudge a child a fraction of a pixel over the edge of a flex container
+        const margin = cntr.type === 'FlexContainer' ? FLEX_CONTAINER_MARGIN : 0
+        const result = []
+        for (let i = 0; i < screen.children.length; i++) {
+            const id = screen.children[i]
+            const w = model.widgets[id]
+            if (w && w.z >= cntr.z && w.id !== cntr.id) {
+                if (this.isFullContained(cntr, w, margin)) {
+                    result.push(w.id)
+                }
+            }
+        }
+        return result
+    }
+
+    isFullContained	(outer, inner, margin = 0) {
+		return (
+			outer.x - margin <= inner.x &&
+			outer.y - margin <= inner.y &&
+			outer.x + outer.w + margin >= inner.x + inner.w &&
+			outer.y + outer.h + margin >= inner.y + inner.h
+		)
+	}
 }
 
 export default new ModelGeom()

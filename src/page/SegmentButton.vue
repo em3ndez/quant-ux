@@ -1,7 +1,7 @@
 
 <template>
 	<div class="MatcSegmentButton">
-		<div type="button" class="MatcSegmentButtonCntr" data-dojo-attach-point="button"> 
+		<div type="button" class="MatcSegmentButtonCntr" ref="button"> 
 		</div>
 	</div>
 </template>
@@ -22,11 +22,11 @@ export default {
     },
     components: {},
     methods: {  
-		setOptions:function(list){
+		setOptions (list){
 			this._lis = {};			
-			var first = list.slice(0, 6);			
-			for(var i=0; i < first.length; i++){
-				var o = list[i];
+			const first = list.slice(0, 6);			
+			for(let i=0; i < first.length; i++){
+				const o = list[i];
 				var li = document.createElement("span");	
 				css.add(li, "MatcButton");
 				if (o.label){
@@ -37,13 +37,13 @@ export default {
 					css.add(icon, o.icon);
 					li.appendChild(icon);
 				}
-				this.button.appendChild(li);
+				this.$refs.button.appendChild(li);
 				this._lis[o.value] = li;
 				this.own(on(li, touch.press, lang.hitch(this, "onChange", o)));
 			}		
 		},
 		
-		setValue:function(v){
+		setValue (v){
 			this.selected = v;
 			for (var id in this._lis){
 				var li = this._lis[id];
@@ -54,11 +54,11 @@ export default {
 			}
 		},
 		
-		getValue:function(){
+		getValue (){
 			return this.selected;
 		},
 		
-		onChange:function(o){
+		onChange (o){
 			this.setValue(o.value);
 			this.emit("change", this.selected );
 			this.emit("input", this.selected );
@@ -73,7 +73,7 @@ export default {
 		if (this.options) {
 			this.setOptions(this.options)
 		}
-		if (this.value) {
+		if (this.value !== undefined) {
 			this.setValue(this.value)
 		}
     }

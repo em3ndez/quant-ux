@@ -8,94 +8,84 @@ export default {
     mixins:[_Tooltip, DojoWidget],
     data: function () {
         return {
-					colorWidgets: []
+			colorWidgets: []
       }
 	},
     components: {},
-		computed: {
-		},
+	computed: {
+	},
     methods: {
 
+		/*****************************************************************************************************
+		* screen properties
+		****************************************************************************************************/
 
-			/*****************************************************************************************************
-			* screen properties
-			****************************************************************************************************/
-
-
-			showScreenProperties (model){
-				this.logger.log(0,"showScreenProperties", "entry");
+		showScreenProperties (model){
+			this.logger.log(0,"showScreenProperties", "entry");
 
 
-				this.showProperties();
+			this.showProperties();
 
-				if (this.isDataView) {
-					return this.showScreenDataProperties(model)
+			if (this.isDataView) {
+				return this.showScreenDataProperties(model)
+			}
+
+
+			if (this.isDesignView) {
+				this.showScreenDesignProperties(model)
+			}
+
+			if (this.isPrototypeView) {
+				this.showScreenPrototypeProperties(model)
+			}
+
+
+			this.restorePropertiesState();
+
+			this.logger.log(2,"showScreenProperties", "exit");
+		},
+
+		showScreenPrototypeProperties (model) {
+				this.logger.log(-1,"showScreenPrototypeProperties", "entry");
+
+				if (this.screenName) {
+					if(model.name){
+						this.screenName.value = model.name;
+					} else {
+						this.screenName.value = "";
+					}
+					this.screenName.blur();
+					css.remove(this.screenNameDiv, "MatcToolbarSectionHidden");
 				}
-
-
-				if (this.isDesignView) {
-					this.showScreenDesignProperties(model)
-				}
-
-				if (this.isPrototypeView) {
-					this.showScreenPrototypeProperties(model)
-				}
-
-
-				this.restorePropertiesState();
-
-				this.logger.log(2,"showWidgetProperties", "exit");
-			},
-
-      showScreenPrototypeProperties (model) {
-			  this.logger.log(-1,"showScreenPrototypeProperties", "entry");
-
-
-				if(model.name){
-					this.screenName.value = model.name;
-				} else {
-					this.screenName.value = "";
-				}
-				this.screenName.blur();
 
 				css.add(this.screenSize.domNode, 'MatcHidden')
-				css.remove(this.screenNameDiv, "MatcToolbarSectionHidden");
+			
 
-        if(this.screenActionDiv){
+				if(this.screenActionDiv){
 					css.remove(this.screenActionDiv, "MatcToolbarSectionHidden");
 					this.screenActionBTN.setScreen(model);
 				}
-				/**
-				 * Show
-				 */
 				if(this.screenAnimationDiv){
 					css.remove(this.screenAnimationDiv, "MatcToolbarSectionHidden")
 				}
 
-      },
+				css.remove(this.callBackDiv, "MatcToolbarSectionHidden")
+				this.callbackSection.setValue(model, 'screen')
+		},
 
-      showScreenDesignProperties (model) {
+		showScreenDesignProperties (model) {
 
 				this.showDesignTokenBtns(model, 'screen')
 
-        if(this.screenDIV){
+				if(this.screenDIV){
 					css.remove(this.screenDIV, "MatcToolbarSectionHidden");
 				}
 
-				css.remove(this.screenNameDiv, "MatcToolbarSectionHidden");
+				css.remove(this.screenShapeDiv, "MatcToolbarSectionHidden");
 				css.remove(this.screenBackDiv, "MatcToolbarSectionHidden");
 				css.remove(this.screenImageDiv, "MatcToolbarSectionHidden");
 				css.remove(this.screenParentsDiv, "MatcToolbarSectionHidden");
 				css.remove(this.screenDownloadDiv, "MatcToolbarSectionHidden");
-
-
-				/**
-				 	* Since 4.0.0 we do not show the prototyping properties in the deisgn view
-				 	*/
-        //if(this.screenActionDiv){
-				//	css.remove(this.screenActionDiv, "MatcToolbarSectionHidden");
-				//	this.screenActionBTN.setScreen(model);
-				//}
 
 				var style = model.style;
 				if (style) {
@@ -103,14 +93,25 @@ export default {
 					this.screenStart.setValue(model.props.start);
 					this.screenBackgroundImage.setValue(style.backgroundImage);
 					this.screenBackgroundImage.setModel(this.model);
-					this.screenBackgroundColor.setValue(style.background);
-					this.screenBackgroundColor.setBox(model)
 
+					/**
+					 * Since 5.0.3 we support image repeats
+					 */
+					if (style.backgroundImage) {
+						css.remove(this.screenImageRepeatDiv, "MatcToolbarSectionHidden")
+					} else {
+						css.add(this.screenImageRepeatDiv, "MatcToolbarSectionHidden")
+					}
+					this.screenImageRepeat.setValue(style.backgroundImageRepeat)
+
+					this.screenBackgroundColor.setBox(model)
+					this.screenBackgroundColor.setValue(style.background);
+			
 					this.screenOverlayCheckBox.setValue(style.overlay);
 
 					/**
-						* Since 2.2.2 we show the segemnt box
-						*/
+					* Since 2.2.2 we show the segemnt box
+					*/
 					if (this.screenSegmentCheckbox) {
 						this.screenSegmentCheckbox.setValue(model.segment)
 						css.remove(this.screenSegmentCheckbox.domNode, "hidden");
@@ -135,12 +136,14 @@ export default {
 				this.screenParentList.setScreen(model);
 				//this.childWidget.setScreen(model);
 
-				if(model.name){
-					this.screenName.value = model.name;
-				} else {
-					this.screenName.value = "";
+				if (this.screenName) {
+					if(model.name){
+						this.screenName.value = model.name;
+					} else {
+						this.screenName.value = "";
+					}
+					this.screenName.blur();
 				}
-				this.screenName.blur();
 
 				if(this.screenDownLoad) {
 					css.remove(this.screenDownLoad.domNode, "MatcHidden")
@@ -156,24 +159,26 @@ export default {
 					this.screenSize.setValue(model);
 				}
 
-      },
+		},
 
 
-			showScreenDataProperties (model) {
-				this.showProperties();
+		showScreenDataProperties (model) {
+			this.showProperties();
 
+			if (this.screenName) {
 				if(model.name){
 					this.screenName.value = model.name;
 				} else {
 					this.screenName.value = "";
 				}
 				this.screenName.blur();
-
-				css.add(this.screenSize.domNode, 'MatcHidden')
-				css.remove(this.screenNameDiv, "MatcToolbarSectionHidden");
-				css.remove(this.callBackDiv, "MatcToolbarSectionHidden")
-				this.callbackSection.setValue(model, 'screen')
 			}
+
+			css.add(this.screenSize.domNode, 'MatcHidden')
+			css.remove(this.screenNameDiv, "MatcToolbarSectionHidden");
+			css.remove(this.callBackDiv, "MatcToolbarSectionHidden")
+			this.callbackSection.setValue(model, 'screen')
+		}
 
     },
     mounted () {

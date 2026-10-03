@@ -6,22 +6,33 @@ Vue.use(VueRouter)
 
 let matcRoutes = []
 
-matcRoutes.push({path:'my-account.html', component: () => import(/* webpackChunkName: "about" */ 'views/user/Account.vue')})
-matcRoutes.push({path:'reset_password.html', component: () => import(/* webpackChunkName: "about" */ 'views/user/ResetPassword.vue')})
-matcRoutes.push({path:'reset_password3.html', component: () => import(/* webpackChunkName: "about" */ 'views/user/ResetPassword.vue')})
-matcRoutes.push({path:'404.html', component: () => import(/* webpackChunkName: "about" */ 'views/404.vue')})
-matcRoutes.push({path:'help.html', component: () => import(/* webpackChunkName: "about" */ 'views/Help.vue')})
-matcRoutes.push({path:'help/:topic.html', component: () => import(/* webpackChunkName: "about" */ 'views/Help.vue')})
-matcRoutes.push({path:'help/:topic/:subtopic.html', component: () => import(/* webpackChunkName: "about" */ 'views/Help.vue')})
+matcRoutes.push({path:'my-account.html', component: () => import(/* webpackChunkName: "about" */ 'views/user/Account.vue'), meta: {hasHeader: true}})
+matcRoutes.push({path:'404.html', component: () => import(/* webpackChunkName: "about" */ 'views/404.vue'), meta: {hasHeader: true}})
+matcRoutes.push({path:'logout.html', component: () => import(/* webpackChunkName: "about" */ 'views/LogoutPage.vue'), meta: {hasHeader: true}})
+matcRoutes.push({path:'help.html', component: () => import(/* webpackChunkName: "about" */ 'views/Help.vue'), meta: {hasHeader: true}})
+matcRoutes.push({path:'help/:topic.html', component: () => import(/* webpackChunkName: "about" */ 'views/Help.vue'), meta: {hasHeader: true}})
+matcRoutes.push({path:'help/:topic/:subtopic.html', component: () => import(/* webpackChunkName: "about" */ 'views/Help.vue'), meta: {hasHeader: true}})
+
+// Studio
+matcRoutes.push({path:'', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Studio.vue'),  meta: {hideHeader: true}})
+matcRoutes.push({path:'apps/my-apps.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Studio.vue'), meta: {hideHeader: true}})
+matcRoutes.push({path:'apps/logged_in.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Studio.vue'),  meta: {hideHeader: true}})
+matcRoutes.push({path:'apps/:id.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Studio.vue'), meta: {hideHeader: true}})
+matcRoutes.push({path:'apps/:id/:tab.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Studio.vue'), meta: {hideHeader: true}})
+matcRoutes.push({path:'apps/:id/replay/:session.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Studio.vue'), meta: {hideHeader: true}})
+matcRoutes.push({path:'apps/create-app.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Create.vue'), meta: {hideHeader: true}})
+matcRoutes.push({path:'apps/tryout.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Create.vue'), meta: {hideHeader:true}})
+
+
 // Apps
-matcRoutes.push({path:'', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Apps.vue'),  meta: {isDarkHeader: true}})
-matcRoutes.push({path:'my-apps.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Apps.vue'), meta: {isDarkHeader: true}})
-matcRoutes.push({path:'logged_in.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Apps.vue'),  meta: {isDarkHeader: true}})
-matcRoutes.push({path:'create-app.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Create.vue')})
-matcRoutes.push({path:'tryout.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Create.vue'), meta: {isTryout:true}})
-matcRoutes.push({path:'apps/:id.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Overview.vue')})
-matcRoutes.push({path:'apps/:id/:tab.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Overview.vue')})
-matcRoutes.push({path:'apps/:id/replay/:session.html', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Overview.vue')})
+// matcRoutes.push({path:'', component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Apps.vue'),  meta: {isDarkHeader: true}})
+// matcRoutes.push({path:'apps/my-apps.html', name: "apps_list", meta: {isHome:true, analytics:true}, component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Apps.vue')})
+// matcRoutes.push({path:'apps/logged_in.html', meta: {isHome:true}, component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Apps.vue')})
+// matcRoutes.push({path:'apps/create-app.html',  name: "apps_create",  meta: {isHome:false}, component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Create.vue')})
+// matcRoutes.push({path:'apps/tryout.html',  name: "apps_tryout", component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Create.vue'), meta: {isTryout:true, isHome:false}})
+// matcRoutes.push({path:'apps/:id.html',  name: "apps_overview", component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Overview.vue'), meta: {analytics:true}})
+// matcRoutes.push({path:'apps/:id/:tab.html', name: "apps_overview_tab", component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Overview.vue'), meta: {analytics:true, analyticsKey:'tab'}})
+// matcRoutes.push({path:'apps/:id/replay/:session.html', name: "apps_video", component: () => import(/* webpackChunkName: "apps" */ 'views/apps/Overview.vue')})
 
 
 export default new VueRouter({
@@ -30,6 +41,18 @@ export default new VueRouter({
       path: '/simulate.html',
       name: 'SimulatorPage',
       component: () => import(/* webpackChunkName: "simulator" */ 'views/simulator/SimulatorPage.vue')
+    },
+    {
+      path: '/tos.html',
+      name: 'Tos',
+      component: () => import(/* webpackChunkName: "simulator" */ 'views/Tos.vue'),
+      meta: {hasHeader: true}
+    },
+    {
+      path: '/privacy.html',
+      name: 'Privacy',
+      component: () => import(/* webpackChunkName: "simulator" */ 'views/Privacy.vue'),
+      meta: {hasHeader: true}
     },
     {
       path: '/test.html',
@@ -52,18 +75,6 @@ export default new VueRouter({
       component: () => import(/* webpackChunkName: "design" */ 'views/apps/Design.vue')
     },
     {
-      path: '/tryout2.html',
-      name: 'TryoutEditor',
-      meta: {isPublic:true},
-      component: () => import(/* webpackChunkName: "design" */ 'views/apps/Tryout.vue')
-    },
-    {
-      path: '/examples/:id/design/:sid.html',
-      name: 'ExampleEditor',
-      meta: {isPublic:true},
-      component: () => import(/* webpackChunkName: "design" */ 'views/apps/Design.vue')
-    },
-    {
       path: '/share.html',
       name: 'SharePage',
       component: () => import(/* webpackChunkName: "design" */ 'views/apps/Share.vue')
@@ -71,13 +82,14 @@ export default new VueRouter({
     {
       path: '/apps/:id/analyze/workspace.html',
       name: 'AnalyticCanvasPage',
-      component: () => import(/* webpackChunkName: "design" */ 'views/apps/Analyze.vue')
+      meta: {viewMode: 'Heatmap'},
+      component: () => import(/* webpackChunkName: "design" */ 'views/apps/Design.vue')
     },
     {
       path: '/examples/:id/analyze/workspace.html',
       name: 'ExampleAnalyticCanvasPage',
-      meta: {isPublic:true},
-      component: () => import(/* webpackChunkName: "design" */ 'views/apps/Analyze.vue')
+      meta: {isPublic:true, viewMode: 'Heatmap'},
+      component: () => import(/* webpackChunkName: "design" */ 'views/apps/Design.vue')
     },
     {
       path: '/',
@@ -104,10 +116,6 @@ export default new VueRouter({
     {
       path: '/test/Rule.html',
       component: () => import(/* webpackChunkName: "unit" */ './unit/RuleTest.vue')
-    },
-    {
-      path: '/test/DataBinding.html',
-      component: () => import(/* webpackChunkName: "unit" */ './unit/DataBindingTest.vue')
     },
     {
       path: '/test/DataBindingTree.html',
@@ -139,6 +147,10 @@ export default new VueRouter({
     },
     {
       path: '/test/Task.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/TaskPerfGramTest.vue')
+    },
+    {
+      path: '/test/Task.html',
       component: () => import(/* webpackChunkName: "unit" */ './unit/TaskCreateDialogTest.vue')
     },
     {
@@ -152,14 +164,66 @@ export default new VueRouter({
     {
       path: '/test/WS.html',
       component: () => import(/* webpackChunkName: "unit" */ './unit/WebSocketTest.vue')
+    },
+    {
+      path: '/test/StyledTable.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/StyledTableTest.vue')
+    },
+    {
+      path: '/test/CondStyle.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/ConditionalStyleTest.vue')
+    },
+    {
+      path: '/test/JS.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/JSSandboxTest.vue')
+    },
+    {
+      path: '/test/Perf.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/PerfTest.vue')
+    },
+    {
+      path: '/test/BigData.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/BigDataTest.vue')
+    },
+    {
+      path: '/test/Outlier.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/OutlierTest.vue')
+    },
+    {
+      path: '/test/Responsive.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/ResponsiveTest.vue')
+    },
+    {
+      path: '/test/Form.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/FormTest.vue')
+    },
+    {
+      path: '/test/VSlider.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/VSliderTest.vue')
+    },
+    {
+      path: '/test/CanvasComment.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/CanvasCommentTest.vue')
+    },
+    {
+      path: '/test/Chat.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/ChatHelpTest.vue')
+    },
+    {
+      path: '/test/SimUser.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/SimUserTest.vue')
+    },
+    {
+      path: '/test/VoiceRecorder.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/VoiceRecorderTest.vue')
+    },
+    {
+      path: '/test/ChatSettings.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/ChatSettingsTest.vue')
+    },
+        {
+      path: '/test/Agent.html',
+      component: () => import(/* webpackChunkName: "unit" */ './unit/AgentTest.vue')
     }
-    //{
-    //  path: '/test/Sketch.html',
-    //  component: () => import(/* webpackChunkName: "unit" */ './unit/SketchTest.vue')
-    // }
-    //{
-    //  path: '/test/paper.html',
-    //  component: () => import(/* webpackChunkName: "unit" */ './unit/Paper.vue')
-    //}
   ]
 })

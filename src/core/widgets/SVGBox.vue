@@ -20,13 +20,14 @@
 import DojoWidget from "dojo/DojoWidget";
 import UIWidget from "core/widgets/UIWidget";
 import Logger from 'common/Logger'
-import * as SVGUtil from './../../svg/SVGUtil'
+import * as SVGUtil from '../../svg/SVGUtil'
 
 export default {
   name: "SVGBox",
   mixins: [UIWidget, DojoWidget],
   data: function() {
     return {
+      offset: 0,
       model: null,
       width: 0,
       height: 0,
@@ -45,8 +46,9 @@ export default {
 
     wireEvents () {
       this.own(this.addClickListener(this.domNode, e => {
-        this.onClick(e)
+        this.emitClick(e)
       }));
+      this.wireHover()
     },
 
     resize (box) {
@@ -56,34 +58,33 @@ export default {
     render (model, style, scaleX, scaleY) {
 
       this.model = model;
-      this.elements = model.elements
+      this.elements = model.props.paths ? model.props.paths : model.elements
       this.style = style;
       this._scaleX = scaleX;
       this._scaleY = scaleY;
-      this.renderElements(this.model, this.elements, scaleX, style)
+      if (this.elements) {
+        this.renderElements(this.model, this.elements, scaleX, style)
+      }
     },
 
     renderElements (box, elements, scale, style) {
       this.width = box.w
       this.height = box.h
-      let w = box.w
-      let h = box.h
-      let paths = []
+      const w = box.w
+      const h = box.h
+      const paths = []
       elements.forEach(element => {
         if (element.type === 'path') {
-          /**
-           * FIXME: Could we do this smarter and stretch and scale the SVG?
-           */
           let d = element.d.map(p => {
             return {
               t: p.t,
-              x: Math.round(p.x * scale * w) + 0.5,
-              y: Math.round(p.y * scale  * h) + 0.5
+              x: Math.round(p.x * scale * w) + this.offset,
+              y: Math.round(p.y * scale  * h) + this.offset
             }
           })
 
           d = SVGUtil.pathToSVG(d)
-          let path = {
+          const path = {
             d: d,
             stroke: element.stroke,
             strokeWidth: element.strokeWith

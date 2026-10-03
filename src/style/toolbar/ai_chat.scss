@@ -1,0 +1,155 @@
+@import '../variables.scss';
+
+.MatcAiChat {
+  width: 100%;
+  padding: 0px 16px;
+  padding-bottom: 8px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: flex-end;
+  flex-grow: 1;
+}
+
+.MatcAiChatBody {
+}
+
+
+.MatcAiChatMessage {
+  padding: 4px;
+  font-size: 12px;
+  border-radius: $toolbar_form_radius;
+
+  .MatcAiChatMessageBody p {
+    font-size: inherit;
+  }
+
+}
+
+
+
+.MatcAiChatMessageAssistant {
+  margin-right: 0px;
+  border-top-left-radius: 0px;
+}
+
+.MatcAiChatMessageUser {
+  margin-left: 8px;
+  border-top-right-radius: 0px;
+}
+
+
+
+.MatcAiChatMessageHeader {
+  display: flex;
+  justify-content: flex-end;
+  height: 8px;
+}
+
+.MatcAiChatMessageBody {
+  padding: 0px 8px;
+
+  strong {
+    color: inherit;
+  }
+}
+
+.MatcAiChatMessageHeader svg{
+  opacity: 0;
+}
+
+.MatcAiChatMessage:hover .MatcAiChatMessageHeader svg{
+  opacity: 1;
+}
+
+
+.MatcAiChatHeader {
+  border-bottom: 1px solid var(--color-border);
+
+  padding: var(--space-m);
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  align-items: center;
+
+  div{
+    text-align: center;
+    flex-grow: 1;
+    padding-left: 24px;
+  }
+}
+.MatcAiChatBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex-grow: 1;
+  flex-basis:0;
+  padding: var(--space-m);
+  overflow: auto;
+}
+
+.MatcAiChatIcons {
+  display: flex;
+  padding-top: 4px;
+  gap: 4px;
+    .MatcQIcon {
+      opacity: 0.5;
+      cursor: pointer;
+      transition: opacity 0.2s;
+
+      &:hover {
+        opacity: 1;
+      }
+    }
+
+      .MatcQIcon .MatcQIconSVG {
+        width: 14px;
+        height: 14px;
+    }
+}
+
+.MatcAiChatIFrame {
+  height: 0px;
+  width: 0px;
+  overflow: hidden;
+}
+
+.MatcAiSettings {
+  height: 480px;
+}
+
+.MatcAiSettingsBody {
+  height: 450px;
+}
+
+.MatcAiChatSelection{
+  height: 24px;
+  display: flex;
+  span {
+     border-radius: 20px;
+     background: rgba(0,0,0, 0.3);
+     padding: 2px 6px;
+     font-size: 12px;
+     display: flex;
+     align-items: center;
+     gap: 4px;
+     height: 18px;
+
+     .MatcQIcon {
+      width: 12px;
+        height: 12px;
+     }
+
+    .MatcQIconSVG {
+        width: 12px;
+        height: 12px;
+        transition: opacity 0.2s;
+        opacity: 0.5;
+        cursor: pointer;
+        &:hover {
+          opacity: 1;
+        }
+      }
+  }
+}

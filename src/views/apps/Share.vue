@@ -4,9 +4,13 @@
   </div>
 </template>
 
-<style lang="css">
-  @import url("../../style/matc.css");
-  @import url("../../style/test.css");
+<style class="css">
+	@import url("../../style/css/legacy.css");
+</style>
+
+<style lang="scss">
+  @import "../../style/matc.scss";
+  @import "../../style/test.scss";
 </style>
 <style lang="sass">
   @import "../../style/bulma.sass"
@@ -20,8 +24,8 @@ import ShareCanvas from 'canvas/share/ShareCanvas'
 import ShareController from 'canvas/share/ShareController'
 import ModelFactory from 'core/ModelFactory'
 import RenderFactory from 'core/RenderFactory'
-import lang from 'dojo/_base/lang'
-import on from 'dojo/on'
+//import lang from 'dojo/_base/lang'
+//import on from 'dojo/on'
 import Services from 'services/Services'
 import Logger from "common/Logger";
 
@@ -85,15 +89,12 @@ export default {
       }
 
       canvas.setController(controller);
+      canvas.setCommentService(Services.getCommentService())
       canvas.setRenderFactory(renderFactory);
       canvas.setModelFactory(factory);
       canvas.setModelService(service);
-      canvas.setCommentService(Services.getCommentService())
       canvas.setUser(this.user)
       canvas.setHash(this.$route.query.h);
-
-      // wire shit together
-      this.tempOwn(on(toolbar, "newComment", lang.hitch(canvas, "addComment")));
 
       var startScreen = null;
       for(var screenID in model.screens){

@@ -3,14 +3,16 @@
 import DojoWidget from "dojo/DojoWidget";
 import lang from "dojo/_base/lang";
 import css from "dojo/css";
-import on from "dojo/on";
 import win from "dojo/_base/win";
 import DomBuilder from "common/DomBuilder";
 import Layout from "core/Layout";
 import ModelGeom from 'core/ModelGeom'
 import ModelResizer from 'core/ModelResizer'
-import SlideLeftButton from 'common/SlideLeftButton'
+import ModelUtil from 'core/ModelUtil'
+import PerformanceMonitor from 'core/PerformanceMonitor'
+import * as DistributeUtil from 'core/DistributionUtil'
 
+import * as UIUtil from '../util/UIUtil'
 var Ring = {};
 var ProgressBar = {};
 export default {
@@ -43,11 +45,11 @@ export default {
   components: {},
   methods: {
 
-    getIcons: function() {
+    getIcons () {
       return this._matcIcons;
     },
 
-    fixGestures: function(events) {
+    fixGestures(events) {
       events.sort(function(a, b) {
         return a.time - b.time;
       });
@@ -103,366 +105,15 @@ export default {
     /**********************************************************************
      * Distribute Tool
      **********************************************************************/
-    _distributedPositions: function(type, ids, boundingBox) {
-      /**
-       * 1) get all subsets (rows or columns) depending on type
-       */
-      var sets = [];
-      for (let i = 0; i < ids.length; i++) {
-        var widgetID = ids[i];
-        var widget = this.model.widgets[widgetID];
-        if (widget) {
-          /**
-           * Attention: This seems counter intuitive. But for vertical,
-           * we have to find columns (x axis) and for horizontal we need
-           * rows (z - axis).
-           */
-          if (type == "vertical") {
-            let start = widget.x;
-            let end = widget.x + widget.w;
-            this._addToDisSet(sets, widget, start, end);
-          } else {
-            let start = widget.y;
-            let end = widget.y + widget.h;
-            this._addToDisSet(sets, widget, start, end);
-          }
-        }
-      }
-
-      /**
-       * Now resize for every set!
-       */
-      var result = {};
-      var distances = [];
-      for (let i = 0; i < sets.length; i++) {
-        var set = sets[i];
-        var temp = this._distributedPositionsInSubSet(
-          type,
-          set.children,
-          boundingBox
-        );
-        var tempPositions = temp.positions;
-        for (var id in tempPositions) {
-          if (!result[id]) {
-            result[id] = tempPositions[id];
-          } else {
-            if (this.logger) {
-              this.logger.error(
-                "_distributedPositions()",
-                "Widget with id is in two sets: " + id
-              );
-              this.logger.sendError(
-                new Error("_distributedPositions() > Sets not ok")
-              );
-            }
-          }
-        }
-        distances = distances.concat(temp.distances);
-      }
-
-      return {
-        positions: result,
-        distances: distances
-      };
+    _distributedPositions (type, ids, boundingBox) {
+        return DistributeUtil.distributedPositions(this.model, type, ids, boundingBox)
     },
 
-    _addToDisSet: function(sets, widget, start, end) {
-      var overlapps = [];
-
-      for (let i = 0; i < sets.length; i++) {
-        var set = sets[i];
-        var overlap = this._getDisOverlap(start, end, set.start, set.end);
-        if (overlap > 0) {
-          set.start = Math.min(set.start, start);
-          set.end = Math.max(set.end, end);
-          set.children.push(widget.id);
-          set.pos = i;
-          overlapps.push(set);
-        }
-      }
-      if (overlapps.length == 0) {
-        sets.push({
-          start: start,
-          end: end,
-          children: [widget.id]
-        });
-      }
-
-      /**
-       * If an element is in two sets, the sets should be merged!
-       * This is not super important, as we would have in worst
-       * case one set, which would fuck up rending in worst case...
-       * Actually this should not happen often (or at all)
-       */
-      if (overlapps.length > 1) {
-        if (this.logger) {
-          this.logger.warn("_addToDisSet()", "Merging of sets needed");
-        }
-        var merged = {
-          start: start,
-          end: end,
-          children: []
-        };
-        for (let i = 0; i < overlapps.length; i++) {
-          let temp = overlapps[i];
-          merged.start = Math.min(merged.start, temp.start);
-          merged.end = Math.max(merged.end, temp.end);
-          merged.children = merged.children.concat(temp.children);
-          sets.splice(temp.pos, 1);
-        }
-      }
-    },
-
-    _getDisOverlap: function(a, b, c, d) {
-      //return Math.max(0, Math.min(max1, max2) - Math.max(min1, min2))
-      return (
-        Math.min(Math.max(a, b), Math.max(c, d)) -
-        Math.max(Math.min(c, d), Math.min(a, b))
-      );
-    },
-
-    _distributedPositionsInSubSet: function(type, ids, boundingBox) {
-      var result = {};
-
-      /**
-       * 1) find groups... This can be bounding boxes or single widgets
-       */
-      var boxes = this._getSelectionGroupPositions(ids);
-
-      /**
-       * 2) Now we calculate the positions
-       */
-      var positions = this._getDistributedPositions(type, boxes, boundingBox);
-      var distances = [];
-      /**
-       * 3) now we fit the group children to their parents...
-       */
-      for (var id in positions) {
-        var newPos = positions[id];
-        if (newPos.children) {
-          for (var widgetID in newPos.children) {
-            var widgetPos = newPos.children[widgetID];
-            widgetPos.x = newPos.x + widgetPos.offSetX;
-            widgetPos.y = newPos.y + widgetPos.offSetY;
-            result[widgetID] = widgetPos;
-          }
-        } else {
-          result[id] = newPos;
-        }
-
-        if (newPos.distanceX || newPos.distanceY) {
-          distances.push({
-            x: newPos.distanceX,
-            y: newPos.distanceY
-          });
-        }
-      }
-
-      return {
-        positions: result,
-        distances: distances
-      };
-    },
-
-    _getDistributedPositions: function(type, boxes, boundingBox) {
-      var positions = {};
-
-      boxes.sort(function(a, b) {
-        if (type == "vertical") {
-          return a.y - b.y;
-        } else {
-          return a.x - b.x;
-        }
-      });
-      var sum = 0;
-      for (let i = 0; i < boxes.length; i++) {
-        var box = boxes[i];
-        if (type == "vertical") {
-          sum += box.h;
-        } else {
-          sum += box.w;
-        }
-      }
-      var last = boxes[boxes.length - 1];
-      if (type == "vertical") {
-        sum = boundingBox.h - sum;
-      } else {
-        sum = boundingBox.w - sum;
-      }
-
-      var space = sum / (boxes.length - 1);
-      last = 0;
-      var lastBox = null;
-      for (let i = 0; i < boxes.length; i++) {
-        let widget = boxes[i];
-
-        let widgetPos = {
-          x: widget.x,
-          y: widget.y,
-          h: widget.h,
-          w: widget.w,
-          children: widget.children
-        };
-        if (i == 0) {
-          if (type == "vertical") {
-            widgetPos.y = boundingBox.y;
-            last = widgetPos.y + widgetPos.h;
-          } else {
-            widgetPos.x = boundingBox.x;
-            last = widgetPos.x + widgetPos.w;
-          }
-        } else if (i == boxes.length - 1) {
-          if (type == "vertical") {
-            widgetPos.y = Math.round(boundingBox.y + boundingBox.h - widget.h);
-          } else {
-            widgetPos.x = Math.round(boundingBox.x + boundingBox.w - widget.w);
-          }
-        } else {
-          if (type == "vertical") {
-            widgetPos.y = Math.round(last + space);
-            last = Math.round(widgetPos.y + widgetPos.h);
-          } else {
-            widgetPos.x = Math.round(last + space);
-            last = Math.round(widgetPos.x + widgetPos.w);
-          }
-        }
-
-        /**
-         * Also store distance so we can show later!
-         */
-        if (lastBox) {
-          if (type == "vertical") {
-            widgetPos.distanceY = {
-              y: lastBox.y + lastBox.h,
-              h: widgetPos.y - (lastBox.y + lastBox.h),
-              x: Math.round(widgetPos.x + widgetPos.w / 2)
-            };
-          } else {
-            //console.debug("distHor", widgetPos.x - (lastBox.x +lastBox.w))
-            widgetPos.distanceX = {
-              x: lastBox.x + lastBox.w,
-              w: widgetPos.x - (lastBox.x + lastBox.w),
-              y: Math.round(widgetPos.y + widgetPos.h / 2)
-            };
-          }
-        }
-
-        positions[widget.id] = widgetPos;
-        lastBox = widgetPos;
-      }
-      return positions;
-    },
-
-    /**
-     * Get widget positions and bounding boxes for groups...
-     */
-    _getSelectionGroupPositions: function(ids) {
-      var groups = {};
-      for (var i = 0; i < ids.length; i++) {
-        var widgetID = ids[i];
-        var widget = this.model.widgets[widgetID];
-        var group = this.getParentGroup(widgetID);
-        if (group) {
-          if (!groups[group.id]) {
-            var bbx = this.getBoundingBox(group.children);
-            bbx.children = {};
-            groups[group.id] = bbx;
-          }
-          groups[group.id].children[widgetID] = {
-            x: widget.x,
-            y: widget.y,
-            h: widget.h,
-            w: widget.w,
-            offSetX: widget.x - bbx.x,
-            offSetY: widget.y - bbx.y
-          };
-        } else {
-          groups[widgetID] = {
-            x: widget.x,
-            y: widget.y,
-            h: widget.h,
-            w: widget.w
-          };
-        }
-      }
-      return this.getArrayFromObject(groups, "id");
-    },
-
-    _distributedPositionsBak: function(type, widgets, boundingBox) {
-      var positions = {};
-
-      var temp = [];
-      for (let i = 0; i < widgets.length; i++) {
-        let widgetID = widgets[i];
-        let widget = this.model.widgets[widgetID];
-        temp.push(widget);
-      }
-
-      temp.sort(function(a, b) {
-        if (type == "vertical") {
-          return a.y - b.y;
-        } else {
-          return a.x - b.x;
-        }
-      });
-
-      var sum = 0;
-      for (let i = 0; i < widgets.length; i++) {
-        let widget = temp[i];
-        if (type == "vertical") {
-          sum += widget.h;
-        } else {
-          sum += widget.w;
-        }
-      }
-      var last = temp[temp.length - 1];
-      if (type == "vertical") {
-        sum = boundingBox.h - sum;
-      } else {
-        sum = boundingBox.w - sum;
-      }
-
-      var space = sum / (widgets.length - 1);
-      last = 0;
-
-      for (let i = 0; i < temp.length; i++) {
-        let widget = temp[i];
-        var widgetPos = { x: widget.x, y: widget.y, h: widget.h, w: widget.w };
-        if (i == 0) {
-          if (type == "vertical") {
-            widgetPos.y = boundingBox.y;
-            last = widgetPos.y + widgetPos.h;
-          } else {
-            widgetPos.x = boundingBox.x;
-            last = widgetPos.x + widgetPos.w;
-          }
-        } else if (i == temp.length - 1) {
-          if (type == "vertical") {
-            widgetPos.y = Math.round(boundingBox.y + boundingBox.h - widget.h);
-          } else {
-            widgetPos.x = Math.round(boundingBox.x + boundingBox.w - widget.w);
-          }
-        } else {
-          if (type == "vertical") {
-            widgetPos.y = Math.round(last + space);
-            last = Math.round(widgetPos.y + widgetPos.h);
-          } else {
-            widgetPos.x = Math.round(last + space);
-            last = Math.round(widgetPos.x + widgetPos.w);
-          }
-        }
-        positions[widget.id] = widgetPos;
-      }
-
-      //this.logger.log(0,"calculateDistributedPositions", "enter > " +type +" > space : " + space);
-
-      return positions;
-    },
 
     /**********************************************************************
      * Clone Tool
      **********************************************************************/
-    getClones: function(ids, target) {
+    getClones(ids, target) {
       var result = [];
       var previews = [];
 
@@ -547,49 +198,22 @@ export default {
      * Bounding Box
      **********************************************************************/
 
-    _correctBoundindBox: function(boundingbox, modelBoundingBox) {
-      if (Math.abs(boundingbox.x - modelBoundingBox.x) <= 2) {
-        this.logger.log(2, "_correctBoundindBox", "Correct X");
-        boundingbox.x = modelBoundingBox.x;
-      }
-
-      if (Math.abs(boundingbox.y - modelBoundingBox.y) <= 2) {
-        this.logger.log(2, "_correctBoundindBox", "Correct Y");
-        boundingbox.y = modelBoundingBox.y;
-      }
-      return boundingbox;
-    },
 
     /**
      * Gets the new position for a group child
      */
-    _getGroupChildResizePosition: function(widget, oldGroup, newGroup, dif) {
+    _getGroupChildResizePosition(widget, oldGroup, newGroup, dif) {
+      console.warn("DEPRECATED: _getGroupChildResizePosition()")
       return ModelResizer.getGroupChildResizePosition(widget, oldGroup, newGroup, dif)
     },
 
-    getObjectFromArray: function(list, key) {
-      var result = {};
-      for (var i = 0; i < list.length; i++) {
-        var item = list[i];
-        var value = item[key];
-        result[value] = item;
-      }
-      return result;
+    getObjectFromArray (list, key) {
+      console.error('Util.vue .getObjectFromArray() > DEPRECATED!')
+      return ModelUtil.getObjectFromArray(list, key)
     },
 
-    getArrayFromObject: function(obj, key) {
-      var result = [];
-      for (var i in obj) {
-        var item = obj[i];
-        if (key) {
-          item[key] = i;
-        }
-        result.push(item);
-      }
-      return result;
-    },
 
-    getWidgetsByDistanceAndType: function(widget, types) {
+    getWidgetsByDistanceAndType(widget, types) {
       var result = [];
 
       if (this.model) {
@@ -619,7 +243,7 @@ export default {
       return result;
     },
 
-    getObjectLength: function(o) {
+    getObjectLength (o) {
       if (o) {
         return Object.keys(o).length;
       } else {
@@ -627,7 +251,7 @@ export default {
       }
     },
 
-    getEventStateLabel: function(state) {
+    getEventStateLabel (state) {
       if (state.type == "hidden") {
         /**
          * A little hacky
@@ -648,6 +272,12 @@ export default {
           return "Unchecked";
         }
       }
+
+      if (state.type == "open") {
+        return "Open";
+      }
+
+      
       if (state.type == "select") {
         return "Select";
       }
@@ -666,7 +296,7 @@ export default {
       return "Change";
     },
 
-    getGestureLabel: function(type) {
+    getGestureLabel (type) {
       if (this.gestureLabels[type]) {
         return this.gestureLabels[type];
       }
@@ -680,14 +310,19 @@ export default {
       return type;
     },
 
-    getScreenName: function(screenID) {
+    getScreenName (screenID, shortenIfNeeded = false) {
       if (this.model.screens[screenID] && this.model.screens[screenID].name) {
-        return this.model.screens[screenID].name;
+        let name = this.model.screens[screenID].name;
+        if (shortenIfNeeded && name.length > 16) {
+          name = name.substring(0, 16) + '...'
+        } 
+        return name
       }
       return screenID;
     },
+    
 
-    getWidgetName: function(widgetID) {
+    getWidgetName (widgetID) {
       if (this.model.widgets[widgetID] && this.model.widgets[widgetID].name) {
         return this.model.widgets[widgetID].name;
       }
@@ -697,7 +332,7 @@ export default {
     /**
      * Filters out bad sessions
      */
-    filterEvents: function(events, anno) {
+    filterEvents (events, anno) {
       var bad = {};
       for (let i = 0; i < anno.length; i++) {
         var a = anno[i];
@@ -721,8 +356,9 @@ export default {
     /**
      * Returns all actionable events
      */
-    getActionEvents: function(df) {
-      return df.select("type", "in", [
+    getActionEvents (df) {
+      PerformanceMonitor.start('Util.getActionEvents()')
+      const result = df.select("type", "in", [
         "ScreenClick",
         "WidgetClick",
         "WidgetChange",
@@ -734,12 +370,14 @@ export default {
         "ScreenGesture",
         "WidgetGesture"
       ]);
+      PerformanceMonitor.end('Util.getActionEvents()')
+      return result
     },
 
     /**
      * Returns all click events
      */
-    getClickEvents: function(df) {
+    getClickEvents (df) {
       return df.select("type", "in", [
         "ScreenClick",
         "WidgetClick",
@@ -747,7 +385,7 @@ export default {
       ]);
     },
 
-    createEmptyImage: function(x, y, name) {
+    createEmptyImage (x, y, name) {
       return {
         type: "Image",
         name: name,
@@ -781,7 +419,7 @@ export default {
       };
     },
 
-    createEmptyScreen: function(x, y, name) {
+    createEmptyScreen (x, y, name) {
       return {
         x: x,
         y: y,
@@ -806,16 +444,16 @@ export default {
       };
     },
 
-    getAppTypeIcon: function(model) {
+    getAppTypeIcon (model) {
       if (model.type == "smartphone") {
-        return "mdi mdi-cellphone";
+        return "mdi mdi-crop-portrait";
       } else if (model.type == "tablet") {
-        return "mdi mdi-tablet-ipad";
+        return "mdi mdi-crop-landscape";
       }
-      return "mdi mdi-laptop";
+      return "mdi mdi-crop-landscape";
     },
 
-    getDomain: function() {
+    getDomain () {
       var host = window.location.hostname;
       if (host == "127.0.0.1" || host == "flowalytics.com") {
         return "flowalytics.com";
@@ -827,7 +465,7 @@ export default {
      * Render helper  functios
      ***************************************************************************/
 
-    ring: function(label, value, p, node, size, color) {
+    ring (label, value, p, node, size, color) {
       if (!size) {
         size = 200;
       }
@@ -849,24 +487,24 @@ export default {
       return ring;
     },
 
-    simpleStats: function(label, mean, std, node) {
-      var db = this.getDB();
-      var cntr = db.div("MatcDashNumberContainer").build(node);
-      db.div("MatcDashLabel", label).build(cntr);
-      db.div("MatcDashNumber", mean + " ").build(cntr);
-      db.div("MatcDashLabelHint", "+/- " + std).build(cntr);
+    // simpleStats (label, mean, std, node) {
+    //   var db = this.getDB();
+    //   var cntr = db.div("MatcDashNumberContainer").build(node);
+    //   db.div("MatcDashLabel", label).build(cntr);
+    //   db.div("MatcDashNumber", mean + " ").build(cntr);
+    //   db.div("MatcDashLabelHint", "+/- " + std).build(cntr);
 
-      //node.appendChild(cntr);
-    },
+    //   //node.appendChild(cntr);
+    // },
 
-    getDB: function() {
+    getDB () {
       if (!this.domBuilder) {
         this.domBuilder = new DomBuilder();
       }
       return this.domBuilder;
     },
 
-    progress: function(label, value, p, id) {
+    progress (label, value, p, id) {
       var node = document.getElementById(id);
 
       var row = document.createElement("div");
@@ -894,7 +532,7 @@ export default {
     },
 
 
-    bulletGraph: function(row, value, emptyMsg) {
+    bulletGraph (row, value, emptyMsg) {
       var db = this.getDB();
 
       for (var i = 0; i < value.length; i++) {
@@ -919,7 +557,7 @@ export default {
       }
     },
 
-    bulletGraphTable: function(row, value, emptyMsg) {
+    bulletGraphTable (row, value, emptyMsg) {
       var db = this.getDB();
 
       var tbody = db
@@ -948,7 +586,7 @@ export default {
       }
     },
 
-    createUserImage: function(user, parent) {
+    createUserImage (user, parent) {
       var imgCntr = document.createElement("div");
       css.add(imgCntr, "MatcUserImageCntr");
       parent.appendChild(imgCntr);
@@ -956,7 +594,7 @@ export default {
       if (!user || user.role == "guest") {
         let img = document.createElement("div");
         css.add(img, "MatcCommentGuest");
-        img.innerHTML = '<span class="glyphicon glyphicon-user"></span>';
+        img.innerHTML = '<span class="mdi mdi-account"></span>';
         imgCntr.appendChild(img);
       } else if (user.image) {
         css.add(imgCntr, "MatcUserImageCntrTrans");
@@ -978,14 +616,14 @@ export default {
       return imgCntr;
     },
 
-    getCommentUserName: function(comment) {
+    getCommentUserName (comment) {
       if ((comment.user && comment.user.name) || comment.user.lastname) {
         return this.getUserName(comment.user);
       }
       return "Guest";
     },
 
-    getUserLetter: function(user) {
+    getUserLetter  (user) {
       let result = ''
       if (user.name) {
         result += user.name.substring(0, 1).toUpperCase();
@@ -1004,7 +642,7 @@ export default {
       return result
     },
 
-    getUserName: function(user) {
+    getUserName (user) {
       var result = "";
       if (user.name) {
         result = user.name + " ";
@@ -1019,7 +657,8 @@ export default {
       return result;
     },
 
-    resizeSimulatorContainer: function(model, container, factor) {
+    resizeSimulatorContainer (model, container, factor) {
+
       css.add(container, "MatchSimulatorContainer");
 
       var pos;
@@ -1045,110 +684,12 @@ export default {
       return pos;
     },
 
-    /**
-     * TODO: Could go to canvas/Comment.vue
-     */
-    renderCommentPopup: function(comment, user, cntr, db, canDelete) {
-      css.add(cntr, "MatcActionBox");
-
-      var li = db.div("MatcMarginBottom").build(cntr);
-
-      var item = db.div("MatcCommentRow").build(li);
-
-      var pic = this.createUserImage(comment.user, item);
-      css.add(pic, "MatcUserImageCntrSmall MatcCommentPic");
-
-      var txt = db.div("MatcCommentText").build(item);
-
-      db.div("MatcFloatClear").build(li);
-
-      var meta = db.div("MatcCommentMeta").build(txt);
-
-      db.div("MatcCommentMeta", this.getCommentUserName(comment)).build(meta);
-
-      db.div("MatcCommentTime", this.formatDate(comment.created)).build(meta);
-
-      if (comment.userID == user.id) {
-        let txtarea = db
-          .textarea("form-control MatcIgnoreOnKeyPress", comment.message)
-          .build(cntr);
-        txtarea.setAttribute("data-gramm_editor", false);
-
-        if (comment.id) {
-          css.add(txtarea, "vommondInlineEdit");
-        } else {
-          txtarea.focus();
-        }
-
-        let bar = db.div("MatcButtonBar MatcMarginTopL").build(cntr);
-
-        if (comment.id) {
-          /**
-           * Create a save button that will only show if people start editing...
-           */
-          var saveBtn = db.a("MatcButton MatcButtonAnimated ", "Update").build(bar);
-          this.tempOwn(on(saveBtn,"mousedown",lang.hitch(this, "onSaveComment", txtarea, comment)));
-
-          let close = db.a("MatcLinkButton", "Close").build(bar);
-          this.tempOwn(on(close,"mousedown", lang.hitch(this, "onCloseCommentPopup", comment)));
-
-          let s = this.$new(SlideLeftButton);
-          s.placeAt(cntr);
-          s.setOptions([
-            {
-              value: "edit",
-              icon: "glyphicon glyphicon-edit",
-              callback: function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                txtarea.focus();
-                txtarea.select();
-              }
-            },
-            {
-              value: "delete",
-              icon: "glyphicon glyphicon-trash",
-              callback: lang.hitch(this, "onDeleteComment", comment)
-            }
-          ]);
-        } else {
-          let create = db.a("MatcButton", "Create").build(bar);
-          this.tempOwn(on(create,"mousedown",lang.hitch(this, "onSaveComment", txtarea, comment)));
-          let close = db.a("MatcLinkButton", "Close").build(bar);
-          this.tempOwn(on(close,"mousedown",lang.hitch(this, "onCloseCommentPopup", comment)));
-        }
-      } else {
-        if (canDelete) {
-          let s = this.$new(SlideLeftButton);
-          s.placeAt(cntr);
-          s.setOptions([
-            {
-              value: "delete",
-              icon: "glyphicon glyphicon-trash",
-              callback: lang.hitch(this, "onDeleteComment", comment)
-            }
-          ]);
-          console.debug("delete", s);
-        }
-
-        db.div("MatcCommentMessage", comment.message).build(cntr);
-        let bar = db.div("MatcButtonBar MatcMarginTopL").build(cntr);
-        let close = db.a("MatcLinkButton", "Close").build(bar);
-        this.tempOwn(
-          on(
-            close,
-            "mousedown",
-            lang.hitch(this, "onCloseCommentPopup", comment)
-          )
-        );
-      }
-    },
-
+   
     /***************************************************************************
      * Model access and query functions
      ***************************************************************************/
 
-    getWidgets: function(screenID, filter) {
+    getWidgets (screenID, filter) {
       var result = [];
       if (screenID) {
         var screen = this.model.screens[screenID];
@@ -1190,7 +731,7 @@ export default {
     /**
      * returns screen from left to right!
      */
-    getScreens: function(app) {
+    getScreens (app) {
       if (!app) {
         app = this.model;
       }
@@ -1211,7 +752,7 @@ export default {
       return result;
     },
 
-    getClickableWidgets: function(screen) {
+    getClickableWidgets (screen) {
       var result = [];
       var children = screen.children;
       for (let i = 0; i < children.length; i++) {
@@ -1229,7 +770,7 @@ export default {
       return result;
     },
 
-    getModelChildren: function(screen) {
+    getModelChildren (screen) {
       var result = [];
 
       for (let id in this.model.widgets) {
@@ -1242,7 +783,7 @@ export default {
       return result;
     },
 
-    getWidgetsWithoutParent: function() {
+    getWidgetsWithoutParent () {
       var result = [];
 
       var temp = [];
@@ -1261,7 +802,7 @@ export default {
       return this.getOrderedWidgets(result);
     },
 
-    getBoxById: function(id) {
+    getBoxById (id) {
       if (this.model.widgets[id]) {
         return this.model.widgets[id];
       }
@@ -1327,7 +868,7 @@ export default {
      * Line helpers
      ***************************************************************************/
 
-    getToLines: function(box) {
+    getToLines (box) {
       var result = [];
 
       for (var id in this.model.lines) {
@@ -1340,10 +881,10 @@ export default {
       return result;
     },
 
-    getLines: function(box, deep) {
-      var result = [];
+    getLines (box, deep) {
+      const result = [];
 
-      var _ids = {};
+      const _ids = {};
 
       for (let id in this.model.lines) {
         let line = this.model.lines[id];
@@ -1353,7 +894,7 @@ export default {
         }
       }
 
-      if (box.children && deep) {
+      if (box && box.children && deep) {
         for (let i = 0; i < box.children.length; i++) {
           let childID = box.children[i];
           for (let id in this.model.lines) {
@@ -1370,7 +911,7 @@ export default {
       return result;
     },
 
-    hasLine: function(widget) {
+    hasLine (widget) {
       for (let id in this.model.lines) {
         let line = this.model.lines[id];
         if (line.from == widget.id) {
@@ -1380,7 +921,7 @@ export default {
       return false;
     },
 
-    getLine: function(widget) {
+    getLine (widget) {
       for (let id in this.model.lines) {
         let line = this.model.lines[id];
         if (line.from == widget.id) {
@@ -1394,8 +935,8 @@ export default {
      * For all line drawing this function returns the widget, or in case of an
      * group the bounding box!
      */
-    getFromBox: function(line) {
-      var fromPos = this.model.widgets[line.from];
+    getFromBox (line) {
+      let fromPos = this.model.widgets[line.from];
 
       if (!fromPos) {
         fromPos = this.model.screens[line.from];
@@ -1405,19 +946,30 @@ export default {
         /**
          * no widget, must be a group
          */
-        var group = this.model.groups[line.from];
+        const group = this.model.groups[line.from];
         if (group) {
-          fromPos = this.getBoundingBox(group.children);
+          const children = this.getAllGroupChildren(group)
+          fromPos = this.getBoundingBox(children);
         }
       }
 
       return fromPos;
     },
 
-    getToBox: function(line) {
+    getToBox (line) {
       var to = this.model.screens[line.to];
       if (!to) {
         to = this.model.widgets[line.to];
+      }
+
+      if (!to && line.isGroup && this.model.groups) {
+        /**
+         * no widget, must be a group
+         */
+        var group = this.model.groups[line.to];
+        if (group) {
+          to = this.getBoundingBox(group.children);
+        }
       }
       return to;
     },
@@ -1426,15 +978,15 @@ export default {
      * template stuff
      ***************************************************************************/
 
-    getTemplateGroupOrderChildren: function(group) {
+    getTemplateGroupOrderChildren (group) {
       /**
        * render children, and order by
        * z values
        */
-      var children = [];
+      let children = [];
       for (var i = 0; i < group.children.length; i++) {
-        var id = group.children[i];
-        var child = this.model.templates[id];
+        const id = group.children[i];
+        const child = this.model.templates[id];
         children.push(child);
       }
       /**
@@ -1481,7 +1033,7 @@ export default {
       return true;
     },
 
-    _isContainedInBox: function(obj, parent) {
+    _isContainedInBox (obj, parent) {
       if (parent) {
         if (
           obj.x >= parent.x &&
@@ -1499,7 +1051,7 @@ export default {
      * Object Compare and Change functios
      ***************************************************************************/
 
-    countProps: function(obj) {
+    countProps (obj) {
       var count = 0;
       for (let k in obj) {
         if (obj.hasOwnProperty(k)) {
@@ -1509,7 +1061,7 @@ export default {
       return count;
     },
 
-    objectEquals: function(v1, v2) {
+    objectEquals (v1, v2) {
       if (typeof v1 !== typeof v2) {
         return false;
       }
@@ -1543,16 +1095,16 @@ export default {
      * Helper functios
      ***************************************************************************/
 
-    round: function(value) {
+    round (value) {
       return Math.round(value * 100) / 100;
     },
 
-    formatTime: function(millis) {
+    formatTime (millis) {
       millis = Math.round(millis / 1000);
       return millis + "s";
     },
 
-    formatSTD: function(value) {
+    formatSTD (value) {
       return (
         '<span class="MatcDashTableTdHint">( +/- ' +
         this.formatNumber(value) +
@@ -1560,11 +1112,11 @@ export default {
       );
     },
 
-    formatRound: function(value) {
+    formatRound (value) {
       return Math.round(value * 100) / 100;
     },
 
-    formatNumber: function(value) {
+    formatNumber (value) {
       if (value > 1000000) {
         value = Math.floor(value / 1000000) + "M";
         return value;
@@ -1584,7 +1136,7 @@ export default {
       return value;
     },
 
-    formatPercent: function(value) {
+    formatPercent (value) {
       value = Math.round(value * 100);
       var cls = "MatchDashStatusFailure";
       if (value > 70) {
@@ -1595,15 +1147,11 @@ export default {
       return '<span class="' + cls + '">' + value + "%</span>";
     },
 
-    formatDate: function(t, justDate) {
-      var date = new Date(t);
-      if (justDate) {
-        return date.toLocaleDateString();
-      }
-      return date.toLocaleString();
+    formatDate (ts, justDate) {
+      return UIUtil.formatDate(ts, justDate)
     },
 
-    formatString: function(s, l) {
+    formatString (s, l) {
       if (s.length > l) {
         s = s.substring(0, l - 3) + "...";
       }
@@ -1618,11 +1166,11 @@ export default {
      * Method to make the z-values pretty and ensure that the z values
      * are consequtive!
      */
-    getNormalizeWidgetZValues: function(values) {
+    getNormalizeWidgetZValues (values) {
       /**
        * convert values to a sorted list!
        */
-      var list = [];
+      const list = [];
       for (var id in values) {
         list.push({
           id: id,
@@ -1631,11 +1179,11 @@ export default {
       }
       this.sortWidgetList(list);
 
-      var z = -1;
-      var lastZ = null;
-      var result = {};
-      for (var i = 0; i < list.length; i++) {
-        var w = list[i];
+      let z = 0;
+      let lastZ = null;
+      const result = {};
+      for (let i = 0; i < list.length; i++) {
+        let w = list[i];
         if (lastZ === null || lastZ != w.z) {
           z++;
           lastZ = w.z;

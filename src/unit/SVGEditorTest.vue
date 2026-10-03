@@ -2,34 +2,61 @@
   <div class="MatcLight">
     <h1>SVg Editor Test</h1>
     <div class="toolbar">
-      <a @click="createLine">Add Line </a>
-      <a @click="createBezier">Add Curve </a>
+      <a @click="createLine">Line </a>
+      <a @click="createBezier"> Curve </a>     
+      <a @click="createRect"> Rect </a>
+      <a @click="createTriangle"> Triangle </a>
+      <a @click="createEllipse"> Ellipse </a>
+      <a @click="createCircle"> Circle </a>
+      <a @click="createDiamond"> Diamond </a>
+      <a @click="createFreeHand"> FreeHand </a>
+
+      |
+      <a @click="selectMoveTool"> Move </a>
+
+      |
       <a @click="clear">Clear </a>
+        <a @click="setZoom(1)">1.0 </a>
+        <a @click="setZoom(0.66)">0.66 </a>
     </div>
     <div class="MatcTReeCntr" ref="cntr">
         <SVGEditor
+          :zoom="zoom"
           :value="paths"
           @select="onSelect"
           :width="800"
           :height="400"
           :pos="pos"
           ref="editor"
+          @change="onChange"
           @qmouse="onMouseMove"/>
     </div>
-    {{mouse}}
+
+
+    <div class="debug">
+      {{svgs}}
+    </div>
+
 
     <div class="tests">
       <a @click="test_createLine" class="MatcButton"> Test Create Line </a>
       <a @click="test_createLineAndSelect" class="MatcButton"> Test Select Line </a>
-      <a @click="test_showBezier" class="MatcButton"> Test Curved Line </a>
     </div>
 
   </div>
 </template>
 
+<style lang="scss">
+  @import "../style/matc.scss";
+  @import "../style/components/qux-svg-editor.scss";
+</style>
 <style>
-  @import url("../style/matc.css");
-  @import url("../style/qux-svg-editor.css");
+
+  .debug {
+    font-size: 12px;
+  }
+
+
   .toolbar {
     margin-left: 30px;
     background: #eee;
@@ -79,24 +106,77 @@ export default {
     return {
         paths: [],
         pos: {x:0 ,y:0},
-        mouse: {}
+        mouse: {},
+        svgs: [],
+        zoom: 0.8
     };
   },
   components: {
     'SVGEditor': SVGEditor
   },
   methods: {
+      setZoom (z) {
+        this.zoom = z
+      },
+      onChange (d) {
+        this.svgs = d
+      },
       onMouseMove (p) {
           this.mouse = p
       },
+      selectMoveTool() {
+        this.$refs.editor.startMoveTool()
+      },
+      test_split () {
+        const paths = [
+          {
+            "id": "pb1667599071427",
+            "name": "Bezier", "hint": "Bezier", "type": "Path", "stroke": "#333333", "strokeWidth": 1, "fill": "", "d": 
+              [
+                { "t": "M", "x": 149, "y": 196 }, 
+                { "t": "C", "x": 342, "y": 196, "x1": 217, "y1": 107, "x2": 270, "y2": 103 
+              }]
+          }]
+          this.$refs.editor.value = paths
+          this.$nextTick(() => {
+            //this.$refs.editor.setShowAllBezier(true)
+            this.$refs.editor.startMorphTool(true)
+          })
+       
+      },
       onSelect (d) {
           this.selection = d
+          this.svgs = JSON.stringify(d, null, 2)
+      },
+      createDiamond () {
+        this.$refs.editor.startDiamondTool()
+      },
+      createRect () {
+        this.$refs.editor.startRectangleTool(true)
       },
       createBezier () {
-        this.$refs.editor.startBezierTool()
+        this.$refs.editor.setShowAllBezier(true)
+        this.$refs.editor.startBezierTool(true)
       },
       createLine () {
-        this.$refs.editor.startPathTool()
+        this.$refs.editor.startPathTool(true)
+      },
+      createArc () {
+        this.$refs.editor.startArcTool(true)
+      },
+      createEllipse () {
+        this.$refs.editor.setShowAllBezier(true)
+        this.$refs.editor.startEllipseTool(true)
+      },
+      createCircle () {
+        this.$refs.editor.setShowAllBezier(true)
+        this.$refs.editor.startCircleTool(true)
+      },
+      createTriangle () {
+        this.$refs.editor.startTriangleTool(true)
+      },
+      createFreeHand () {
+        this.$refs.editor.startFreeHandTool()
       },
       clear () {
         this.$refs.editor.clear()
@@ -104,7 +184,9 @@ export default {
       test_createLine () {
         this.clear()
         let e = this.$refs.editor
-        e.startPathTool(this.p(30, 30))
+        e.startPathTool()
+        e.onMouseMove(this.e(30, 30))
+        e.onMouseClick(this.e(30, 30))
         /** we need move */
         e.onMouseMove(this.e(60, 200))
         e.onMouseClick(this.e(60, 200))
@@ -113,6 +195,36 @@ export default {
         e.onMouseClick(this.e(200, 250))
         e.onMouseClick(this.e(300, 200))
         e.onMouseClick(this.e(350, 350))
+        e.onMouseDoubleClick(this.e(300, 200))
+        this.assertEquals(1, e.value.length)
+      },
+      test_createBezier () {
+        this.clear()
+        let e = this.$refs.editor
+        //this.$refs.editor.setShowAllBezier(true)
+        e.startBezierTool()
+        e.onMouseMove(this.e(30, 30))
+        e.onMouseClick(this.e(30, 30))
+        /** we need move */
+        e.onMouseMove(this.e(60, 200))
+        e.onMouseClick(this.e(60, 200))
+
+        e.onMouseDown(this.e(70, 220))
+        e.onMouseMove(this.e(70, 220))
+
+
+        e.onMouseMove(this.e(200, 250))
+        e.onMouseClick(this.e(200, 250))
+
+        e.onMouseDown(this.e(250, 220))
+        e.onMouseMove(this.e(280, 210))
+        
+        e.onMouseMove(this.e(300, 200))
+        e.onMouseClick(this.e(300, 200))
+
+        e.onMouseMove(this.e(350, 350))
+        e.onMouseClick(this.e(350, 350))
+
         e.onMouseDoubleClick(this.e(300, 200))
         this.assertEquals(1, e.value.length)
       },
@@ -129,43 +241,6 @@ export default {
           this.assertEquals(path.id, e.selection[0])
         }, 100)
 
-      },
-      test_showBezier () {
-        let e = this.$refs.editor
-        e.setValue([{
-            id: 'pbezier',
-            name: 'Path',
-            type: 'Path',
-            stroke: '#333333',
-            strokeWidth: 1,
-            fill:'',
-            d: [{
-              t: 'M',
-              x: 100,
-              y: 100
-            }, {
-              t: 'C',
-              x: 500,
-              y: 100,
-              x1: 200,
-              y1: 200,
-              x2: 400,
-              y2: 200
-            }, {
-              t: 'C',
-              x: 700,
-              y: 100,
-              x1: 550,
-              y1: 200,
-              x2: 650,
-              y2: 200
-            }]
-        }])
-        setTimeout( () => {
-          e.startSelectTool()
-          e.select('pbezier')
-          e.setState('moveDoubleClick')
-        }, 300)
       },
       // helper methods
       e (x,y) {
@@ -193,17 +268,19 @@ export default {
       onKey (event) {
         let e = this.$refs.editor
         if (e) {
-          e.onKeyUp(event)
+          e.onKeyDown(event)
         }
       }
   },
   mounted() {
       this.pos = domGeom.position(this.$refs.cntr)
       setTimeout(() => {
-        // this.test_showBezier()
+          //this.test_createLine()
+          //this.test_createBezier()
+          this.test_split()
       }, 100)
 
-      this.keyBoardListener = on(win.body(), "keyup", this.onKey);
+      this.keyBoardListener = on(win.body(), "keydown", this.onKey);
   }
 };
 </script>

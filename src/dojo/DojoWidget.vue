@@ -62,21 +62,38 @@ export default {
 
     initDomNodes() {
       this.domNode = this.$el;
-      if (this.domNode) {
-        if (this.domNode.querySelectorAll) {
-          let attachPoints = this.domNode.querySelectorAll("[data-dojo-attach-point]");
-          attachPoints.forEach(element => {
-            let name = element.getAttribute("data-dojo-attach-point");
-            if (!this[name]) {
-              this[name] = element;
-            }
-          });
-        } else {
-          console.warn('initDomNodes', this.domNode)
+      if (this.domNode ) {
+        if (!this.overRideAttachWithRef) {
+          if (this.domNode.querySelectorAll) {
+            /**
+             * This is quite buggy for nested widgets, 
+             * as it might return several attach points.
+             */
+            let attachPoints = this.domNode.querySelectorAll("[data-dojo-attach-point]");
+            attachPoints.forEach(element => {
+              let name = element.getAttribute("data-dojo-attach-point");
+              if (!this[name]) {
+                this[name] = element;
+              } else {
+                //console.error('initDomNodes() > double', name, element)
+              }
+            });
+          } else {
+            console.warn('initDomNodes', this)
+          }
         }
+       
       } else {
         console.warn('no domnode for', this.name)
       }
+
+      if (this.overRideAttachWithRef && this.$refs) {
+          for (let key in this.$refs) {
+            //console.debug('initDomNodes', key, this.$refs[key])
+            this[key] = this.$refs[key]
+          }
+      }
+
     },
 
     /**
@@ -94,20 +111,23 @@ export default {
     },
 
     tempOwn (listener) {
+      if (!listener || !listener.remove) {
+          console.error('tempOwn() > wrong object passed!', new Error().stack)
+      }
       if(!this._dojoTempListener){
         this._dojoTempListener = []
       }
       this._dojoTempListener.push(listener)
     },
 
-    cleanUpTempListener:function(){
+    cleanUpTempListener (){
+ 
 			if(this._dojoTempListener){
-        for(var i=0; i < this._dojoTempListener.length; i++){
+        for(let i=0; i < this._dojoTempListener.length; i++){
           try {
 					  this._dojoTempListener[i].remove();
           } catch (e) {
-            console.error('cleanUpTemp,', this.name, e.stack
-            )
+            console.error('cleanUpTemp,', this.name, e.stack)
           }
 				}
 				this._dojoTempListener = null;
@@ -346,16 +366,15 @@ export default {
       if (!this.$options.name) {
         console.warn('No name for widget', this)
       }
-      // this.logger = new Logger(this.$options.name);
     },
     /**
      * Message sending stuff
      */
     showHint (msg) {
-      this.$root.$emit('hint', msg)
+      this.$root.$emit('Hint', msg)
     },
     showError (msg) {
-      this.$root.$emit('error', msg)
+      this.$root.$emit('Error', msg)
     },
     showSuccess (msg) {
       this.$root.$emit('Success', msg)
@@ -410,15 +429,15 @@ export default {
       }
 		},
 
-		_setStatus:function(key, value){
+		_setStatus (key, value){
       if (typeof(Storage) !== "undefined") {
         localStorage.setItem(key, JSON.stringify(value));
       }
     },
-    _getMousePosition: function(e){
+    _getMousePosition (e){
       // updated and synced with simulator
       // in case of error roll back and change mixin order in simulator
-      var result = {x: 0, y: 0};
+      let result = {x: 0, y: 0};
       if (e) {
 		    if (e.touches && e.touches.length > 0) {
           e = e.touches[0]

@@ -1,34 +1,35 @@
 <template>
   <div class="MatcTest MatcLayout" >
-    <section class="section">
-      <div class="container">
+    <section class="" v-if="false">
+   
         <div class="box is-shadowless">
-          <h2 class="title">Tests
+          <h3 class="title">Tests
             <HelpButton
               topic="testing"
               subtopic="testing.howmany"
               :hasNotifications="false"
             />
 
-          </h2>
+          </h3>
           <div class="MatcForm" id="testUserCountCntr">
             <BulletGraph :value="sessionCount" :sections="bulletGraphSection" />
           </div>
         </div>
-      </div>
+
     </section>
-    <section class="section" data-dojo-attach-point="sectionDes" >
-      <div class="container">
+    <section class="" data-dojo-attach-point="sectionDes" >
+
         <div class="box is-shadowless ">
 
-            <h2 class="title">Landing Page   
-             <HelpButton topic="testing" subtopic="testing.landing" :hasNotifications="false"/>
-            </h2>
+            <h3 class="title">
+              {{getNLS('testSettingsHeader')}}  
+              <HelpButton topic="testing" subtopic="testing.landing" :hasNotifications="false"/>
+            </h3>
 
           
-            <div class="MatcLayoutCols">
+            <div class="MatcLayoutCols mb-32">
                 <textarea
-                    class="input MatcTextAreaMedium MatcLayoutColGrow"
+                    class="form-control MatcTextAreaMedium MatcLayoutColGrow"
                     v-model="test.description"
                     data-gramm_editor="false"
                     @change="onTestChange"
@@ -48,55 +49,59 @@
                       </div>
                   </div>
             </div>
+
+            <div class="form-group ">
+            <CheckBox :value="test.recordOneTestPerUser" :label="getNLS('testSettingsRecordOneTestPerUser')" @change="setRecordOnePerUser"/>
+          </div>
+
         
-        </div>
       </div>
     </section>
 
 
-    <section class="section" data-dojo-attach-point="sectionTask">
-      <div class="container">
+    <section data-dojo-attach-point="sectionTask">
+
         <div class="box is-shadowless">
-          <h2 data-nls="testSettingsTasks" class="title">Tasks
+          <h3 data-nls="testSettingsTasks" class="title">Tasks
             <HelpButton
               topic="testing"
               subtopic="testing.tasks"
               :hasNotifications="false"
-            /></h2>
+            /></h3>
           <TestSettings :pub="pub" :test="test" :app="app" @change="onTaskChange" :hash="hash"/>
         </div>
-      </div>
+  
     </section>
 
-    <section class="section">
-      <div class="container">
+    <!-- <section data-dojo-attach-point="sectionVoice">
         <div class="box is-shadowless">
-          <h2 class="title">Screen Recordings</h2>
+          <h3 data-nls="testSettingsTasks" class="title">Think-aloud Testing 
+            <HelpButton
+              topic="testing"
+              subtopic="testing.transcribeVoice"
+              :hasNotifications="false"
+            /></h3>
+          <div class="form-group ">
+            <CheckBox :value="test.transcribeVoice" :label="getNLS('testSettingsTranscribeVoice')" @change="setTranscribeVoice"/>
+          </div>
+        </div>  
+    </section> -->
+
+
+    <section class="">
+ 
+        <div class="box is-shadowless">
+          <h3 class="title">Screen Recordings</h3>
           <div ref="sessionCntr" class="MatcDashTable"></div>
         </div>
-      </div>
+
     </section>
 
-    <section class="section">
-      <div class="container">
-        <div class="box is-shadowless">
-          <h2 class="title">Comments</h2>
-          <Comment
-            v-if="app"
-            :appID="app.id"
-            type="overview_test"
-            reference
-            contentID
-            insertPosition="top"
-          />
-        </div>
-      </div>
-    </section>
   </div>
 </template>
 <style lang="scss">
-  @import '../../../style/scss/upload.scss';
-  @import '../../../style/scss/layout.scss';
+  @import '../../../style/components/upload.scss';
+  @import '../../../style/components/layout.scss';
 </style>
 <script>
 import Logger from "common/Logger"
@@ -111,12 +116,13 @@ import Table from "common/Table"
 import Services from "services/Services"
 import Analytics from "dash/Analytics"
 import Plan from "page/Plan"
+import {iconDOM} from "page/QIconUtil"
 import Util from "core/Util"
-import Comment from "page/Comment"
 import HelpButton from "help/HelpButton"
 import Dialog from "common/Dialog"
 import touch from "dojo/touch"
 import DomBuilder from "common/DomBuilder"
+import CheckBox from "common/CheckBox";
 
 export default {
   name: "Test",
@@ -127,6 +133,7 @@ export default {
       sessionCount: 10,
       hasDragOver: false,
       isUploading: false,
+      hasComments: false,
       bulletGraphSection: [
         {
           value: 5,
@@ -152,8 +159,8 @@ export default {
   components: {
     'BulletGraph': BulletGraph,
     'TestSettings': TestSettings,
-    'Comment': Comment,
-    'HelpButton': HelpButton
+    'HelpButton': HelpButton,
+    'CheckBox': CheckBox
   },
   computed: {
     pub() {
@@ -210,7 +217,7 @@ export default {
 				  formData.append('file', file);
           let result = await this.imageService.upload(url, formData)
           result = JSON.parse(result)
-          console.debug(result)
+     
           if (result.uploads && result.uploads.length === 1) {
             this.test.splash = result.uploads[0]
             this.onTestChange()
@@ -230,17 +237,25 @@ export default {
     onTaskChange(test) {
       this.$emit("change", lang.clone(test));
     },
+    setRecordOnePerUser(value) {
+      this.test.recordOneTestPerUser = value
+      this.onTestChange()
+    },
+    setTranscribeVoice(value) {
+      this.test.transcribeVoice = value
+      this.onTestChange()
+    },
+
     async onTestChange() {
       if (this.pub) {
         this.showSuccess("Saved");
       } else {
-        let res = await this.modelService.saveTestSettings(
+        const res = await this.modelService.saveTestSettings(
           this.app.id,
           this.test
         );
         if (res.status === "ok") {
           this.showSuccess("Saved");
-          // clone to make sure changes are propagated?
           this.$emit("change", lang.clone(this.test));
         } else {
           this.showError("Could not save test settings");
@@ -249,52 +264,45 @@ export default {
     },
     showBullet() {
       this.logger.log(-2, "show", "entry >");
-      var df = new DataFrame(this.events);
+      const df = new DataFrame(this.events);
       this.sessionCount = df.unique("session");
       this.logger.log(0, "show", "exit", this.sessionCount);
     },
     showSessions() {
       this.logger.log(-1, "showSessions", "enter " + this.planGetTestCount());
+      this.cleanUpTempListener()
+      const app = this.app;
+      const list = this._getTestList(lang.clone(this.events), this.annotation, this.test);
+      const urlPrefix = this.urlPrefix;
 
-      var maxTestsToShow = this.planGetTestCount();
-      let app = this.app;
-      var actionEvents = this.getActionEvents(new DataFrame(this.events));
-      let events = actionEvents.as_array();
-      var list = this._getTestList(events, this.annotation, this.test);
-      var urlPrefix = this.urlPrefix;
-
-      /**
-       * Set flag to turn off play buttons
-       */
-      for (var i = 0; i < list.length; i++) {
-        var t = list[i];
-        if (maxTestsToShow == -1 || i < maxTestsToShow) {
-          t.canShow = true;
-        } else {
-          t.canShow = false;
-        }
-      }
-
-      var tbl = this.$new(Table);
+      const tbl = this.$new(Table);
       tbl.setColumns([
         {
-          query: "id",
-          label: "#"
+          query: "label",
+          width:10,
+          label: "Test",
+          fct: (td, row) => {
+            const input = document.createElement('input')
+            css.add(input, 'form-control MatcInlineEdit')
+            input.value = row.label
+            td.appendChild(input)
+            this.tempOwn(on(input, "change", () => this.onChangeSessionLabel(input.value, row)))
+          }
         },
-         {
+        {
           query: "status",
           label: this.getNLS("videoTableStatus")
         },
         {
           query: "taskPerformance",
           label: "Successful Tasks",
-          fct: function(td, row) {
-            var names = row.taskNames;
-            css.add(td, "MatcTagCntr");
-            let cntr = document.createElement('div')
+          fct: (td, row) => {
+            const names = row.taskNames;
+            const cntr = document.createElement('div')
+            css.add(cntr, "MatcTagCntr");
             if (names && names.length > 0) {
-              for (var r = 0; r < names.length; r++) {
-                var span = document.createElement("span");
+              for (let r = 0; r < names.length; r++) {
+                const span = document.createElement("span");
                 css.add(span, "tag");
                 span.innerHTML = names[r];
                 cntr.appendChild(span);
@@ -307,16 +315,15 @@ export default {
         },
         {
           query: "duration",
-          label: this.getNLS("videoTableDuration")
+          label: this.getNLS("videoTableDuration"),
+          fct: (td, row) => {
+            td.innerHTML = row.duration + ' sec'
+          }
         },
-        //{
-        //  query: "screens",
-        //  label: this.getNLS("videoTableScreens")
-        //},
-        {
-          query: "size",
-          label: this.getNLS("videoTableEvents")
-        },
+        // {
+        //   query: "size",
+        //   label: this.getNLS("videoTableEvents")
+        // },
         {
           query: "date",
           label: this.getNLS("videoTableDate")
@@ -325,22 +332,21 @@ export default {
       tbl.setActions([
         {
           render: (node, row) => {
-            var group = document.createElement("div");
-            group.style.width = '120px'
+            const group = document.createElement("div");
+            group.style.width = '140px'
             group.style.display = 'inline-block'
             node.appendChild(group);
 
-            let play = document.createElement("a");
+            const play = document.createElement("a");
             play.href = "#/" +  urlPrefix + "/" +  app.id + "/replay/" + row.session + ".html";
-            css.add(play, "button is-primary");
-            play.innerHTML = '<span class="mdi mdi-play"></span>';
+            css.add(play, "MatcButton MatcButtonSecondary MatcButtonXXS");
+            play.appendChild(iconDOM('PlayVideo'))
             group.appendChild(play);
 
-
-            let remove = document.createElement("a");
-            this.own(on(remove, 'click',(e) => this.showDeleteSessionDialog(e, row)));
-            css.add(remove, "button is-danger");
-            remove.innerHTML = '<span class="mdi mdi-close"></span>';
+            const remove = document.createElement("a");
+            this.tempOwn(on(remove, 'click',(e) => this.showDeleteSessionDialog(e, row)));
+            css.add(remove, "MatcButton MatcButtonDanger MatcButtonXXS MatcButtonSecondary");
+            remove.appendChild(iconDOM('DeleteTrash'))
             group.appendChild(remove);
 
           }
@@ -352,23 +358,37 @@ export default {
       tbl.setValue(list);
     },
 
+    onChangeSessionLabel (value, row) {
+      this.logger.log(-1,"onChangeSessionLabel", "enter >", value);
+      const session = row.session
+      const sessionStart = this.events.find(e => e.type === 'SessionStart' && e.session === session)
+      if (sessionStart) {
+        sessionStart.label = value
+        this.modelService.updateEvent(this.app.id, sessionStart)
+        this.$root.$emit("Success", "Test name was updated");
+      } else {
+        this.logger.warn("onChangeSessionLabel", "No session start >");
+      }
+
+    },
+
     showDeleteSessionDialog (e, session) {
-      this.logger.warn("showDeleteSessionDialog", "enter >", session.session);
-      let db = new DomBuilder()
-      var div = db.div("box MatcDeleteDialog").build();
+      this.logger.log(1,"showDeleteSessionDialog", "enter >", session.session);
+      const db = new DomBuilder()
+      const div = db.div("MatcDeleteDialog").build();
       db.h3("title is-4", 'Delete Test').build(div);
-      db.p('', "Do you want to delete the test? You will loose all data related to this test!").build(div)
-      var bar = db.div("buttons").build(div);
-      var write = db.a("button is-danger", this.getNLS("btn.delete")).build(bar);
-      var cancel = db.a("button is-text", this.getNLS("btn.cancel")).build(bar);
-      var d = new Dialog();
+      db.p('MatcMarginBottomXL', "Do you want to delete the test? You will loose all data related to this test!").build(div)
+      const bar = db.div("MatcButtonBar").build(div);
+      const write = db.a("MatcButton MatcButtonDanger", this.getNLS("btn.delete")).build(bar);
+      const cancel = db.a("MatcLinkButton", this.getNLS("btn.cancel")).build(bar);
+      const d = new Dialog();
       d.own(on(write, touch.press, lang.hitch(this, "deleteSession", session, d)));
       d.own(on(cancel, touch.press, lang.hitch(d, "close")));
       d.popup(div, e.target);
     },
 
     async deleteSession (session, d) {
-      this.logger.warn("deleteSession", "enter >", session.session);
+      this.logger.log(1,"deleteSession", "enter >", session.session);
       if (!this.pub) {
         await this.modelService.deleteEventsBySession(this.app.id, session.session)
         this.showSuccess('Test deleted');
@@ -378,54 +398,57 @@ export default {
       d.close()
     },
 
-    _getTestList: function(events, annotatation, testSettings) {
-      var list = [];
+    _getTestList (events, annotatation, testSettings) {
+      const list = [];
 
-      /**
-       * Legacy
-       */
       if (!testSettings.tasks) {
         testSettings.tasks = [];
       }
 
-      var df = new DataFrame(events);
+      const df = new DataFrame(events);
       df.sortBy("time");
-      var sessionGroup = df.groupBy("session");
-      let sessions = sessionGroup.data;
+      const sessionGroup = df.groupBy("session");
+      const sessions = sessionGroup.data;
 
-      var annoSession = new DataFrame(annotatation).groupBy("reference");
+      const annoSession = new DataFrame(annotatation).groupBy("reference");
 
-      var actionDF = this.getActionEvents(new DataFrame(events));
+      const actionDF = this.getActionEvents(new DataFrame(events));
 
-      var analytics = new Analytics();
-      var taskCount = testSettings.tasks.length;
-      var tasksPerformance = analytics.getMergedTaskPerformance(
+      const analytics = new Analytics();
+      const taskCount = testSettings.tasks.length;
+      // merge in annotation overwrites
+      const tasksPerformance = analytics.getMergedTaskPerformance(
         actionDF,
         testSettings.tasks,
         annotatation
       );
-      var tasksBySession = tasksPerformance.count("session");
+      const tasksBySession = tasksPerformance.count("session");
 
-      var sessionTaskNames = analytics.getSuccessTaskNames(
+      const sessionTaskNames = analytics.getSuccessTaskNames(
         tasksPerformance,
         testSettings.tasks
       );
 
-      var id = 1;
+      let id = 1;
       for (let sessionID in sessions) {
-        var session = sessions[sessionID];
-        var date = this.formatDate(session.min("time"));
+        let label = `Test ${id}`
+        const session = sessions[sessionID];
+        const date = this.formatDate(session.min("time"));
 
-        var anno = annoSession.get(sessionID);
-        var status = '<span class="MatchDashStatusSuccess">Valid</span>';
-        var isValid = true;
+        const anno = annoSession.get(sessionID);
+        let status = '<span class="MatchDashStatusSuccess">Valid</span>';
+        let isValid = true;
         if (anno) {
           isValid = anno.get(0).get("isValid");
           if (!isValid) {
-            status = '<span class="MatchDashStatusFailure">Failure</span>';
+            status = '<span class="MatchDashStatusFailure">Ignore</span>';
           }
         }
 
+        const start = session.data.find(e => e.type === 'SessionStart')
+        if (start && start.label) {
+          label = start.label
+        }
 
         /** Since 2.4 we show also the user */
         let user = session.data && session.data.length > 0 ? session.data[0].user : '-'
@@ -433,23 +456,26 @@ export default {
           user = user.name
         }
 
-        var taskSuccess = tasksBySession.get(sessionID);
+        let taskSuccess = tasksBySession.get(sessionID);
         if (!taskSuccess) {
           taskSuccess = 0;
         }
 
-        var item = {
+        const actionsEvents = this.getActionEvents(new DataFrame(session.data));
+
+        const item = {
           session: sessionID,
           user: user,
           taskPerformance: taskSuccess + " / " + taskCount,
           taskNames: sessionTaskNames[sessionID],
-          duration: Math.ceil((session.max("time") - session.min("time")) / 1000) + ' sec',
+          duration: Math.ceil((session.max("time") - session.min("time")) / 1000),
           date: date,
           start: session.min("time"),
-          size: session.size(),
+          size: actionsEvents.size(),
           status: status,
           isValid: isValid,
           id: id,
+          label: label,
           screens: session.unique("screen")
         };
 
@@ -457,7 +483,7 @@ export default {
         id++;
       }
 
-      list.sort(function(a, b) {
+      list.sort((a, b) => {
         return a.id - b.id;
       });
 

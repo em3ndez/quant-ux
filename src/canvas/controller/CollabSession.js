@@ -9,31 +9,36 @@ export default class CollabSession {
   }
 
   initWebsocket(model, canvas, controller, toolbar) {
-    Logger.log(-1, "BusService.initWebsocket()", "enter");
-    try {
-      let user = this.user
-      let websocket = Services.getWebSocketService(model.id, user.token, user)
-      if (websocket) {
-        websocket.onMessage(msg => this.dispatchWebSocketMessage(canvas, controller, toolbar, user, msg))
-        websocket.init(success => {
-          if (success) {
-            this.sendHello()
-          }
-          canvas.setMouseListener(pos => {
-            this.sendMouse(pos)
-          })
-          controller.setModelChangeListener(changeEvent => {
-            this.sendChange(changeEvent)
-          })
-        })
 
-        this.websocket = websocket
-      } else {
-        Logger.log(-1, "BusService.initWebsocket()", "exit > No session created");
+    setTimeout(() => {
+    try {
+        Logger.log(3, "CollabSession.initWebsocket()", "enter");
+        let user = this.user
+        let websocket = Services.getWebSocketService(model.id, user.token, user)
+        if (websocket) {
+          websocket.onMessage(msg => this.dispatchWebSocketMessage(canvas, controller, toolbar, user, msg))
+          websocket.init(success => {
+            if (success) {
+              this.sendHello()
+            }
+            canvas.setMouseListener(pos => {
+              this.sendMouse(pos)
+            })
+            controller.setModelChangeListener(changeEvent => {
+              this.sendChange(changeEvent)
+            })
+
+            // FIXME: all also the command stack??
+          })
+
+          this.websocket = websocket
+        } else {
+          Logger.log(1, "CollabSession.initWebsocket()", "exit > No session created");
+        }
+      } catch (err) {
+        Logger.error('CollabSession.initWebsocket()', "Cannot init WebSocket", err)
       }
-    } catch (err) {
-      Logger.error('CollabSession.initWebsocket()', "Cannot init WebSocket", err)
-    }
+    }, 3000)
   }
 
   hasOtherUsers () {
@@ -49,10 +54,10 @@ export default class CollabSession {
      * so we just send events if there is another user.
      */
     if (this.websocket && this.hasOtherUsers()) {
-      Logger.log(-1, "CollabSession.sendChange()", "send", changeEvent);
+      Logger.log(2, "CollabSession.sendChange()", "send", changeEvent);
       this.websocket.send({type: 'change', changeEvent: changeEvent})
     } else {
-      Logger.log(-1, "CollabSession.sendChange()", "NOT SEND");
+      Logger.log(2, "CollabSession.sendChange()", "NOT SEND");
     }
   }
 
@@ -115,14 +120,14 @@ export default class CollabSession {
     }
 
     if (msg.type === 'change') {
-      Logger.log(-1, "CollabSession.dispatchWebSocketMessage()", "change");
+      Logger.log(2, "CollabSession.dispatchWebSocketMessage()", "change");
       controller.collabRecieveChanges(msg.user, msg.changeEvent)
     }
   }
 
 
   addCollabUser (user) {
-    Logger.log(-1, "CollabSession.addCollabUser()", user);
+    Logger.log(1, "CollabSession.addCollabUser()", user);
     const found = this.collabUsers.find(u => u.id === user.id)
     if (!found) {
       this.collabUsers.push(user)
@@ -130,12 +135,12 @@ export default class CollabSession {
   }
 
   removeCollabUser (user) {
-    Logger.log(-1, "CollabSession.removeCollabUser()", user);
+    Logger.log(1, "CollabSession.removeCollabUser()", user);
     this.collabUsers = this.collabUsers.filter(u => u.id !== user.id)
   }
 
   close () {
-    Logger.log(-1, "CollabSession.dispatchWebSocketMessage()", "close");
+    Logger.log(1, "CollabSession.dispatchWebSocketMessage()", "close");
     if (this.websocket) {
       this.websocket.close()
     }

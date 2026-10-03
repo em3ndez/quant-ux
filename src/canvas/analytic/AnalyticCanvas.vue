@@ -2,30 +2,37 @@
 <template>
   <div class="MatcCanvas MatcAnalyticCanvas">
     <div class="MatcCanvasFrame" data-dojo-attach-point="frame">
-      <div class="MatcCanvasContainer MatcCanvasZoomable"  data-dojo-attach-point="container" >
+      <div class="MatcCanvasContainer MatcCanvasZoomable" data-dojo-attach-point="container">
         <div class="MatcCanvasContainer" data-dojo-attach-point="zoomContainer">
-          <div  data-dojo-attach-point="screenContainer" class="MatcCanvasLayer" ></div>
+          <div data-dojo-attach-point="screenContainer" class="MatcCanvasLayer"></div>
           <div data-dojo-attach-point="widgetContainer" class="MatcCanvasLayer"></div>
-					<div data-dojo-attach-point="svgContainer" class="MatcCanvasLayer MatcCanvasSVGLayer"></div>
+          <div data-dojo-attach-point="svgContainer" class="MatcCanvasLayer MatcCanvasSVGLayer"></div>
         </div>
         <div data-dojo-attach-point="dndContainer" class="MatcDnDLayer"></div>
       </div>
     </div>
     <div class="MatcCanvasScrollBar MatcCanvasScrollBarRight" data-dojo-attach-point="scrollRight">
-      <div class="MatcCanvasScrollBarCntr MatcCanvasScrollBarCntrRight" data-dojo-attach-point="scrollRightCntr" >
-        <div class="MatchCanvasScrollHandle" data-dojo-attach-point="scrollRightHandler"
-        ></div>
+      <div class="MatcCanvasScrollBarCntr MatcCanvasScrollBarCntrRight" data-dojo-attach-point="scrollRightCntr">
+        <div class="MatchCanvasScrollHandle" data-dojo-attach-point="scrollRightHandler"></div>
       </div>
     </div>
-    <div class="MatcCanvasScrollBar MatcCanvasScrollBarBottom" data-dojo-attach-point="scrollBottom" >
+    <div class="MatcCanvasScrollBar MatcCanvasScrollBarBottom" data-dojo-attach-point="scrollBottom" :style="'padding-left:' + this.layerListWidth + 'px'">
       <div class="MatcCanvasScrollBarCntr MatcCanvasScrollBarCntrBottom" data-dojo-attach-point="scrollBottomCntr" >
-        <div class="MatchCanvasScrollHandle" data-dojo-attach-point="scrollBottomHandler"
-        ></div>
+        <div class="MatchCanvasScrollHandle" data-dojo-attach-point="scrollBottomHandler"></div>
       </div>
     </div>
     <div class="MatcMessage" data-dojo-attach-point="message"></div>
   </div>
 </template>
+
+<style lang="css">
+@import url("../../style/css/legacy.css");
+</style>
+<style lang="scss">
+@import "../../style/matc.scss";
+@import "../../style/canvas/all.scss";
+@import '../../style/toolbar/all.scss';
+</style>
 
 <script>
 import DojoWidget from "dojo/DojoWidget";
@@ -50,6 +57,7 @@ import DnD from "canvas/DnD";
 import Add from "canvas/Add";
 import Select from "canvas/Select";
 import Distribute from "canvas/Distribute";
+import GridResize from "canvas/GridResize";
 import Tools from "canvas/Tools";
 import Zoom from "canvas/Zoom";
 import Util from "core/Util";
@@ -65,8 +73,13 @@ import FastDomUtil from "core/FastDomUtil";
 import * as d3 from "d3";
 import _Color from 'common/_Color'
 
+import UserJourney from './UserJourney'
+import DropOff from './DropOff'
+import DataProcessing from './DataProcessing'
+
 export default {
   name: "AnalyticCanvas",
+  props:['viewport'],
   mixins: [
     DojoWidget,
     _DragNDrop,
@@ -78,6 +91,7 @@ export default {
     Add,
     Select,
     Distribute,
+    GridResize,
     Tools,
     Zoom,
     InlineEdit,
@@ -88,11 +102,14 @@ export default {
     Replicate,
     Comment,
     Heat,
+    UserJourney,
+    DropOff,
+    DataProcessing
   ],
   data: function () {
     return {
       mode: "view",
-      zoom: 0.5,
+      zoom: 1,
       analyticMode: "HeatmapClick",
       resizeEnabled: false,
       renderDND: true,
@@ -102,7 +119,9 @@ export default {
       isBlackAndWhite: false,
       dropOffLineWidth: 25,
       dropOffLineColor: '#555',
-      dropOffEventWidth: 40
+      dropOffEventWidth: 40,
+      userJourneyEndColor: '#f03131',
+      layerListWidth: 256
     };
   },
   components: {},
@@ -113,7 +132,8 @@ export default {
       this.cache = {};
       this.moveMode = "classic";
       this.domUtil = new FastDomUtil();
-			this.analyticLines = {}
+      this.analyticLines = {}
+      this.analyticCircles = {}
 
       this.logger.log(2, "postCreate", "entry");
       this.initSize();
@@ -127,20 +147,25 @@ export default {
         w: this.canvasFlowWidth,
         h: this.canvasFlowHeight,
       };
+      this.initViewport()
       this.initContainerSize();
       this.setContainerPos();
 
       /**
        * Init remaining sub components
        */
+      this.initSelection()
       this.initRender();
-			this.initAnalyticSVG()
+      this.initAnalyticSVG()
       this.initZoom();
       this.initScrollBars();
       this.initComment();
       this.initSettings();
       this.initWiring();
       this.initKeys();
+      this.initMouseTracker()
+      this.initDarkModeListener()
+      this.initLayer()
 
       this.db = new DomBuilder();
 
@@ -159,18 +184,30 @@ export default {
       this.logger.log(2, "postCreate", "exit!!!");
     },
 
-    showError (msg){
-			if(this.message){
-				css.add(this.message, "MatcMessageError");
-				css.remove(this.message, "MatcMessageSuccess MatcMessageHint");
-				this.message.textContent = msg;
-				setTimeout(lang.hitch(this,"hideMessage"), 3000);
+    initLayer (){
+			this.logger.log(-2,"initLayer", "entry");
+			const w = localStorage.getItem('quxLayerListWidth')
+			if (w && !isNaN(w * 1)) {
+				this.setLayerListWidth( w * 1)				
 			}
 		},
 
 
-    XlineFunction (line) {
-    	return this.straightLineFunction(line)
+    setLayerListWidth (w) {
+      this.layerListWidth = w
+    },
+ 
+    showError(msg) {
+      if (this.message) {
+        css.add(this.message, "MatcMessageError");
+        css.remove(this.message, "MatcMessageSuccess MatcMessageHint");
+        this.message.textContent = msg;
+        setTimeout(lang.hitch(this, "hideMessage"), 3000);
+      }
+    },
+
+    XlineFunction(line) {
+      return this.straightLineFunction(line)
     },
 
     setPublic(isPublic) {
@@ -190,9 +227,9 @@ export default {
       this.onChangeCanvasViewConfig();
     },
 
-		setMouseListener (callback) {
-			this.mouseListenerCallback = callback
-		},
+    setMouseListener(callback) {
+      this.mouseListenerCallback = callback
+    },
 
     inlineEditInit() {
       this.logger.log(2, "inlineEditInit", "enter");
@@ -208,7 +245,7 @@ export default {
     },
 
     setBW(isBW) {
-      this.logger.log(-1, "setBW", "enter > " + isBW);
+      this.logger.log(1, "setBW", "enter > " + isBW);
       if (isBW) {
         css.add(this.container, "MatcCanvasBW");
       } else {
@@ -247,33 +284,64 @@ export default {
       }
     },
 
-		/**********************************************************************
+    /**********************************************************************
      * Lines
      **********************************************************************/
 
-		initAnalyticSVG (){
-			this.logger.log(3, "initAnalyticSVG", "entry");
-			let bodySelection = d3.select(this.svgContainer);
-			this.analyticSVG = bodySelection.append("svg").attr("width", this.canvasPos.h).attr("height",this.canvasPos.w);
-	  },
+    initAnalyticSVG() {
+      this.logger.log(3, "initAnalyticSVG", "entry");
+      let bodySelection = d3.select(this.svgContainer);
+      this.analyticSVG = bodySelection.append("svg").attr("width", this.canvasPos.h).attr("height", this.canvasPos.w);
+    },
 
-		cleanUpAnalyticLines () {
-			if (this.analyticSVG) {
-				this.analyticSVG.selectAll("*").remove();
-			}
-			this.analyticLines = {}
-		},
+    cleanUpAnalyticLines() {
+      if (this.analyticSVG) {
+        this.analyticSVG.selectAll("*").remove();
+      }
+      this.analyticLines = {}
+      this.analyticCircles = {}
+    },
 
-		drawAnalyticLine(id, line, color, width, opacity) {
-			this.analyticSVG.append("path")
-							.attr("d", this.lineFunction(line))
-							.attr("stroke", color)
-							.attr("stroke-width", width )
-							.attr("fill", "none")
-							.style("opacity", opacity);
+    drawLine(id, line) {
+      let color = this.defaultLineColor
+      let width = this.defaultLineWidth
+      if (this.model && this.model.lines && this.model.lines[id]) {
+        let modelLine = this.model.lines[id]
+        let widgetData = this.getLineWidgetData()
+        if (widgetData[modelLine.from]) {
+          let data = widgetData[modelLine.from]
+          let p = data.clicksRel
+          //width = Math.max(0.3, Math.round(1 * p))
+          color = this.mixColor(p)
+        }
+      }
+      return this.drawSVGLine(id, line, color, width, 1);
+    },
 
-			this.analyticLines[id] = line
-		},
+    drawAnalyticLine(id, line, color, width, opacity) {
+      const svg = this.analyticSVG.append("path")
+        .attr("d", this.lineFunction(line))
+        .attr("stroke", color)
+        .attr("stroke-width", width)
+        .attr("fill", "none")
+        .style("opacity", opacity);
+
+      this.analyticLines[id] = svg
+    },
+
+
+    drawStraightAnalyticLine(id, line, color, width, opacity) {
+      const svg = this.analyticSVG.append("path")
+        .attr("d", this.straightLineFunction(line))
+        .attr("stroke", color)
+        .attr("stroke-width", width)
+        .attr("fill", "none")
+        .style("opacity", opacity);
+
+      this.analyticLines[id] = svg
+    },
+
+
 
     /**********************************************************************
      * Wiring
@@ -301,9 +369,9 @@ export default {
      * Settings
      **********************************************************************/
 
-		afterUpdateDnd (zoomedModel) {
+    afterUpdateDnd(zoomedModel) {
       this.logger.log(1, "afterUpdateDnd", "enter > ", zoomedModel);
-		},
+    },
 
     initSettings() {
       this.logger.log(1, "initSettings", "enter > ");
@@ -311,8 +379,8 @@ export default {
        * default settings
        */
       this.settings = {
-        canvasTheme: "MatcDark",
-        lineColor: "#333",
+        canvasTheme: "MatcLight",
+        lineColor: "#365fff",
         lineWidth: 1,
         storePropView: true,
         moveMode: "ps",
@@ -382,20 +450,7 @@ export default {
         this.defaultLineWidth = s.lineWidth;
       }
       if (s.canvasTheme) {
-        if (this._lastCanvasTheme) {
-          css.remove(win.body(), this._lastCanvasTheme);
-        }
-        css.add(win.body(), s.canvasTheme);
-        this._lastCanvasTheme = s.canvasTheme;
-
-        /**
-         * FIXME: Kind of hack
-         */
-        if (s.canvasTheme == "MatcLight") {
-          this.defaultLineColor = "#777";
-        } else {
-          this.defaultLineColor = "#333";
-        }
+        this.setCanvasTheme(s.canvasTheme)
       }
 
       if (s.mouseWheelMode) {
@@ -405,6 +460,53 @@ export default {
       this.settings = s;
     },
 
+
+    setCanvasTheme(canvasTheme) {
+
+      if (canvasTheme === "MatcAuto") {
+        this.logger.log(-1, "setCanvasTheme", "enter > auto: " + canvasTheme + ' > OS: ' + this.isDarkModeOS())
+        if (this.isDarkModeOS()) {
+          canvasTheme = 'MatcDark'
+        } else {
+          canvasTheme = 'MatcLight'
+        }
+      }
+
+      if (this._lastCanvasTheme) {
+        css.remove(win.body(), this._lastCanvasTheme);
+      }
+
+      css.add(win.body(), canvasTheme)
+      this._lastCanvasTheme = canvasTheme;
+
+      if (canvasTheme == "MatcLight") {
+        this.defaultLineColor = "#365fff";
+      } else {
+        this.defaultLineColor = "#365fff";
+      }
+    },
+
+    initDarkModeListener() {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+      this.own(on(mediaQuery, 'change', () => {
+        this.logger.log(-1, "initDarkModeListener", "change");
+        if (this.settings.canvasTheme === 'MatcAuto') {
+          this.setCanvasTheme(this.settings.canvasTheme)
+        }
+      }))
+    },
+
+
+    isDarkModeOS() {
+      if (window.matchMedia) {
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          return true
+        } else {
+          return false
+        }
+      }
+      return true
+    },
     /**********************************************************************
      * DnD.js overwrites
      **********************************************************************/
@@ -420,7 +522,7 @@ export default {
     onScreenDndClick(id, div, pos, e) {
       this.logger.log(2, "onScreenDndClick", "entry > " + id);
       this.stopEvent(e);
-      this.onScreenSelected(id);
+      this.setSelectedScreens([id]);
       this.selectAnalyticDiv(id);
       this.setState(0);
     },
@@ -430,9 +532,7 @@ export default {
       this.selectAnalyticDiv(null);
       if (this.toolbar) {
         this.toolbar.unselect();
-        if (this.analyticMode === "HeatmapClick") {
-          this.toolbar.reShowClickHeatMap();
-        }
+        this.toolbar.onCanvasSelected()
       }
     },
 
@@ -459,11 +559,11 @@ export default {
      **********************************************************************/
 
     renderLayerList() {
-      this.logger.log(-1, "renderLayerList", "entry > ");
+      this.logger.log(1, "renderLayerList", "entry > ");
     },
 
     afterRender() {
-      this.logger.log(-1, "afterRender", "entry > " + this.analyticMode);
+      this.logger.log(1, "afterRender", "entry > " + this.analyticMode);
       this.cleanUpAnalytics();
 
       try {
@@ -502,16 +602,16 @@ export default {
         this.defaultBlur = this.sourceModel.screenSize.w / 100;
       }
 
-      this.logger.log(0,"onScreenRendered", "adjust radios to " + this.defaultRadius);
+      this.logger.log(0, "onScreenRendered", "adjust radios to " + this.defaultRadius);
 
-      var screenGrouping = this.df.groupBy("screen");
+      const screenGrouping = this.df.groupBy("screen");
 
       this.heatmapDivs = {};
       for (var id in this.sourceModel.screens) {
-        var screen = this.sourceModel.screens[id];
+        const screen = this.sourceModel.screens[id];
 
-        var screenDF = screenGrouping.get(id);
-        var screenEvents = [];
+        const screenDF = screenGrouping.get(id);
+        let screenEvents = [];
         if (screenDF) {
           screenEvents = screenDF.as_array();
         }
@@ -520,17 +620,17 @@ export default {
           /**
            * create canvas
            */
-          var div = this.createBox(screen);
+          const div = this.createBox(screen);
           css.add(div, "MatcHeatMapScreen");
-          var cntr = this.db.div("MatcHeapMapContainer").build(div);
+          const cntr = this.db.div("MatcHeapMapContainer").build(div);
 
-          var canvas = this.db.canvas(screen.w, screen.h).build(cntr);
-          var ctx = canvas.getContext("2d");
+          const canvas = this.db.canvas(screen.w, screen.h).build(cntr);
+          const ctx = canvas.getContext("2d");
 
           this["_render_" + this.analyticMode](screenEvents, screen, ctx, div);
 
           if (this.hasSelect()) {
-            this.tempOwn(on(div,touch.press,lang.hitch(this, "onScreenDndClick", screen.id, div, null)));
+            this.tempOwn(on(div, touch.press, lang.hitch(this, "onScreenDndClick", screen.id, div, null)));
           }
 
           this.widgetContainer.appendChild(div);
@@ -551,7 +651,7 @@ export default {
       }
 
       if (this["_render_global_" + this.analyticMode]) {
-        this["_render_global_" + this.analyticMode](screenEvents,screen, ctx, div);
+        this["_render_global_" + this.analyticMode]();
       }
     },
 
@@ -562,6 +662,7 @@ export default {
        * or at least soft the events by screen
        */
       let mouseData = this.mouseData.filter((m) => m.screen === screen.id);
+      mouseData = this._filterSelectedSessions(mouseData)
       let data = this.computeMouseDistribution(mouseData, this.sourceModel);
       if (data[screen.id]) {
         let d = data[screen.id];
@@ -572,6 +673,9 @@ export default {
     _render_HeatmapClick(screenEvents, screen, ctx, div) {
       this.logger.log(2, "_render_HeatmapClick", "entry > ");
 
+      const events = this._filterSelectedSessions(this.events)
+
+      const df = new DataFrame(events)
       var numberOfClicks = -1;
       if (this.analyticParams) {
         numberOfClicks = this.analyticParams.numberOfClicks;
@@ -579,51 +683,59 @@ export default {
 
       if (numberOfClicks === "screenClicks") {
 
-        let screenClicks = this.getScreenClicksOnBackground();
+        let screenClicks = this.getScreenClicksOnBackground(df);
         screenClicks = screenClicks.as_array();
         this._render_pixel_screen_heatmap(screenClicks, screen, ctx, div);
 
       } else if (numberOfClicks === "missedClicks") {
 
-        let missedClicks = this.getMissedClicks();
+        let missedClicks = this.getMissedClicks(df);
         this._render_pixel_screen_heatmap(missedClicks, screen, ctx, div);
 
       } else if (numberOfClicks > 0) {
 
-        let firstNEvents = this.getFirstNClicksData(numberOfClicks);
+        let firstNEvents = this.getFirstNClicksData(events, numberOfClicks);
         this._render_pixel_screen_heatmap(firstNEvents, screen, ctx, div);
 
       } else {
 
-        /**
-         * Ignore Hover events...
-         */
-        let filtered = this.getClickEvents(new DataFrame(this.events));
+        let filtered = this.getClickEvents(new DataFrame(events));
         let actionEvents = filtered.as_array();
         this._render_pixel_screen_heatmap(actionEvents, screen, ctx, div);
-        
+
       }
     },
 
+    _filterSelectedSessions(events) {
+      if (this.analyticParams && this.analyticParams.sessions) {
+        const sessions = this.analyticParams.sessions
+        return events.filter(e => {
+          return sessions[e.session] === true
+        })
+      }
+      return events
+    },
+
     _render_pixel_screen_heatmap(actionEvents, screen, ctx) {
-      /**
-       * get only the events for this screen..
-       *
-       * FIXME: could be done in one loop before rendering...
-       */
-
-      var events = [];
-
-      for (var i = 0; i < actionEvents.length; i++) {
-        var e = actionEvents[i];
-        var screenID = this.getEventScreenId(e);
-        if (screenID == screen.id) {
-          events.push(e);
+      if (screen.w <= 0 || screen.h <= 0) {
+        this.logger.error("_render_pixel_screen_heatmap", "Error > bad screen dimension: " + screen.name);
+        return
+      }
+      try {
+        const events = [];
+        for (let i = 0; i < actionEvents.length; i++) {
+          const e = actionEvents[i];
+          const screenID = this.getEventScreenId(e);
+          if (screenID == screen.id) {
+            events.push(e);
+          }
         }
+        const dist = this.computeClickDistribution(events, screen.w, screen.h);
+        this.draw(ctx, dist.values, dist.max, screen.w, screen.h);
+      } catch (err) {
+        this.logger.error("_render_pixel_screen_heatmap", "Error > " + screen.name);
       }
 
-      var dist = this.computeClickDistribution(events, screen.w, screen.h);
-      this.draw(ctx, dist.values, dist.max, screen.w, screen.h);
     },
 
     _render_HeatmapScrollView(screenEvents, screen, ctx) {
@@ -702,476 +814,22 @@ export default {
       }
     },
 
-    _render_global_UserJourney(screenEvents, screen, ctx, div) {
-      this.logger.log(-1, "_render_global_UserJourney", "entry > ");
-      this.setBW(true);
-      if (!this.analyticParams.tree) {
-        this._renderUserSingleLines(screenEvents, screen, ctx, div);
-      } else {
-        this._renderUserTree(screenEvents, screen, ctx, div);
+
+
+    drawDurationLine(session, line, defaultColor, maxDuration) {
+      for (let i = 0; i < line.length - 1; i++) {
+        let start = line[i]
+        let end = line[i + 1]
+        let p = end.duration / maxDuration
+        let width = Math.round(p * 6) + 2
+        let color = defaultColor
+        if (!defaultColor) {
+          //color = this.mixColor(Math.min(1, p))
+        }
+        this.drawStraightAnalyticLine(session, [start, end], color, width, this.taskLineOpacity);
       }
     },
 
-    _renderUserTree() {
-      let sessions = this.getUserJourney();
-      let taskPerformance = this.getTaskPerformance();
-      let db = new DomBuilder();
-      let task = null;
-      if (this.analyticParams.task !== false && this.analyticParams.task >= 0) {
-        task = this.testSettings.tasks[this.analyticParams.task];
-      }
-
-      let selectedSessions = this.analyticParams.sessions;
-      let graph = {};
-      let taskGraph = {};
-      let maxCount = 0;
-      for (let sessionID in selectedSessions) {
-        if (selectedSessions[sessionID] === true) {
-          let session = sessions[sessionID];
-          let matches = taskPerformance[sessionID];
-          if (session) {
-            this._getSessionGraph(session, db, task, matches, graph, taskGraph);
-            maxCount++;
-          } else {
-            console.debug("_renderUserTree() > No session for ", sessionID);
-          }
-        }
-      }
-
-      /**
-       * We might have the situation that the users creates loopes
-       * in one session. This will cause the count to be bigger than the
-       * session count (maxCount). This messes up the graph. To make it
-       * nice again, we update maxCount
-       */
-      for (let id in graph) {
-        let l = graph[id]
-        if (l.count > maxCount) {
-          console.warn("_renderUserTree() > Update maxcount, because l.count bigger than max count", )
-          maxCount = l.count
-        }
-      }
-
-      let divs = {};
-      for (let id in graph) {
-        let l = graph[id];
-
-        let line = [];
-        line.push({
-          x: l.from.x,
-          y: l.from.y,
-          d: "right",
-        });
-        line.push({
-          x: l.to.x,
-          y: l.to.y,
-          d: "right",
-        });
-        
-        let p = Math.min(1, l.count / maxCount)
-        var width = Math.min(15, Math.max(1, Math.round(p * 25)));
-       
-        var color = this.mixColor(Math.min(1, p));
-        var toID = l.to.x + "," + l.to.y;
-        if (!divs[toID]) {
-          divs[toID] = this._renderTreeEvent(l.to.x, l.to.y, width, color, db);
-        }
-        var fromID = l.from.x + "," + l.from.y;
-        if (!divs[fromID]) {
-          divs[fromID] = this._renderTreeEvent(l.from.x,l.from.y,width,color,db);
-        }
-
-        this.drawAnalyticLine(id, line, color, width, this.taskLineOpacity);
-				this.analyticLines[id] = line
-      }
-    },
-
-
-
-    _renderTreeEvent(x, y, width, color, db) {
-      var cntr = db
-        .div("MatcAnalyticCanvasEventCntr")
-        .build(this.widgetContainer);
-      cntr.style.left = Math.round(x) + "px";
-      cntr.style.top = Math.round(y) + "px";
-
-      var div = db
-        .div("MatcAnalyticCanvasEvent MatcAnalyticCanvasEvent")
-        .build(cntr);
-
-      var r = Math.round(width * 2);
-      div.style.width = r + "px";
-      div.style.height = r + "px";
-      div.style.top = -1 * Math.round(r / 2) + "px";
-      div.style.left = -1 * Math.round(r / 2) + "px";
-      div.style.background = color;
-    },
-
-    _renderUserSingleLines() {
-      var sessions = this.getUserJourney();
-      var taskPerformance = this.getTaskPerformance();
-      var db = new DomBuilder();
-
-      var task = null;
-      if (this.analyticParams.task !== false && this.analyticParams.task >= 0) {
-        task = this.testSettings.tasks[this.analyticParams.task];
-      }
-
-      var selectedSessions = this.analyticParams.sessions;
-      for (var sessionID in selectedSessions) {
-        if (selectedSessions[sessionID] === true) {
-          var session = sessions[sessionID];
-          var matches = taskPerformance[sessionID];
-          if (session) {
-            this._renderUserGraph(session, db, task, matches);
-          } else {
-            console.debug( "_render_global_UserJourney() > No session for ", sessionID   );
-          }
-        }
-      }
-    },
-
-    _renderUserGraph(session, db, task, matches) {
-      var sessionEvents = session.data;
-      var line = [];
-      var lastEventDiv = null;
-      var divs = [];
-      var match = null;
-      var matchLines = [];
-      var matchDiv = [];
-      if (task && matches) {
-        match = matches[task.id];
-      }
-      for (let i = 0; i < sessionEvents.length; i++) {
-        var e = sessionEvents[i];
-        /**
-         * Be aware of the overlay...
-         */
-        var screenID = this.getEventScreenId(e);
-        var sourceScreen = this.sourceModel.screens[screenID];
-				var zoomedScreen = this.model.screens[screenID];
-        if (sourceScreen && zoomedScreen) {
-          if (e.type == "SessionStart") {
-            let x = sourceScreen.x - Math.max(10, Math.round(30 * this.zoom));
-            let y = sourceScreen.y + Math.max(10, Math.round(30 * this.zoom));
-            lastEventDiv = this._renderScreenEvent(x,y, e.type, "S",db, e.session);
-
-            line.push({ x: x, y: y, d: "right" });
-          } else if (e.x >= 0 && e.y >= 0 && !e.noheat) {
-            let x = e.x * sourceScreen.w + sourceScreen.x;
-            let y = e.y * sourceScreen.h + sourceScreen.y;
-            lastEventDiv = this._renderScreenEvent(x,y,e.type,"", db, e.session);
-            line.push({ x: x, y: y, d: "right" });
-            divs.push(lastEventDiv);
-          }
-          if (match && match.startPosition <= i && match.endPosition >= i) {
-            var temp = line[line.length - 1];
-            matchLines.push(temp);
-            matchDiv.push(lastEventDiv);
-          }
-        } else {
-          console.warn("_renderUserGraph()", "Screen is not there", e.screen);
-        }
-      }
-
-      if (lastEventDiv) {
-        css.add(lastEventDiv, "MatcAnalyticCanvasEventSessionEnd");
-      }
-
-      if (this.analyticParams.color) {
-        for (let i = 0; i < divs.length - 1; i++) {
-          divs[i].style.background = this.analyticParams.color;
-        }
-      }
-
-      /**
-       * Render successful task on top
-       */
-      if (task) {
-        this.drawAnalyticLine(session.session, line, this.analyticParams.color, 2, this.taskLineOpacity);
-        this.drawAnalyticLine(session.session,matchLines,this.analyticParams.taskColor,4,this.taskLineOpacity);
-        for (let i = 0; i < matchDiv.length; i++) {
-          matchDiv[i].style.background = this.analyticParams.taskColor;
-        }
-      } else {
-        this.drawAnalyticLine(session.session,line, this.analyticParams.color, 2, this.taskLineOpacity);
-      }
-
-      return false;
-    },
-
-    _renderScreenEvent(x, y, type, label, db, screenID) {
-      var cntr = db
-        .div("MatcAnalyticCanvasEventCntr")
-        .build(this.widgetContainer);
-      cntr.style.left = Math.round(x) + "px";
-      cntr.style.top = Math.round(y) + "px";
-
-      var div = db
-        .div("MatcAnalyticCanvasEvent MatcAnalyticCanvasEvent" + type)
-        .build(cntr);
-      var r = Math.max(5, Math.round(15));
-      div.style.width = r + "px";
-      div.style.height = r + "px";
-      div.style.top = -1 * Math.round(r / 2) + "px";
-      div.style.left = -1 * Math.round(r / 2) + "px";
-
-      this.tempOwn(on(div, "click", lang.hitch(this, "onScreenEventClick", screenID)));
-
-      return div;
-    },
-
-    onScreenEventClick(id, e) {
-      this.stopEvent(e);
-      if (this.toolbar) {
-        this.toolbar.setSelectSessions([id]);
-      }
-    },
-
-    _getSessionGraph(session, db, task, matches, graph) {
-      var sessionEvents = session.data;
-
-      // var matchDiv = [];
-      // if (task && matches) {
-      //	match = matches[task.id];
-      //}
-      var from;
-      for (var i = 0; i < sessionEvents.length; i++) {
-        var e = sessionEvents[i];
-        /**
-         * Be aware of the overlay...
-         */
-        var screenID = this.getEventScreenId(e);
-        var screen = this.sourceModel.screens[screenID];
-        if (screen) {
-          var to = {};
-          if (e.type == "SessionStart") {
-            to.x = screen.x - Math.max(10, Math.round(30));
-            to.y = screen.y + Math.max(10, Math.round(30));
-            from = this._addToGraph(from, to, graph);
-          } else if (e.x >= 0 && e.y >= 0 && !e.noheat) {
-            if (e.widget && this.sourceModel.widgets[e.widget]) {
-              var widget = this.sourceModel.widgets[e.widget];
-              to.x = Math.round(widget.x + widget.w / 2);
-              to.y = Math.round(widget.y + widget.h / 2);
-              from = this._addToGraph(from, to, graph);
-            } else {
-              to.x = Math.round(Math.min(1, e.x) * screen.w + screen.x);
-              to.y = Math.round(Math.min(1, e.y) * screen.h + screen.y);
-              from = this._addToGraph(from, to, graph);
-            }
-          }
-        } else {
-          console.warn("_getSessionGraph()", "Screen is not there", e.screen);
-        }
-      }
-    },
-
-    _addToGraph(from, to, graph) {
-      if (from) {
-        var id = from.x + ";" + from.y + "-" + to.x + ";" + to.y;
-        if (!graph[id]) {
-          graph[id] = {
-            from: from,
-            to: to,
-            count: 0,
-          };
-        }
-        graph[id].count++;
-        return to;
-      }
-      return to;
-    },
-
-    /**********************************************************************
-     * DropOff
-     **********************************************************************/
-
-    _render_global_DropOff(screenEvents, screen, ctx, div) {
-      this.logger.log(-1, "_render_global_DropOff", "entry > ", this.analyticParams.task);
-      this.setBW(true);
-      if (this.analyticParams.task) {
-        if (this.analyticParams.time) {
-          this._render_dropoff_task_time(screenEvents, screen, ctx, div, this.analyticParams.task);
-        } else {
-          this._render_dropoff_task_sucess(screenEvents, screen, ctx, div, this.analyticParams.task);
-        }
-      } else {
-        this.showError('No task selected')
-      }
-    },
-
-     _render_dropoff_task_time (screenEvents, screen, ctx, div, task) {
-
-      let db = new DomBuilder()
-
-      var df = new DataFrame(this.events);
-      var analytics  = new Analytics();
-      let funnel = analytics.getFunnelSummary(df, task, this.annotation);
-
-
-
-      let length = task.flow.length
-      if (task.flow && task.flow.length > 1) {
-
-        /**
-         * We take here to total task time...
-         */
-        let maxTime = Math.max(1,funnel[funnel.length-1].durationMean)
-        /*
-        let maxTime = 1
-        for (let i=0; i < task.flow.length - 1; i++){
-          let startSummary = funnel[i+1]
-          let endSummary = funnel[i+2]
-          let time = endSummary.durationMean - startSummary.durationMean
-          maxTime = Math.max(maxTime, time)
-        }
-        */
-
-        for (let i=0; i < task.flow.length - 1; i++){
-          //let
-          let startSummary = funnel[i+1]
-          let endSummary = funnel[i+2]
-          let start = task.flow[i]
-          let end = task.flow[i+1]
-
-
-          let time = endSummary.durationMean - startSummary.durationMean
-          let p = Math.min(1, time  / maxTime)
-
-
-          let startPos = this._getDropOffBoxPosition(start, i , length)
-          let endPos = this._getDropOffBoxPosition(end, i+ 1, length)
-          let line = [startPos, endPos]
-
-          let color = this.mixColor(p)
-          let width = Math.max(3, Math.round(this.dropOffLineWidth * p))
-          this.drawAnalyticLine('dropOffLine'+i,line, color , width, this.taskLineOpacity);
-
-          /**
-           * Render Points
-           */
-          this._renderDropOffEvent(endPos.x, endPos.y, 'FlowStep', db, color, width + this.dropOffEventWidth, Math.round(time / 100) / 10, 's')
-          if (i === 0) {
-              color = this.mixColor(p)
-              width = Math.max(3, Math.round(this.dropOffLineWidth * p))
-                        console.debug(time, p, maxTime, width)
-              this._renderDropOffEvent(startPos.x, startPos.y, 'FlowStep', db, color, width + this.dropOffEventWidth, '0', 's')
-          }
-
-        }
-      } else {
-        this.showError('Cannot show task times. The selected task has only one step.')
-      }
-    },
-
-    _render_dropoff_task_sucess (screenEvents, screen, ctx, div, task) {
-
-      let db = new DomBuilder()
-
-      var df = new DataFrame(this.events);
-      var analytics  = new Analytics();
-      let funnel = analytics.getFunnelSummary(df, task, this.annotation);
-
-      let length = task.flow.length
-      if (task.flow && task.flow.length > 1) {
-        for (let i=0; i < task.flow.length - 1; i++){
-          //let
-          let startSummary = funnel[i+1]
-          let endSummary = funnel[i+2]
-          let start = task.flow[i]
-          let end = task.flow[i+1]
-
-          let startPos = this._getDropOffBoxPosition(start, i, length)
-          let endPos = this._getDropOffBoxPosition(end, i + 1, length)
-          let line = [startPos, endPos]
-
-          let color = this.greenToRed(endSummary.p)
-          let width = Math.max(3, Math.round(this.dropOffLineWidth * endSummary.p))
-          this.drawAnalyticLine('dropOffLine'+i,line, color , width, this.taskLineOpacity);
-
-          /**
-           * Render drop off
-           */
-          if (startSummary && endSummary) {
-              let p = startSummary.p - endSummary.p
-              let dropOffPos = {
-                x: startPos.x + 100,
-                y: startPos.y + 100
-              }
-              let dropOffLine = [startPos, dropOffPos]
-               let width = Math.max(3, Math.round(this.dropOffLineWidth * p))
-              this.drawAnalyticLine('dropOffLineDrop'+i,dropOffLine, this.dropOffLineColor , width, this.taskLineOpacity);
-              this._renderDropOffEvent(dropOffPos.x, dropOffPos.y, 'FlowStep', db, this.dropOffLineColor, width + this.dropOffEventWidth, Math.round(-100 * p))
-          }
-
-          /**
-           * Render POints
-           */
-          this._renderDropOffEvent(endPos.x, endPos.y, 'FlowStep', db, color, width + this.dropOffEventWidth, Math.round(endSummary.p * 100))
-          if (i === 0) {
-              color = this.greenToRed(startSummary.p)
-              width = Math.max(3, Math.round(this.dropOffLineWidth * startSummary.p))
-              this._renderDropOffEvent(startPos.x, startPos.y, 'FlowStep', db, color, width + this.dropOffEventWidth, Math.round(startSummary.p * 100))
-          }
-
-        }
-      } else {
-        this.showError('Cannot show task times. The selected task has only one step.')
-      }
-    },
-
-    _getDropOffBoxPosition (e, i = 0, l = 1) {
-
-      if (e.widget) {
-        let widget = this.sourceModel.widgets[e.widget]
-        if (widget) {
-            let pos = {}
-            pos.x = Math.round(widget.x + widget.w / 2);
-            pos.y = Math.round(widget.y + widget.h / 2);
-            return pos
-        } else {
-           this.logger.warn("_geDropOffBoxPosition", "no widget > ", e.widget);
-        }
-
-      }
-      if (e.screen) {
-        let sourceScreen = this.sourceModel.screens[e.screen]
-        if (sourceScreen) {
-            let pos = {}
-            pos.x = Math.round(sourceScreen.x + sourceScreen.w / 2);
-            pos.y = Math.min(sourceScreen.y + sourceScreen.h, Math.round(sourceScreen.y + sourceScreen.h / 3) + (sourceScreen.h * i / (l * 2)));
-            return pos
-        } else {
-           this.logger.warn("_geDropOffBoxPosition", "no screen > ", e.screen);
-        }
-      }
-    },
-
-    _renderDropOffEvent(x, y, type, db, color, width, p, unit='%') {
-      var cntr = db
-        .div("MatcAnalyticCanvasEventCntr")
-        .build(this.widgetContainer);
-      cntr.style.left = Math.round(x) + "px";
-      cntr.style.top = Math.round(y) + "px";
-
-      var div = db
-        .div("MatcAnalyticCanvasEvent MatcAnalyticCanvasEvent" + type,)
-        .build(cntr);
-
-      var r = Math.max(5, Math.round(width));
-      div.style.width = r + "px";
-      div.style.height = r + "px";
-      div.style.top = -1 * Math.round(r / 2) + "px";
-      div.style.left = -1 * Math.round(r / 2) + "px";
-      div.style.background = color
-
-      if (unit) {
-        db.span('MatcAnalyticCanvasEventLabel', p + unit).build(div)
-      }
-
-      return div;
-    },
 
 
     /**********************************************************************
@@ -1240,441 +898,13 @@ export default {
 
 
     cleanUpAnalytics() {
-			this.cleanUpAnalyticLines()
+      this.cleanUpAnalyticLines()
 
-			this.cleanUpNode(this.widgetContainer)
+      this.cleanUpNode(this.widgetContainer)
       this.analyticsDivs = {};
     },
 
-    /**********************************************************************
-     * Analytic Cached method
-     **********************************************************************/
 
-    getGestures() {
-      if (!this.cache["gestures"]) {
-        var df = new DataFrame(this.events);
-        var gestures = df.select("type", "in", [
-          "ScreenGesture",
-          "WidgetGesture",
-        ]);
-        this.cache["gestures"] = gestures.data;
-      }
-
-      return this.cache["gestures"];
-    },
-
-    getUserJourney() {
-      if (!this.cache["userJourney"]) {
-        var df = new DataFrame(this.events);
-        df.sortBy("time");
-        var sessionGroup = df.groupBy("session");
-        let sessions = sessionGroup.data;
-        this.cache["userJourney"] = sessions;
-      }
-      return this.cache["userJourney"];
-    },
-
-    getTaskPerformance() {
-      if (!this.cache["taskPerformance"]) {
-        var analytics = new Analytics();
-
-        var df = new DataFrame(this.events);
-        df.sortBy("time");
-
-        var temp = analytics.getTaskPerformance(
-          df,
-          this.testSettings.tasks,
-          false,
-          false
-        );
-        var sessions = {};
-        for (var i = 0; i < temp.data.length; i++) {
-          var match = temp.data[i];
-
-          if (!sessions[match.session]) {
-            sessions[match.session] = {};
-          }
-          if (!sessions[match.session][match.task]) {
-            sessions[match.session][match.task] = match;
-          } else {
-            console.warn("getTaskPerformance() Double mactch", match);
-          }
-        }
-        this.cache["taskPerformance"] = sessions;
-      }
-      return this.cache["taskPerformance"];
-    },
-
-    getOverlayViews() {
-      if (!this.cache["overlayViews"]) {
-        var screenLoads = this.df.select("type", "==", "OverlayLoaded");
-
-        var screenLoadCounts = screenLoads.count("overlay");
-        var totalScreenLoads = screenLoads.size();
-
-        var views = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          views[screen.id] = screenLoadCounts.get(screen.id, null, 0);
-        }
-
-        this.cache["overlayViews"] = {
-          total: totalScreenLoads,
-          counts: views,
-        };
-      }
-      return this.cache["overlayViews"];
-    },
-
-    getOverlayTest() {
-      if (!this.cache["overlayTests"]) {
-        var sessions = this.df.groupBy("session");
-        var sessionCount = sessions.size().size();
-
-        var tests = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          tests[screen.id] = 0;
-        }
-
-        sessions.foreach(function (df) {
-          var screenCounts = df.count("overlay"); // diference to screenTest
-          screenCounts.foreach(function (row, id) {
-            tests[id] += 1;
-          });
-        });
-
-        this.cache["overlayTests"] = {
-          sessions: sessionCount,
-          counts: tests,
-        };
-      }
-      return this.cache["overlayTests"];
-    },
-
-    getScreenViews() {
-      if (!this.cache["screenViews"]) {
-        var screenLoads = this.df.select("type", "==", "ScreenLoaded");
-        var screenLoadCounts = screenLoads.count("screen");
-        var totalScreenLoads = screenLoads.size();
-
-        var views = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          views[screen.id] = screenLoadCounts.get(screen.id, null, 0);
-        }
-
-        this.cache["screenViews"] = {
-          total: totalScreenLoads,
-          counts: views,
-        };
-      }
-      return this.cache["screenViews"];
-    },
-
-    getScreenTests() {
-      if (!this.cache["screenTests"]) {
-        var sessions = this.df.groupBy("session");
-        var sessionCount = sessions.size().size();
-
-        var tests = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          tests[screen.id] = 0;
-        }
-
-        sessions.foreach(function (df) {
-          var screenCounts = df.count("screen");
-          screenCounts.foreach(function (row, id) {
-            tests[id] += 1;
-          });
-        });
-
-        this.cache["screenTests"] = {
-          sessions: sessionCount,
-          counts: tests,
-        };
-      }
-      return this.cache["screenTests"];
-    },
-
-    getScreenDwellTime() {
-      if (!this.cache["screenDwell"]) {
-        var count = this.df.count("session");
-        var sessionCount = count.size();
-
-        var analytics = new Analytics();
-        var screenTimeGrouping = analytics.getScreenTimeGrouping(this.df);
-        var totalTime = screenTimeGrouping.sum().sum();
-
-        var times = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          var screenTimeDF = screenTimeGrouping.get(screen.id);
-          if (screenTimeDF) {
-            times[screen.id] = screenTimeDF.sum();
-          } else {
-            times[screen.id] = 0;
-          }
-        }
-
-        this.cache["screenDwell"] = {
-          total: totalTime,
-          times: times,
-          sessions: sessionCount,
-        };
-      }
-      return this.cache["screenDwell"];
-    },
-
-    getOverlayDwellTime() {
-      if (!this.cache["overlayDwell"]) {
-        var count = this.df.count("session");
-        var sessionCount = count.size();
-
-        var analytics = new Analytics();
-
-        /**
-         * We calculate the overlay time relative to the absolute screen time...
-         */
-        var screenTimeGrouping = analytics.getScreenTimeGrouping(this.df);
-        var totalTime = screenTimeGrouping.sum().sum();
-
-        var overlayGrouping = analytics.getOverlayTimeGrouping(this.df);
-
-        var times = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          var screenTimeDF = overlayGrouping.get(screen.id);
-          if (screenTimeDF) {
-            times[screen.id] = screenTimeDF.sum();
-          } else {
-            times[screen.id] = 0;
-          }
-        }
-
-        this.cache["overlayDwell"] = {
-          total: totalTime,
-          times: times,
-          sessions: sessionCount,
-        };
-      }
-      return this.cache["overlayDwell"];
-    },
-
-    getScreenWidgetClicks() {
-      if (!this.cache["screenWidgetClicks"]) {
-        /**
-         * FIXME: This could be nice with regards to the overlays....
-         *
-         * Some clicks should be attributed the to overlay, nit the clicks, or?
-         */
-        var widgetEvents = this.df.select("type", "==", "WidgetClick");
-        var widgetScreenEvents = widgetEvents.count("screen");
-        var totalWidgetEvents = widgetScreenEvents.sum();
-
-        /**
-         * Now filter out overlay events
-         */
-        widgetEvents = widgetEvents.select("overlay", "==", null);
-        widgetScreenEvents = widgetEvents.count("screen");
-
-        var clicks = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          clicks[screen.id] = widgetScreenEvents.get(screen.id, null, 0);
-        }
-
-        this.cache["screenWidgetClicks"] = {
-          clicks: clicks,
-          total: totalWidgetEvents,
-        };
-      }
-
-      return this.cache["screenWidgetClicks"];
-    },
-
-
-    getScreenClicksOnBackground() {
-      if (!this.cache["screenClicksOnBackground"]) {
-        var screenClicks = this.df.select("type", "==", "ScreenClick");
-        this.cache["screenClicksOnBackground"] = screenClicks
-      }
-
-      return this.cache["screenClicksOnBackground"];
-    },
-
-    getMissedClicks () {
-       if (!this.cache["missedClicks"]) {
-        /** 
-         * Get all screens that do not have a line
-         */
-        var screens = Object.values(this.sourceModel.screens);
-        let passiveScreens = {}
-        screens.forEach(s => {
-          let linesFrom = this.getFromLines(s)
-          if (linesFrom.length === 0) {
-            passiveScreens[s.id] = true
-          }
-        })
-
-
-        /**
-         * Get all the widgets that do not have a line
-         * AND that are not inputs 
-         */
-        let passiveWidgets = []
-        let widgets = Object.values(this.sourceModel.widgets)
-        widgets.forEach(w => {
-          if (w.type === "Box" || w.type === "Button" || w.type === "HotSpot") {
-            let linesFrom = this.getFromLines(w)
-            if (linesFrom.length === 0) {
-              passiveWidgets[w.id] = true
-            }
-          }
-        })
-
-        /**
-         * Filter screenclicks for these screens
-         */
-        let clickEvents = this.df
-          .select("type", "in", ["ScreenClick", "WidgetClick"])
-          .as_array();
-        
-
-        let missedClicks = clickEvents.filter(e => {
-          if (e.type === "ScreenClick" && passiveScreens[e.screen] === true) {
-            return true
-          }
-          if (e.type === "WidgetClick" && passiveWidgets[e.widget] === true) {
-            return true
-          }
-        
-          return false
-        })
-
-        this.cache["missedClicks"] = missedClicks;
-      }
-
-      return this.cache["missedClicks"];
-    },
-
-
-    getScreenClicks() {
-      if (!this.cache["screenClicks"]) {
-        /**
-         * FIXME: This could be nice with regards to the overlays....
-         *
-         * Some clicks should be attributed the to overlay, nit the clicks, or?
-         */
-        var clickEvents = this.df.select("type", "in", [
-          "ScreenClick",
-          "WidgetClick",
-        ]);
-        var clickEventsCount = clickEvents.count("screen");
-        var totalWidgetEvents = clickEventsCount.sum();
-
-        var widgetEvents = this.df.select("type", "==", "ScreenClick");
-        var widgetScreenEvents = widgetEvents.count("screen");
-
-        var clicks = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          clicks[screen.id] = widgetScreenEvents.get(screen.id, null, 0);
-        }
-
-        this.cache["screenClicks"] = {
-          clicks: clicks,
-          total: totalWidgetEvents,
-        };
-      }
-
-      return this.cache["screenClicks"];
-    },
-
-    getOverlayClicks() {
-      if (!this.cache["overlayCicks"]) {
-        /**
-         * FIXME: This could be nice with regards to the overlays....
-         *
-         * Some clicks should be attributed the to overlay, nit the clicks, or?
-         */
-        var widgetEvents = this.df.select("type", "==", "ScreenClick");
-        var widgetScreenEvents = widgetEvents.count("overlay");
-        var totalWidgetEvents = widgetScreenEvents.sum();
-
-        var clicks = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          clicks[screen.id] = widgetScreenEvents.get(screen.id, null, 0);
-        }
-
-        this.cache["overlayCicks"] = {
-          clicks: clicks,
-          total: totalWidgetEvents,
-        };
-      }
-
-      return this.cache["overlayCicks"];
-    },
-
-    getOverlayWidgetClicks() {
-      if (!this.cache["overlayWidgetCicks"]) {
-        /**
-         * FIXME: This could be nice with regards to the overlays....
-         *
-         * Some clicks should be attributed the to overlay, nit the clicks, or?
-         */
-        var widgetEvents = this.df.select("type", "==", "WidgetClick");
-        var widgetScreenEvents = widgetEvents.count("overlay");
-        var totalWidgetEvents = widgetScreenEvents.sum();
-
-        var clicks = {};
-        var screens = this.getScreens(this.sourceModel);
-        for (var s = 0; s < screens.length; s++) {
-          var screen = screens[s];
-          clicks[screen.id] = widgetScreenEvents.get(screen.id, null, 0);
-        }
-
-        this.cache["overlayWidgetCicks"] = {
-          clicks: clicks,
-          total: totalWidgetEvents,
-        };
-      }
-
-      return this.cache["overlayWidgetCicks"];
-    },
-
-    getWidgetData() {
-      if (!this.cache["widgetData"]) {
-        var analytics = new Analytics();
-        var widgets = {};
-        var data = analytics.getWidgetStatistics(this.sourceModel, this.df);
-        for (var id in data) {
-          widgets[id] = data[id];
-        }
-        this.cache["widgetData"] = widgets;
-      }
-      return this.cache["widgetData"];
-    },
-
-    getFirstNClicksData(n) {
-      var key = "firstClicks" + n;
-      if (!this.cache[key]) {
-        var analytics = new Analytics();
-        this.cache[key] = analytics.getFirstNClicks(this.events, n);
-      }
-      return this.cache[key];
-    },
 
     /**********************************************************************
      * DI
@@ -1709,12 +939,14 @@ export default {
 
     setModel(model) {
       this.sourceModel = model;
+      this.model = model
       this.grid = this.sourceModel.grid;
-      this.loadComments();
+      this.setCommentView(this.showComments);
     },
 
     setEvents(events) {
-      this.logger.log(1, "setEvents", "enter > # " + events.length);
+      this.logger.log(-1, "setEvents", "enter > # " + events.length);
+      this.cache = {};
       var analytics = new Analytics();
       this.events = analytics.nornalizeContainerChildEvents(events);
       this.df = new DataFrame(events);
@@ -1751,11 +983,7 @@ export default {
     },
 
     setMode(mode, forceRender) {
-      this.logger.log(
-        2,
-        "setMode",
-        "enter > " + mode + " != " + this.mode + " > " + forceRender
-      );
+      this.logger.log(2, "setMode", "enter > " + mode + " != " + this.mode + " > " + forceRender);
       if (mode != this.mode) {
         this.mode = mode;
         if (this.toolbar) {
@@ -1765,6 +993,10 @@ export default {
       } else if (forceRender) {
         this.rerender();
       }
+    },
+
+    setSubMode () {
+
     },
 
     /***************************************************************************
@@ -1792,20 +1024,12 @@ export default {
         // space
 
         if (!this._inlineEditStarted) {
-          this.setMode("move");
           this.stopEvent(e);
-          /**
-           * start the dnd already
-           */
-          this.onDragStart(
-            this.container,
-            "container",
-            "onCanvasDnDStart",
-            "onCanvasDnDMove",
-            "onCanvasDnDEnd",
-            null,
-            this._lastMouseMoveEvent
-          );
+          if (this.getMode() != "move") {
+            this.setMode("move");
+            this.showHint("Move the mouse to move canvas...");
+            this.onDragStart(this.container, "container", "onCanvasDnDStart", "onCanvasDnDMove", "onCanvasDnDEnd", null, this._lastMouseMoveEvent, true);
+          }
         }
 
         /**
@@ -1836,6 +1060,10 @@ export default {
       }
     },
 
+    getMode() {
+      return this.mode;
+    },
+
     onKeyUp(e) {
       var k = e.keyCode ? e.keyCode : e.which;
       if (k == 32) {
@@ -1850,7 +1078,9 @@ export default {
      * Helper Functons
      ***************************************************************************/
 
-    initMouseTracker() {},
+    initMouseTracker() {
+      this.own(on(win.body(), "mousemove", lang.hitch(this, "onMouseMove")));
+    },
 
     onMouseMove(e) {
       var pos2 = this.getCanvasMousePosition(e, true);
@@ -1867,6 +1097,6 @@ export default {
       this.logger.log(4, "logPageView", "enter", url);
     },
   },
-  mounted() {},
+  mounted() { },
 };
 </script>

@@ -3,15 +3,17 @@
 		<div class="MatcPlayerLeft">
 			<div class="MatcPlayerView" ref="container">
 			</div>
-			<div class="MatcPlayerProgress" ref="progress">
-			</div>
+			<div class="MatcPlayerNav">
+				<div class="MatcPlayerTasks" ref="tasks">
+				</div>
+				<div class="MatcPlayerProgress" ref="progress">
+				</div>
+			</div>	
+		
 			<div class="MatcPlayerButtonBar">
 				<div class="">
-					<a data-dojo-attach-point="btnBack"><span class="glyphicon glyphicon-step-backward"></span></a>
-					<a data-dojo-attach-point="btnPlay"><span data-dojo-attach-point="iconPlay" class="glyphicon glyphicon-play"></span></a>
-					<!--
-						<a data-dojo-attach-point="btnComment" class="vommondPopupCntr"><span class="glyphicon glyphicon-tag"></span></a>
-					-->
+					<a data-dojo-attach-point="btnBack"><span class="mdi mdi-skip-previous"></span></a>
+					<a data-dojo-attach-point="btnPlay"><span data-dojo-attach-point="iconPlay" class="mdi mdi-play"></span></a>
 					<span class="MatcPlayerTime" data-dojo-attach-point="time"></span>
 				</div>
 			</div>
@@ -31,6 +33,7 @@ import domGeom from 'dojo/domGeom'
 import Logger from 'common/Logger'
 import DataFrame from 'common/DataFrame'
 import HSlider from 'common/HSlider'
+import DomBuilder from 'common/DomBuilder'
 import Util from 'core/Util'
 import RenderFactory from 'core/RenderFactory'
 import Animation from 'core/Animation'
@@ -51,29 +54,30 @@ export default {
             animationTimeOffSet: 400,
             mode: "private",
             invisibleEvents: {
-							"Animation": true,
-							"SessionStart": true,
-							"ScreenAnimation": true,
-							"OverlayShowAnimation": true,
-							"OverlayRemoveAnimation": true,
-							"ValidationOk": true,
-							"MouseOut": true,
-							"MouseOver": true,
-							"WidgetInit": true
-						}
+				"Animation": true,
+				"SessionStart": true,
+				"ScreenAnimation": true,
+				"OverlayShowAnimation": true,
+				"OverlayRemoveAnimation": true,
+				"ValidationOk": true,
+				"MouseOut": true,
+				"MouseOver": true,
+				"WidgetInit": true
+			}
         }
     },
 	components: {},
 
     methods: {
-      postCreate: function(){
-				this.logger = new Logger('VideoPlayer');
-				this.analytics = new Analytics();
-				this.jwtToken = Services.getUserService().getToken()
-				this.own(on(this.btnBack, touch.press, lang.hitch(this, "onBack")));
-				this.own(on(this.btnPlay, touch.press, lang.hitch(this, "onPlay")));
-				this.init()
-			},
+      postCreate (){
+			this.logger = new Logger('VideoPlayer');
+			this.analytics = new Analytics();
+			this.jwtToken = Services.getUserService().getToken()
+			this.db = new DomBuilder()
+			this.own(on(this.btnBack, touch.press, lang.hitch(this, "onBack")));
+			this.own(on(this.btnPlay, touch.press, lang.hitch(this, "onPlay")));
+			this.init()
+		},
 
 		init () {
 			if (this.app) {
@@ -91,9 +95,22 @@ export default {
 			this.mouseData = m
 		},
 
+		setTestSettings (t) {
+			this.testSettings = t
+		},
+
+		setDialog(dialog) {
+			this.dialog = dialog
+		},
+
 		setModel(model){
 			this.model = this.createInheritedModel(model);
 			this.model = Core.addContainerChildrenToModel(this.model)
+			this.initSize()
+		},
+
+		initSize () {
+			this.previewWrapper = this.renderPreview()
 		},
 
 		setSession(session,sessionID){
@@ -750,8 +767,8 @@ export default {
 
 		start(){
 			this.running = true;
-			css.add(this.iconPlay, "glyphicon-pause");
-			css.remove(this.iconPlay, "glyphicon-play");
+			css.add(this.iconPlay, "mdi-pause");
+			css.remove(this.iconPlay, "mdi-play");
 			this.lastLoop = new Date().getTime();
 			requestAnimationFrame(lang.hitch(this, "loop"));
 		},
@@ -760,8 +777,8 @@ export default {
 
 		stop(){
 			this.running = false;
-			css.remove(this.iconPlay, "glyphicon-pause");
-			css.add(this.iconPlay, "glyphicon-play");
+			css.remove(this.iconPlay, "mdi-pause");
+			css.add(this.iconPlay, "mdi-play");
 		},
 
 
@@ -790,14 +807,10 @@ export default {
 		render(){
 			this.logger.log(2,"render","enter");
 
-			this.$refs.container.innerHTML="";
-			var previewWrapper = document.createElement("div");
-			css.add(previewWrapper, "MatcPlayerPreview");
-			this.layout(previewWrapper);
 
 			this.preview = this.$new(Preview, {isPlayer:true});
 			this.preview.setJwtToken(this.jwtToken)
-			this.preview.placeAt(previewWrapper);
+			this.preview.placeAt(this.previewWrapper);
 			this.preview.setModel(this.model);
 
 			this.scaledModel = this.preview.model;
@@ -809,21 +822,53 @@ export default {
 
 			this.own(on(this.slider, "change", lang.hitch(this, "onSliderChange")));
 			this.renderEventList();
+			this.renderTaskBar()
 		},
 
-		getAnnotation(){
-			var result = [];
+		renderPreview () {
+			this.$refs.container.innerHTML="";
+			var previewWrapper = document.createElement("div");
+			css.add(previewWrapper, "MatcPlayerPreview");
+			this.layout(previewWrapper);
+			return previewWrapper
+		},
+
+		renderTaskBar () {
 			if(	this.taskMatches){
-				var names = this.taskNames;
-				var t = this.animationTimeOffSet;
-				this.taskMatches.foreach(function(row){
-					/**
-					 * We have to fix also the task match to match the animation of the click
-					 */
-					var marker = {
-						start : row.discoveryTime -t ,
-						length : 100,
-						label : names[row.task]
+				const tasks = this.taskMatches.as_dict('task')
+				for (let id in this.taskNames) {
+					const label = this.taskNames[id]
+					let row =  tasks[id]
+					if (row) {
+						const start = (row.startTime - this.min) / this.duration
+						const length = (row.endTime - row.startTime) / this.duration
+						this.renderTask(start, length, label)
+					}
+				}
+				if (Object.values(tasks).length === 0) {
+					css.add(this.$refs.tasks, "MatcHidden")
+				}
+			}
+		},
+
+		renderTask (start, length, label) {			
+			const bar = this.db
+				.div('MatcPlayerTasksBarCntr')
+				.div('MatcPlayerTasksBar', label)
+				.build(this.$refs.tasks)
+		
+			bar.style.left = Math.min(97, (start * 100)) +'%'
+			bar.style.width = Math.max(3, 100* length) +'%'
+		},
+
+
+		getAnnotation(){
+			const result = [];
+			if(	this.taskMatches){
+				this.taskMatches.foreach(row => {
+					const marker = {
+						start : row.startTime - this.min,
+						length : 0
 					}
 					result.push(marker);
 				});
@@ -858,12 +903,11 @@ export default {
 				let type = e.type;
 				if(type){
 
-					if(!this.invisibleEvents[type]){
+					if(!this.invisibleEvents[type] && !e.hidden){
 						var item = document.createElement("div");
 						css.add(item, "MatcPlayerEvent");
 						css.add(item, e.type);
 						var txt = this.getMinute(e.time -this.min);
-
 						if(type == "WidgetClick" || type == "WidgetChange" || type=="ValidationError" || type=="ValidationErrorLine"){
 							if(e.state && (type == "WidgetClick" || type == "WidgetChange" )){
 								txt += " - " +  this.getEventStateLabel(e.state);
@@ -921,7 +965,7 @@ export default {
 					this.tempOwn(on(item, touch.press, lang.hitch(this, "onEvent", e)));
 
 					let del = document.createElement("span");
-					css.add(del, "glyphicon glyphicon-remove MatcPlayerEventRemove");
+					css.add(del, "mdi mdi-close-circle MatcPlayerEventRemove");
 					item.appendChild(del);
 					this.tempOwn(on(del, touch.press, lang.hitch(this, "removeTag", e)));
 				}
@@ -931,18 +975,29 @@ export default {
 		},
 
 		layout(previewWrapper){
+			const container = this.$refs.container
 
-			var cPos = domGeom.position(this.$refs.container);
-			var pos = this.getScaledSize(cPos, "height", this.model);
+			const cPos = domGeom.position(container);
+			const pos = this.getScaledSize(cPos, "auto", this.model);
 
 			previewWrapper.style.width = Math.round(pos.w) + "px";
-			previewWrapper.style.height = cPos.h + "px";
-			this.$refs.container.appendChild(previewWrapper);
+			previewWrapper.style.height = pos.h + "px";
+			container.style.height = pos.h + "px";
+			container.appendChild(previewWrapper);
 
-			var domPos = domGeom.position(this.domNode);
+			const domPos = domGeom.position(this.domNode);
 			this.eventCntr.style.height= Math.floor(domPos.h) + "px";
-			// this.eventCntr.style.width= Math.floor(domPos.w - cPos.w) + "px";
 
+		
+
+			if (this.dialog) {
+				this.logger.log(-1,'layout', 'dialog >> ' +  domPos.h + ' x ' +  domPos.w)
+				domPos.w += 0
+				domPos.h += 0
+				setTimeout(() => {
+					this.dialog.resize(domPos)
+				}, 30)
+			}		
 		},
 
 		onEvent(e){
@@ -986,83 +1041,88 @@ export default {
 			var event = this.getEvent(Math.floor(t));
 
 
-			/**
-			 * Set screen or animate transition
-			 */
-			if(event.screen){
+			try {
+				/**
+				 * Set screen or animate transition
+				 */
+				if(event.screen){
 
-				if("ScreenAnimation" == event.type){
-					this.preview.animateScreen(event, t, this.min);
-				} else {
-					this.preview.setScreen(event.screen, event.scrollTop);
+					if("ScreenAnimation" == event.type){
+						this.preview.animateScreen(event, t, this.min);
+					} else {
+						this.preview.setScreen(event.screen, event.scrollTop);
+					}
 				}
-			}
-
-			/**
-			 * Set overlays.
-			 *
-			 * 1) We render all overlays.
-			 * 2) Then we run an animation if required
-			 */
-			var overlays = this._overLayStates[event.id];
-			if(overlays){
-				this.preview.setOverlays(overlays);
-			}
-			if(event.type == "OverlayShowAnimation" || event.type == "OverlayRemoveAnimation"){
-
-				this.preview.animateOverlay(event, t, this.min);
-
-			} else if(this.lastEvent && this.lastEvent.type == "OverlayShowAnimation"){
 
 				/**
-				 * Because of skipping or so, the animation might not have reached 100%,
-				 * so we force fore the animation one mo time,
+				 * Set overlays.
+				 *
+				 * 1) We render all overlays.
+				 * 2) Then we run an animation if required
 				 */
-				this.preview.animateOverlay(this.lastEvent, t, this.min);
+				var overlays = this._overLayStates[event.id];
+				if(overlays){
+					this.preview.setOverlays(overlays);
+				}
+				if(event.type == "OverlayShowAnimation" || event.type == "OverlayRemoveAnimation"){
+
+					this.preview.animateOverlay(event, t, this.min);
+
+				} else if(this.lastEvent && this.lastEvent.type == "OverlayShowAnimation"){
+
+					/**
+					 * Because of skipping or so, the animation might not have reached 100%,
+					 * so we force fore the animation one mo time,
+					 */
+					this.preview.animateOverlay(this.lastEvent, t, this.min);
+				}
+
+
+				/**
+				 * Show a click marker. We only show the marker if the delta is small
+				 * and there and x and y values
+				 */
+				var tDelta = 0;
+				if(forceMarker){
+					tDelta = Math.abs((event.time -this.min) - t);
+				}
+				if(event.x> 0 && event.y >0 && tDelta < 100){
+					this.preview.setMarker(event, forceMarker );
+				}
+
+				/**
+				 * now update widget states
+				 */
+				var states = this._widgetStates[event.id];
+				for(var widgetID in states){
+					var state = states[widgetID];
+					this.preview.setWidgetState(widgetID, state, forceMarker, t +this.min);
+				}
+
+				/**
+				 * Set scroll
+				 */
+				this.setScroll(event, t);
+
+				this.setMouseCursor(event, t);
+
+
+				/**
+				 * fire widget animations
+				 */
+
+				var at = this.getAnimationIndex(t);
+				if(this._widgetAnimationStates[at]){
+					var animStates = this._widgetAnimationStates[at];
+					this.preview.setWidgetAnimationStates(animStates);
+				} else {
+					console.warn("setTime() > No animation data for time index", at)
+				}
+
+			} catch (err) {
+				console.warn("VideoPlayer.setTime() > Error", err)
 			}
-
-
-			/**
-			 * Show a click marker. We only show the marker if the delta is small
-			 * and there and x and y values
-			 */
-			var tDelta = 0;
-			if(forceMarker){
-				tDelta = Math.abs((event.time -this.min) - t);
-			}
-			if(event.x> 0 && event.y >0 && tDelta < 100){
-				this.preview.setMarker(event, forceMarker );
-			}
-
-			/**
-			 * now update widget states
-			 */
-			var states = this._widgetStates[event.id];
-			for(var widgetID in states){
-				var state = states[widgetID];
-				this.preview.setWidgetState(widgetID, state, forceMarker, t +this.min);
-			}
-
-			/**
-			 * Set scroll
-			 */
-			this.setScroll(event, t);
-
-			this.setMouseCursor(event, t);
-
-
-			/**
-			 * fire widget animations
-			 */
-
-			var at = this.getAnimationIndex(t);
-			if(this._widgetAnimationStates[at]){
-				var animStates = this._widgetAnimationStates[at];
-				this.preview.setWidgetAnimationStates(animStates);
-			} else {
-				console.warn("setTime() > No animation data for time index", at)
-			}
-
+			
 
 			this.lastEventID = event.id;
 

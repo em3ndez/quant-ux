@@ -23,10 +23,11 @@ export function fromHex (/*String*/ color ) {
 
 export function fromArray (/** array */ a) {
   var result = {}
-  let rgb = ["b", "g", "r"]
+  let rgb = ["r", "g", "b"]
   rgb.forEach((x, i) => {
     result[x] = a[i] * 1
   })
+  result.a = a[3] * 1
   if(isNaN(result.a)){
       result.a = 1;
   }
@@ -44,4 +45,19 @@ export function fromString (str) {
 
 export function toString(color) {
   return `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`
+}
+
+
+export function getGradientCSS(gradient) {
+  let value = "(" + gradient.direction + "deg";
+  const sortedColors = gradient.colors.slice()
+  sortedColors.sort((a, b) => {
+    return a.p - b.p
+  })
+  for (let i = 0; i < sortedColors.length; i++) {
+    const color = sortedColors[i];
+    value += "," + color.c + " " + color.p + "% ";
+  }
+  value + ");";
+  return value;
 }

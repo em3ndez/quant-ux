@@ -3,25 +3,36 @@
      <div class="MatcBoxSize">
 
 		<div data-dojo-attach-point="layerX" class="MatcToolbarFlexCntr">
-			<div class="MatcToolbarItem MatcToolbarItemSmall " >
-				<span class="MatcBoxSizeLabel">X :</span>
-				<input class="MatcIgnoreOnKeyPress MatcToobarInlineEdit MatcToobarInput" data-dojo-attach-point="inputX"/>
+			<div class=" MatcToolbarItemSmall " >
+				<span class="MatcBoxSizeLabel">X</span>
+				<input class="MatcIgnoreOnKeyPress MatcToobarInput" data-dojo-attach-point="inputX"/>
 			</div>
-			<div class="MatcToolbarItem MatcToolbarItemSmall" >
-				<span class="MatcBoxSizeLabel">Y :</span>
-				<input class="MatcIgnoreOnKeyPress MatcToobarInlineEdit MatcToobarInput" data-dojo-attach-point="inputY"/>
+			<div class=" MatcToolbarItemSmall" >
+				<span class="MatcBoxSizeLabel">Y</span>
+				<input class="MatcIgnoreOnKeyPress MatcToobarInput" data-dojo-attach-point="inputY"/>
+			</div>
+
+			<div class="" >
+				<span></span>
 			</div>
 		</div>
 
 		<div class="MatcToolbarFlexCntr" >
-			<div class="MatcToolbarItem MatcToolbarItemSmall" >
-				<span class="MatcBoxSizeLabel">W :</span>
-				<input class="MatcIgnoreOnKeyPress MatcToobarInlineEdit MatcToobarInput" data-dojo-attach-point="inputW"/>
+			<div class=" MatcToolbarItemSmall" >
+				<span class="MatcBoxSizeLabel">W</span>
+				<input class="MatcIgnoreOnKeyPress MatcToobarInput" data-dojo-attach-point="inputW"/>
 			</div>
-			<div class="MatcToolbarItem MatcToolbarItemSmall" >
-				<span class="MatcBoxSizeLabel">H :</span>
-				<input class="MatcIgnoreOnKeyPress MatcToobarInlineEdit MatcToobarInput" data-dojo-attach-point="inputH"/>
+			<div class=" MatcToolbarItemSmall" >
+				<span class="MatcBoxSizeLabel">H</span>
+				<input class="MatcIgnoreOnKeyPress MatcToobarInput" data-dojo-attach-point="inputH"/>
 			</div>
+			<div class=" " @click="toggleLinked()">
+				<template v-if="mode == 'all'">
+					<QIcon icon="LinkOff" v-if="isLinked"></QIcon>
+					<QIcon icon="Link" v-else></QIcon>
+				</template>
+			</div>
+	
 		</div>
 
 	</div>
@@ -32,216 +43,278 @@ import css from 'dojo/css'
 import lang from 'dojo/_base/lang'
 import on from 'dojo/on'
 import Util from 'core/Util'
+import QIcon from 'page/QIcon'
 
 export default {
     name: 'BoxSize',
     mixins:[Util, DojoWidget],
     data: function () {
         return {
+			linkedStatusByWidget: {},
+			widgetId: '',
             value: null,
             inputEvent: "change",
-            mode: "all"
+            mode: "all",
+			isHoverParent: false
         }
     },
-    components: {},
+    components: {
+		'QIcon': QIcon
+	},
+	computed: {
+		isLinked () {
+			if (this.widgetId) {
+				return this.linkedStatusByWidget[this.widgetId]
+			}
+			return true
+		}
+	},
     methods: {
       postCreate: function(){
-				this.own(on( this.inputX, this.inputEvent, lang.hitch(this,"update")));
-				this.own(on( this.inputY, this.inputEvent, lang.hitch(this,"update")));
-				this.own(on( this.inputH, this.inputEvent, lang.hitch(this,"update")));
-				this.own(on( this.inputW, this.inputEvent, lang.hitch(this,"update")));
+			this.own(on( this.inputX, this.inputEvent, lang.hitch(this,"update")));
+			this.own(on( this.inputY, this.inputEvent, lang.hitch(this,"update")));
+			this.own(on( this.inputH, this.inputEvent, lang.hitch(this,"update")));
+			this.own(on( this.inputW, this.inputEvent, lang.hitch(this,"update")));
 
-				this.own(on( this.inputX, "focus", function(e) {e.target.select()}));
-				this.own(on( this.inputY, "focus", function(e) {e.target.select()}));
-				this.own(on( this.inputH, "focus", function(e) {e.target.select()}));
-				this.own(on( this.inputW, "focus", function(e) {e.target.select()}));
+			this.own(on( this.inputX, "focus", function(e) {e.target.select()}));
+			this.own(on( this.inputY, "focus", function(e) {e.target.select()}));
+			this.own(on( this.inputH, "focus", function(e) {e.target.select()}));
+			this.own(on( this.inputW, "focus", function(e) {e.target.select()}));
 
-				if(this.mode == "widthAndHeight"){
-					css.add(this.layerX, "hidden");
-					this.inputW.disabled = true;
-					css.add(this.inputW, "MatcToobarInlineEditDisabled");
-				}
-			},
+			// this will trigger some weird redran action thingy. We should call here
+			// something like changing
+			// this.own(on( this.inputX, 'keyup', (e) => this.onKeyUp(e, this.inputX)));
+			// this.own(on( this.inputY, 'keyup', (e) => this.onKeyUp(e, this.inputY)));
+			// this.own(on( this.inputH, 'keyup', (e) => this.onKeyUp(e, this.inputH)));
+			// this.own(on( this.inputW, 'keyup', (e) => this.onKeyUp(e, this.inputW)));
 
-			setCanvasSettings (settings) {
-				if (settings) {
-					this.hasProtoMoto = settings.hasProtoMoto
-				}
-			},
+			if(this.mode == "widthAndHeight"){
+				css.add(this.layerX, "hidden");
+				this.inputW.disabled = true;
+				css.add(this.inputW, "MatcToobarInlineEditDisabled");
+			}
+		},
 
-			isDirty (){
-				return this._dirty;
-			},
+		onKeyUp (e, input) {
+			let value = input.value
+			if (!this.isValid(value)) {
+				return	
+			}
+		
+			if (e.key === 'ArrowUp') {
+				input.value = (value * 1) + 1	
+				this.update()			
+			}
+			if (e.key === 'ArrowDown') {
+				input.value = (value * 1) - 1	
+				this.update()		
+			}
+		},
 
-			update (e){
-				this.stopEvent(e);
-				this._dirty = true;
-				if (this.value){
-					var h = this.inputH.value;
-					var w = this.inputW.value;
-					let hasChange = false
+		toggleLinked () {
+			this.$set(this.linkedStatusByWidget, this.widgetId, !this.linkedStatusByWidget[this.widgetId])
+		},
 
-					if (h != this.value.h) {
-							if (this.isPercent(h)) {
-								this.scaleValueWH(h)
-								hasChange = true
-							}
-							if (this.isValid(h, this.inputH)){
-								this.value.h = h * 1;
-								hasChange = true
-							}
+		setCanvasSettings (settings) {
+			if (settings) {
+				this.hasProtoMoto = settings.hasProtoMoto
+			}
+		},
+
+		isDirty (){
+			return this._dirty;
+		},
+
+		update (e){
+		
+			this.stopEvent(e);
+			this._dirty = true;
+			if (this.value){
+				var h = this.inputH.value;
+				var w = this.inputW.value;
+				let hasChange = false
+
+				if (h * 1 != this.value.h) {
+					
+					if (this.isPercent(h)) {
+						this.scaleValueWH(h)
+						hasChange = true
 					}
-
-					if (w != this.value.w) {
-							if (this.isPercent(w)) {
-								this.scaleValueWH(w)
-								hasChange = true
-							}
-							if (this.isValid(w, this.inputW)){
-								this.value.w = w * 1;
-								hasChange = true
-							}
+					
+					if (this.isValid(h, this.inputH)){
+						if (this.isLinked && this.mode === 'all') {
+							const p = h / this.value.h
+							this.value.w = Math.round(this.value.w * p)
+							this.inputW.value = this.value.w
+						}
+						this.value.h = h * 1;
+						hasChange = true
 					}
+				} else if (w * 1 != this.value.w) {
+				
+					if (this.isPercent(w)) {
+						this.scaleValueWH(w)
+						hasChange = true
+					}
+					if (this.isValid(w, this.inputW)){
+						if (this.isLinked && this.mode === 'all') {
+							const p = w / this.value.w
+							this.value.h = Math.round(this.value.h * p)
+							this.inputH.value = this.value.h
+						}
+						this.value.w = w * 1;
+						hasChange = true
+					}
+				}
 
-					if (this.mode == "all"){
-						var parent= this.getParentScreen(this.value);
-						if (parent){
-							var x = this.inputX.value * 1 + parent.x;
-							var y = this.inputY.value * 1 + parent.y;
+				if (this.mode == "all"){
+					var parent= this.getParent(this.value);
+					if (parent){
+						var x = this.inputX.value * 1 + parent.x;
+						var y = this.inputY.value * 1 + parent.y;
 
-							if (x != this.value.x) {
-								let valueX = this.inputX.value
-								if (this.isPercent(valueX)){
-									this.scaleValueXY(valueX, parent)
-									hasChange = true
-								}
-
-								if (this.isValid(x, this.inputX)) {
-									this.value.x = x * 1;
-									hasChange = true
-								}
+						if (x != this.value.x) {
+							let valueX = this.inputX.value
+							if (this.isPercent(valueX)){
+								this.scaleValueXY(valueX, parent)
+								hasChange = true
 							}
 
-							if(y != this.value.y) {
-								let valueY = this.inputY.value
-								if (this.isPercent(valueY)){
-									this.scaleValueXY(valueY, parent)
-									hasChange = true
-								}
-								if (this.isValid(y, this.inputY)) {
-									this.value.y = y * 1;
-									hasChange = true
-								}
+							if (this.isValid(x, this.inputX)) {
+								this.value.x = x * 1;
+								hasChange = true
+							}
+						}
+
+						if(y != this.value.y) {
+							let valueY = this.inputY.value
+							if (this.isPercent(valueY)){
+								this.scaleValueXY(valueY, parent)
+								hasChange = true
+							}
+							if (this.isValid(y, this.inputY)) {
+								this.value.y = y * 1;
+								hasChange = true
 							}
 						}
 					}
-
-					if (hasChange) {
-						console.debug('BoxSize.update() > Change')
-						this.emit("change", this.value);
-					}
-				}
-			},
-
-			scaleValueXY (value, parent) {
-				let p = (this.getPercent(value) * 1) / 100
-				this.value.x = Math.round((this.value.x - parent.x) * p + parent.x);
-				this.value.y = Math.round((this.value.y - parent.y) * p + parent.y);
-				this.inputX.value = this.value.x - parent.x
-				this.inputY.value = this.value.y - parent.y
-			},
-
-			scaleValueWH (value) {
-				let p = (this.getPercent(value) * 1) / 100
-				this.value.w = Math.round(p * this.value.w)
-				this.value.h = Math.round(p * this.value.h)
-				this.inputH.value = this.value.h
-				this.inputW.value = this.value.w
-			},
-
-			isPercent (value) {
-					if (value.indexOf('%') === value.length - 1) {
-						let str = this.getPercent(value)
-						return this.isValid(str)
-					}
-					return false
-			},
-
-			getPercent(value) {
-					if (value.indexOf('%') === value.length - 1) {
-						return value.substring(0, value.length - 1)
-					}
-					return value
-			},
-
-			isValid (value){
-				var er = /^-?[0-9]+$/;
-				var valid =  er.test(value);
-				if(!valid){
-					/**
-					 * FIXME: add here some kind if css class or so?
-					 */
-					return false;
 				}
 
-				if(value > 0){
-					return true;
+				if (hasChange) {
+					this.emit("change", this.value);
 				}
+			}
+		},
 
+		scaleValueXY (value, parent) {
+			let p = (this.getPercent(value) * 1) / 100
+			this.value.x = Math.round((this.value.x - parent.x) * p + parent.x);
+			this.value.y = Math.round((this.value.y - parent.y) * p + parent.y);
+			this.inputX.value = this.value.x - parent.x
+			this.inputY.value = this.value.y - parent.y
+		},
+
+		scaleValueWH (value) {
+			let p = (this.getPercent(value) * 1) / 100
+			this.value.w = Math.round(p * this.value.w)
+			this.value.h = Math.round(p * this.value.h)
+			this.inputH.value = this.value.h
+			this.inputW.value = this.value.w
+		},
+
+		isPercent (value) {
+			if (value.indexOf('%') === value.length - 1) {
+				let str = this.getPercent(value)
+				return this.isValid(str)
+			}
+			return false
+		},
+
+		getPercent(value) {
+			if (value.indexOf('%') === value.length - 1) {
+				return value.substring(0, value.length - 1)
+			}
+			return value
+		},
+
+		isValid (value){
+			var er = /^-?[0-9]+$/;
+			var valid =  er.test(value);
+			if(!valid){
+				/**
+				 * FIXME: add here some kind if css class or so?
+				 */
 				return false;
-			},
+			}
 
-			setModel (m){
-				this.model = m;
-			},
+			if(value > 0){
+				return true;
+			}
 
-			setValue (box){
-				this._dirty = false;
+			return false;
+		},
 
+		setModel (m){
+			this.model = m;
+		},
+
+		setValue (box){
+			this._dirty = false;
+		
+			/**
+			 * make a copy so we do not modify the real model!
+			 */
+			this.value = {
+				h: box.h,
+				w: box.w,
+				x: box.x,
+				y: box.y,
+				id : box.id
+			};
+			this.widgetId = box.id ? box.id : 'No'
+			if (this.linkedStatusByWidget[this.widgetId] === undefined) {
+				this.$set(this.linkedStatusByWidget, this.widgetId, false)
+			}
+			this.render();
+		},
+
+		render (){
+			/**
+			 * w and h
+			 */
+			this.inputH.value = this.value.h;
+			this.inputW.value = this.value.w;
+
+			if(this.mode == "all"){
 				/**
-				 * make a copy so we do not modify the real model!
+				 * x and y
 				 */
-				this.value = {
-					h: box.h,
-					w: box.w,
-					x: box.x,
-					y: box.y,
-					id : box.id
-				};
-				this.render();
-			},
-
-			render:function(){
-				/**
-				 * w and h
-				 */
-				this.inputH.value = this.value.h;
-				this.inputW.value = this.value.w;
-
-				if(this.mode == "all"){
+				const parent = this.getParent(this.value);
+				if(parent){
+					this.inputX.value = this.value.x - parent.x;
+					this.inputY.value = this.value.y - parent.y;
+				} else {
 					/**
-					 * x and y
+					 * DISABLE?
 					 */
-					var parent= this.getParentScreen(this.value);
-					if(parent){
-						this.inputX.value = this.value.x - parent.x;
-						this.inputY.value = this.value.y - parent.y;
-					} else {
-						/**
-						 * DISABLE?
-						 */
-						this.inputX.value = "-";
-						this.inputY.value = "-";
-					}
-
+					this.inputX.value = "-";
+					this.inputY.value = "-";
 				}
-			},
+			}
+		},
 
-			blur:function(){
-				this.inputH.blur();
-				this.inputW.blur();
-				this.inputX.blur();
-				this.inputY.blur();
+		getParent (value) {
+			if (this.isHoverParent === true) {
+				return this.getHoverScreen(value);
+			}
+			return this.getParentScreen(value);
+		},
+
+		blur (){
+			this.inputH.blur();
+			this.inputW.blur();
+			this.inputX.blur();
+			this.inputY.blur();
 		}
     },
     mounted () {

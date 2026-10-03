@@ -4,17 +4,17 @@
     <div class data-dojo-attach-point="sectionTask">
       <div class="level">
         <div class="level-left">
-          <h2 class="title level-item">
+          <h3 class="title level-item">
             <span data-nls="testSettingsTasks">{{$t('analytic-task-list.header')}}</span>
             <HelpButton
               topic="analytics.tasks"
               subtopic="analytics.tasks.create"
               :hasNotifications="false"
             />
-          </h2>
+          </h3>
         </div>
         <div class="level-right">
-          <a class="button is-primary is-outlined level-item"  data-nls="btn.download"  @click="downloadCVS" >{{$t('analytic-task-list.download')}}</a>
+          <a class="MatcButton MatcButtonSecondary MatcButtonXS"  data-nls="btn.download"  @click="downloadCVS" >{{$t('analytic-task-list.download')}}</a>
         </div>
       </div>
 
@@ -38,6 +38,7 @@ import TaskPerfGram from "views/apps/analytics/TaskPerfGram";
 import TestSettings from "views/apps/test/TestSettings";
 import Analytics from "dash/Analytics";
 import HelpButton from "help/HelpButton";
+
 
 export default {
   name: "AnalyticsTaskList",
@@ -77,16 +78,17 @@ export default {
 
     downloadCVS () {
       var csvContent =
-        "Name,Success Rate,Duration (Mean),Duration (Median), Duration (STD),Events (Mean), Events (STD)\n";
+        "Name,Start, Success,Duration (Mean),Duration (Median), Duration (STD),Events (Mean), Events (STD)\n";
 
-      var tasks = this.test.tasks;
-      var analytics = new Analytics();
-      var perf = analytics.getTaskPerformance(this.df, tasks);
-      var summaries = analytics.getTaskSummary(this.df, tasks, this.annotation);
+      const tasks = this.test.tasks;
+      const analytics = new Analytics();
+      const perf = analytics.getTaskPerformance(this.df, tasks);
+      const summaries = analytics.getTaskSummary(this.df, tasks, this.annotation);
 
-      for (var i = 0; i < summaries.length; i++) {
-        var summary = summaries[i];
+      for (let i = 0; i < summaries.length; i++) {
+        const summary = summaries[i];
         csvContent += summary.label + ",";
+        csvContent += summary.startCount + " / " + summary.sessionCount + ",";
         csvContent += summary.value + " / " + summary.sessionCount + ",";
         csvContent += this.formatNumber(summary.durationMean / 1000) + ",";
         csvContent += this.formatNumber(summary.durationMedian / 1000) + ",";
@@ -111,13 +113,13 @@ export default {
       });
 
 
-      var blob = new Blob([csvContent], {
+      const blob = new Blob([csvContent], {
         type: "text/csv;charset=utf-8;"
       });
       if (window.navigator.msSaveOrOpenBlob) {
         window.navigator.msSaveBlob(blob, this.downloadFileName);
       } else {
-        var elem = window.document.createElement("a");
+        const elem = window.document.createElement("a");
         elem.href = window.URL.createObjectURL(blob);
         elem.download = this.downloadFileName;
         document.body.appendChild(elem);
@@ -155,14 +157,25 @@ export default {
       var analytics = new Analytics();
 
       var summaries = analytics.getTaskSummary(this.df, tasks, this.annotation);
-
+ 
       var me = this;
       var tbl = this.$new(Table);
+      tbl.actionLabel = 'Details'
+    
       tbl.setColumns([
         {
           query: "label",
           label: this.getNLS("dashTaskTableName"),
           width: 20
+        },
+        {
+          query: "startCount",
+          label: this.getNLS("dashTaskTableStart"),
+          fct: function(td, row) {
+            css.add(td, "MatcDashTableTdHint MatcDashTableLabels");
+            td.innerHTML = row.startCount + " / " + row.sessionCount
+          },
+          width: 10
         },
         {
           query: "success",
@@ -173,9 +186,9 @@ export default {
             bar.color = me.PROGRESS_COLOR;
             bar.placeAt(td);
             bar.setValue(row.p);
-            bar.setLabel(row.value + " / " + row.sessionCount);
+            bar.setLabel(row.value + " / " + row.startCount);
           },
-          width: 30
+          width: 20
         },
         {
           query: "success",
@@ -184,7 +197,7 @@ export default {
             css.add(td, "MatcDashTableTdHint MatcDashTableLabels");
             td.innerHTML = "(" + Math.round(row.p * 100) + "%)";
           },
-          width: 15
+          width: 10
         },
         {
           query: "durationMean",
@@ -208,8 +221,8 @@ export default {
       tbl.setActions([
         {
           label: "",
-          icon: "mdi mdi-chart-bar",
-          css: "button is-primary is-outlined",
+          icon: "AnalyseChart",
+          css: "MatcButton MatcButtonXXS MatcButtonSecondary",
           callback: lang.hitch(me, "_showTaskPerf")
         }
       ]);
@@ -232,7 +245,7 @@ export default {
       if (task) {
         var db = new DomBuilder();
         var dialog = new Dialog();
-        var d = db.div("MatcPadding MatcDashTaskPerfGramDialog").build();
+        var d = db.div("MatcPadding MatcDashTaskPerfGramDialog MatcDialog").build();
         var gram = this.$new(TaskPerfGram, {
           model: this.app,
           dialog: dialog,
@@ -256,6 +269,11 @@ export default {
         }
       }
       this.save();
+    }
+  },
+  watch: {
+    events () {
+        this.render();
     }
   },
   mounted() {}

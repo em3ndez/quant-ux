@@ -1,0 +1,42 @@
+
+[
+    {
+        "id" : "GridContainer",
+        "type" : "GridContainer",
+		"category": "WireFrame",
+        "subcategory" : "AAA",
+        "_type" : "Widget",
+        "name" : "Grid Container",
+        "x" : 0,
+        "y" : 0,
+        "w": 320,
+        "h": 320,
+        "z" : 0,
+        "props" : {
+            "layout": "grid",
+            "rows": 2,
+            "columns": 2,
+            "rowGap": 16, 
+            "columnGap": 24            
+        },
+        "has" : {
+           "onclick" : true,
+           "borderRadius" : true,
+           "backgroundColor": true,
+           "border": true,
+           "padding":true
+        },
+        "actions":{},
+        "style" : {
+           "borderRadius": 0,
+           "borderWidth": 1,
+           "borderStyle": "solid",
+           "borderColor": "@background-passive",	
+           "background": "@form-background",
+           "paddingBottom":24,
+           "paddingLeft": 24,
+           "paddingRight": 24,
+           "paddingTop": 24
+        }
+    }
+]

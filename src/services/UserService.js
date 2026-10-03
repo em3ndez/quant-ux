@@ -40,6 +40,8 @@ class UserService extends AbstractService{
     logout () {
         localStorage.removeItem('quxUser');
         Cookies.remove('quxUserLoggedIn')
+        Cookies.remove('quxUserLoggedIn', { path: '/' })
+        Cookies.remove('quxUserLoggedIn', { path: '/' , domain: 'quant-ux.com'})
         return this._delete('rest/login/')
     }
 
@@ -64,17 +66,23 @@ class UserService extends AbstractService{
     load () {
         if (!this.user) {
             this.logger.info('getUser()', 'load')
-            let s = localStorage.getItem('quxUser')
+            let s = Cookies.get('quxUserLoggedIn')
+            if (s == undefined || s === null || s === '') {
+                this.logger.info('getUser()', 'from localstorage')
+                s = localStorage.getItem('quxUser')
+            }
             if (s) {
                 try {
-                    let user = JSON.parse(s)
+                    const user = JSON.parse(s)
                     this.setTTL(user)
                     if (this.isValidUser(user)) {
                         this.user = user
                         this.setToken(this.getToken())
+                        //this.refreshToken()
                     } else {
                         this.user = this.GUEST
                     }
+                                    
                 } catch (error) {
                     this.logger.error('getUser', 'could not parse', s)
                     this.user = this.GUEST
@@ -88,6 +96,12 @@ class UserService extends AbstractService{
 
     async loadById (id) {
         return await this._get('/rest/user/' + id + '.json')
+    }
+
+    async setTos(key) {
+        const req = {}
+        req[key] = true
+        this._post('/rest/user/' + this.user.id + "/tos.json", req)
     }
 
     getNotications () {
@@ -149,10 +163,30 @@ class UserService extends AbstractService{
             if (jwt) {
                 // JWT uses seconds
                 u.exp = jwt.exp * 1000
-                this.logger.log(-1, 'setTTL', 'exit > User valid until', new Date(u.exp))
+                if (this.ttlTimeout) {
+                    clearTimeout(this.ttlTimeout)
+                }
+                let waitTime = u.exp - new Date().getTime() - (12 * 60 * 60 * 1000)
+                this.ttlTimeout = setTimeout(() => {
+                    this.refreshToken()
+                }, waitTime)
+                this.logger.log(2, 'setTTL', 'User valid until', new Date(u.exp))
+                this.logger.log(-1, 'setTTL', 'Auto loggout  in ' + Math.round((waitTime / (1000 * 3600))) + ' hours')
             } else {
                 this.logger.log(-1, 'setTTL', 'exit > NO token')
             }
+        }
+    }
+
+    async refreshToken() {
+        this.logger.log(-1, 'refreshToken', 'enter')
+        const res = await this._post('/rest/user/token/refresh.json')
+        if (res.errors || res.error) {
+            this.logger.error('refreshToken', 'could not get refresh', res)
+        }
+        if (res.token && this.user) {
+            this.user.token = res.token
+            this.setUser(this.user)
         }
     }
 
@@ -174,11 +208,7 @@ class UserService extends AbstractService{
         this.setTTL(u)
         this.user = u
         localStorage.setItem('quxUser', JSON.stringify(u));
-        if (location.hostname === 'quant-ux') {
-            Cookies.set('quxUserLoggedIn', 'true', { expires: 7, secure: true, domain: '.quant-ux.com'}) 
-        } else {
-            Cookies.set('quxUserLoggedIn','true', { expires: 7, secure: true })
-        }   
+        Cookies.set('quxUserLoggedIn', JSON.stringify(u), { domain: 'quant-ux.com', expires: 7, secure: true, path:'/'}) 
     }
 
     setLanguage (langauge) {

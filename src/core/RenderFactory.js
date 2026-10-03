@@ -14,13 +14,17 @@ import DropDown from 'core/widgets/DropDown'
 import TextBox from 'core/widgets/TextBox'
 import Password from 'core/widgets/Password'
 import TextArea from 'core/widgets/TextArea'
+import Chat from 'core/widgets/Chat'
+import ChatTextBox from 'core/widgets/ChatTextBox'
 import DragNDrop from 'core/widgets/DragNDrop'
+import DragNDropTarget from 'core/widgets/DragNDropTarget'
 import Spinner from 'core/widgets/Spinner'
 import QDate from 'core/widgets/QDate'
 import QDateDropDown from 'core/widgets/QDateDropDown'
 import HSlider from 'core/widgets/HSlider'
 import TableWidget from 'core/widgets/TableWidget'
 import SegmentButton from 'core/widgets/SegmentButton'
+import SegmentPicker from 'core/widgets/SegmentPicker'
 import ToggleButton from 'core/widgets/ToggleButton'
 import LogicOr from 'core/widgets/LogicOr'
 import PolyLine from 'core/widgets/PolyLine'
@@ -46,12 +50,36 @@ import UploadPreview from 'core/widgets/UploadPreview'
 import WebLink from 'core/widgets/WebLink'
 import ProgressBar from 'core/widgets/ProgressBar'
 import ScreenSegment from 'core/widgets/ScreenSegment'
+import LockSlider from 'core/widgets/LockSlider'
+import Script from 'core/widgets/Script'
+import IconToggleButton from 'core/widgets/IconToggleButton'
+import IFrameWidget from 'core/widgets/IFrameWidget'
+import ProgessSegments from 'core/widgets/ProgessSegments'
+import ImagePaging from 'core/widgets/ImagePaging'
+import LabeledRadioBox from 'core/widgets/LabeledRadioBox'
+import LabeledCheckBox from 'core/widgets/LabeledCheckBox'
+import LabeledTextBox from 'core/widgets/LabeledTextBox'
+import LabeledTextArea from 'core/widgets/LabeledTextArea'
+import Navigation from 'core/widgets/Navigation'
+import NavMenu from 'core/widgets/NavMenu'
+import SVGIcon from 'core/widgets/SVGIcon'
+
 import CountingStepper from 'core/widgets/CountingStepper'
 import Tree from 'core/widgets/Tree'
 import IconButton from 'core/widgets/IconButton'
 import Paging from 'core/widgets/Paging'
 import Timeline from 'core/widgets/Timeline'
 import SVGBox from 'core/widgets/SVGBox'
+import SVGPaths from 'core/widgets/SVGPaths'
+import VisualPicker from 'core/widgets/VisualPicker'
+import SortableList from 'core/widgets/SortableList'
+import RadioTable from 'core/widgets/RadioTable'
+import GeoLocation from 'core/widgets/GeoLocation'
+import ImageGrid from 'core/widgets/ImageGrid'
+import AudioPlayer from 'core/widgets/AudioPlayer'
+import AudioLogic from 'core/widgets/AudioLogic'
+import GridContainer from 'core/widgets/GridContainer'
+import FlexContainer from 'core/widgets/FlexContainer'
 
 import Animation from 'core/Animation'
 import Core from 'core/Core'
@@ -102,12 +130,11 @@ export default class RenderFactory extends Core {
 	}
 
 	setHash (h) {
-		this.logger.log(-1, "setHash", "enter");
+		this.logger.log(1, "setHash", "enter");
 		this.hash = h
 	}
 
 	setJwtToken (t) {
-		this.logger.log(1, "setJwtToken", "enter");
 		this.jwtToken = t
 	}
 
@@ -263,13 +290,19 @@ export default class RenderFactory extends Core {
 				this._set_icon(null, widget.style, m);
 			}
 			if (widget && "Image" == widget.type) {
-				if (widget.style.backgroundPosition) {
-					let m = lang.clone(widget);
-					m.h = pos.h;
-					m.w = pos.w;
-					var div = this.getWidgetNodeByID(widget.id);
-					if (div) {
-						this._set_backgroundImage(div, widget.style, m);
+				if (!widget?.style?.backgroundImage) {				
+					if (widget.has.iconPlaceholder) {
+						const div = this.getWidgetNodeByID(widget.id);
+						this.renderImageIcon(pos, div)
+					}
+					if (widget.style.backgroundPosition) {
+						let m = lang.clone(widget);
+						m.h = pos.h;
+						m.w = pos.w;
+						const div = this.getWidgetNodeByID(widget.id);
+						if (div) {
+							this._set_backgroundImage(div, widget.style, m);
+						}
 					}
 				}
 			}
@@ -284,11 +317,16 @@ export default class RenderFactory extends Core {
 	 */
 	updatePositions (model) {
 		for (let id in this._containerWidgets){
-			let uiWidget = this._containerWidgets[id];
-			let widget = model.widgets[id];
+			const uiWidget = this._containerWidgets[id];
+			const widget = model.widgets[id];
 			if (uiWidget && widget) {
-				uiWidget.setZoomedModel(model);
-				uiWidget.update(widget)
+				try {
+					uiWidget.setZoomedModel(model);
+					uiWidget.update(widget)
+				} catch (err){
+					this.logger.error('updatePositions', 'Cannot render', + widget?.type)
+					this.logger.sendError(err)
+				}
 			}
 		}
 	}
@@ -329,6 +367,30 @@ export default class RenderFactory extends Core {
 		this.setStyle(parent, model, true, true);
 	}
 
+	updateLabel (widget) {
+		const uiWidget = this.getUIWidgetByID(widget.id);
+		if (!uiWidget) {
+			let node = this._labelNodes[widget.id]
+			if (node) {
+				this.setInnerHTML(node, widget.props.label)
+			}
+		}
+	}
+
+	updateWidget(widget) {
+		let parent = this._widgetNodes[widget.id];
+		if (parent) {
+			this.setStyle(parent, widget, true, false);
+		}
+		const uiWidget = this.getUIWidgetByID(widget.id);
+		if (!uiWidget) {
+			const labelNode = this._labelNodes[widget.id]
+			if (labelNode) {
+				this.setInnerHTML(labelNode, widget.props.label)
+			}
+		}
+	}
+
 	/**********************************************************************
 	 * Create Method -  The creation of the dom elements
 	 **********************************************************************/
@@ -339,8 +401,8 @@ export default class RenderFactory extends Core {
 	}
 
 	$new (cls) {
-		var ComponentClass = Vue.extend(cls);
-		var instance = new ComponentClass();
+		const ComponentClass = Vue.extend(cls);
+		const instance = new ComponentClass();
 		instance.mode = this.mode
 		instance.$mount(); // pass nothing
 		/**
@@ -354,7 +416,7 @@ export default class RenderFactory extends Core {
 
 
 	createWidgetHTML(parent, model) {
-
+	
 		css.add(parent, "MatchWidgetType" + model.type);
 
 		/**
@@ -379,16 +441,22 @@ export default class RenderFactory extends Core {
 		this.setStyle(parent, model, false);
 
 		if (this._uiWidgets[model.id]) {
-			var w = this._uiWidgets[model.id];
+			const w = this._uiWidgets[model.id];
 			if (this.mode == "simulator") {
-				w.wireEvents();
+				try {
+					w.wireEvents();
+					w.onSimulatoStarted()
+				} catch (err) {
+					this.logger.error("createWidgetHTML", "Could not wire events for " + w.type);
+					this.logger.sendError(err)
+				}
 			}
 			/**
 			 * In case of player or simulator set previews status
 			 */
 			if (this.mode == "simulator" || this.mode == "view") {
 				if (model.inherited) {
-					var orgModel = this.model.widgets[model.inherited];
+					const orgModel = this.model.widgets[model.inherited];
 					if (orgModel) {
 						if (this._uiWidgetsStates[orgModel.id] != null && this._uiWidgetsStates[orgModel.id] != undefined) {
 							w.setState(this._uiWidgetsStates[orgModel.id]);
@@ -412,13 +480,13 @@ export default class RenderFactory extends Core {
 	}
 
 	createWidgetByClass (parent, model, cls) {
-		var checkBox = this.$new(cls);
+		const checkBox = this.$new(cls);
 		checkBox.placeAt(parent);
 		this._uiWidgets[model.id] = checkBox;
 	}
 
 	_createScreenSegment (parent, model) {
-		let segement = this.$new(ScreenSegment)
+		const segement = this.$new(ScreenSegment)
 		segement.placeAt(parent);
 		/**
 		 * In the simulator the zoomedModel is not set,
@@ -435,44 +503,140 @@ export default class RenderFactory extends Core {
 		this._containerWidgets[model.id] = segement;
 	}
 
+	_createLabeledTextBox(parent, model) {
+		const widget = this.$new(LabeledTextBox)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createSVGIcon(parent, model) {
+		const widget = this.$new(SVGIcon)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createRadioTable(parent, model) {
+		const widget = this.$new(RadioTable)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createSortableList(parent, model) {
+		const widget = this.$new(SortableList)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createLabeledTextArea(parent, model) {
+		const widget = this.$new(LabeledTextArea)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+	
+	_createGridContainer(parent, model) {
+		const widget = this.$new(GridContainer)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createFlexContainer(parent, model) {
+		const widget = this.$new(FlexContainer)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createProgessSegments(parent, model) {
+		const widget = this.$new(ProgessSegments)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createIFrameWidget(parent, model) {
+		const widget = this.$new(IFrameWidget)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createImageGrid(parent, model) {
+		const widget = this.$new(ImageGrid)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
 	_createIconButton(parent, model) {
 		var widget = this.$new(IconButton);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
 
+	_createImagePaging(parent, model) {
+		const widget = this.$new(ImagePaging)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createGeoLocation(parent, model) {
+		const widget = this.$new(GeoLocation)
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createVisualPicker(parent, model) {
+		const widget = this.$new(VisualPicker);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
 	_createSVGBox(parent, model) {
-		var widget = this.$new(SVGBox);
+		const widget = this.$new(SVGBox);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createSVGPaths(parent, model) {
+		const widget = this.$new(SVGPaths);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
 
 	_createTree(parent, model) {
-		var widget = this.$new(Tree);
+		const widget = this.$new(Tree);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
 
+	_createNavBar(parent, model) {		
+		const widget = this.$new(Navigation);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createNavMenu(parent, model) {		
+		const widget = this.$new(NavMenu);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}	
+
 	_createTimeline (parent, model) {
-		var widget = this.$new(Timeline)
+		const widget = this.$new(Timeline)
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
 
 	_createVerticalNavigation(parent, model) {
-		var widget = this.$new(Tree);
+		const widget = this.$new(Tree);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
 
 	_createCountingStepper (parent, model) {
-		let stepper = this.$new(CountingStepper)
+		const stepper = this.$new(CountingStepper)
 		stepper.placeAt(parent);
 		this._uiWidgets[model.id] = stepper;
 	}
 
 	_createRepeater (parent, model) {
-		var repeater = this.$new(Repeater);
+		const repeater = this.$new(Repeater);
 		repeater.placeAt(parent);
 		/**
 		 * In the simulator the zoomedModel is not set,
@@ -488,69 +652,94 @@ export default class RenderFactory extends Core {
 		this._containerWidgets[model.id] = repeater;
 	}
 
+	_createDragNDropTarget (parent, model) {
+		const dnd = this.$new(DragNDropTarget);
+		if (this.zoomedModel){
+			dnd.setZoomedModel(this.zoomedModel)
+		} else {
+			dnd.setZoomedModel(this.model)
+		}
+
+		dnd.placeAt(parent);
+		this._uiWidgets[model.id] = dnd;
+	}
+
 	_createWebLink (parent, model) {
-		var upload = this.$new(WebLink);
+		const upload = this.$new(WebLink);
 		upload.placeAt(parent);
 		this._uiWidgets[model.id] = upload;
 	}
 
+	_createAudioPlayer (parent, model) {
+		const widget = this.$new(AudioPlayer);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createAudioLogic (parent, model) {
+		const widget = this.$new(AudioLogic);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+
 	_createProgressBar(parent, model) {
-		var upload = this.$new(ProgressBar);
+		const upload = this.$new(ProgressBar);
 		upload.placeAt(parent);
 		this._uiWidgets[model.id] = upload;
 	}
 
 	_createUpload (parent, model) {
-		var upload = this.$new(Upload);
+		const upload = this.$new(Upload);
 		upload.placeAt(parent);
 		this._uiWidgets[model.id] = upload;
 	}
 
 	_createUploadPreview(parent, model) {
-		var upload = this.$new(UploadPreview);
+		const upload = this.$new(UploadPreview);
 		upload.hash = this.hash
 		upload.placeAt(parent);
 		this._uiWidgets[model.id] = upload;
 	}
 
 	_createCamera (parent, model) {
-		var upload = this.$new(Upload);
+		const upload = this.$new(Upload);
 		upload.placeAt(parent);
 		this._uiWidgets[model.id] = upload;
 	}
 
 	_createCheckBox (parent, model) {
-		var checkBox = this.$new(CheckBoxWidget);
+		const checkBox = this.$new(CheckBoxWidget);
 		checkBox.placeAt(parent);
 		this._uiWidgets[model.id] = checkBox;
 	}
 
 	_createCheckBoxGroup(parent, model) {
-		var checkBox = this.$new(CheckBoxGroup);
+		const checkBox = this.$new(CheckBoxGroup);
 		checkBox.placeAt(parent);
 		this._uiWidgets[model.id] = checkBox;
 	}
 
 	_createRest(parent, model) {
-		var widget = this.$new(Rest);
+		const widget = this.$new(Rest);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
 
 	_createRadioBox(parent, model) {
-		var widget = this.$new(RadioBox);
+		const widget = this.$new(RadioBox);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
 
 	_createRadioBox2(parent, model) {
-		var widget = this.$new(RadioBox2);
+		const widget = this.$new(RadioBox2);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
 
 	_createRadioGroup(parent, model) {
-		var widget = this.$new(RadioGroup);
+		const widget = this.$new(RadioGroup);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
@@ -578,6 +767,11 @@ export default class RenderFactory extends Core {
 	_createDragNDrop(parent, model) {
 		var widget = this.$new(DragNDrop);
 		widget.placeAt(parent);
+		if (this.zoomedModel){
+			widget.setZoomedModel(this.zoomedModel)
+		} else {
+			widget.setZoomedModel(this.model)
+		}
 		this._uiWidgets[model.id] = widget;
 	}
 
@@ -603,6 +797,12 @@ export default class RenderFactory extends Core {
 	_createLogicOr(parent, model) {
 		css.add(parent, "MatcLogic");
 		var widget = this.$new(LogicOr);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createIconToggleButton(parent, model) {
+		var widget = this.$new( IconToggleButton);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
@@ -641,6 +841,12 @@ export default class RenderFactory extends Core {
 		this._uiWidgets[model.id] = widget;
 	}
 
+	_createStackedRingChart(parent, model) {
+		var widget = this.$new(Chart)
+		widget.type =  "stackedring";
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
 
 	_createVolumeSlider(parent, model) {
 		var widget = this.$new(VolumeSlider);
@@ -654,11 +860,29 @@ export default class RenderFactory extends Core {
 		this._uiWidgets[model.id] = widget;
 	}
 
+	_createScript(parent, model) {
+		var widget = this.$new(Script);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createLockSlider(parent, model) {
+		var widget = this.$new(LockSlider);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
 	_createSegmentButton(parent, model) {
 		var widget = this.$new(SegmentButton);
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
+
+	_createSegmentPicker(parent, model) {
+		var widget = this.$new(SegmentPicker);
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	} 
 
 	_createTypeAheadTextBox(parent, model) {
 		var widget = this.$new(TypeAheadTextBox)
@@ -759,6 +983,20 @@ export default class RenderFactory extends Core {
 		this._uiWidgets[model.id] = widget;
 	}
 
+	_createChat(parent, model) {
+		var widget = this.$new(Chat)
+		widget.mode = this.mode;
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createChatTextBox(parent, model) {
+		var widget = this.$new(ChatTextBox)
+		widget.mode = this.mode;
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
 	_createSpinner(parent, model) {
 		var widget = this.$new(Spinner)
 		widget.mode = this.mode
@@ -776,7 +1014,7 @@ export default class RenderFactory extends Core {
 	 */
 	_createButton(parent, model) {
 		css.add(parent, "MatcEventedWidget");
-		var border = this._createBorder(parent, model);
+		const border = this._createBorder(parent, model);
 		this._createInlineEdit(border, model);
 	}
 
@@ -784,7 +1022,7 @@ export default class RenderFactory extends Core {
 	 * Using a VUE widget is much slower!
 	 */
 	_createButtonSlow(parent, model) {
-		var widget = this.$new(Button)
+		const widget = this.$new(Button)
 		widget.mode = this.mode
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
@@ -792,22 +1030,35 @@ export default class RenderFactory extends Core {
 
 
 	_createBox(parent, model) {
-		var border = this._createBorder(parent, model);
+		const border = this._createBorder(parent, model);
 		return border;
 	}
 
 
 	_createLabel(parent, model) {
-		var widget = this.$new(Label);
+		const widget = this.$new(Label, {mode: this.mode});
 		widget.placeAt(parent);
 		this._uiWidgets[model.id] = widget;
 	}
+
+	_createLabeledRadioBox(parent, model) {
+		const widget = this.$new(LabeledRadioBox, {mode: this.mode});
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
+	_createLabeledCheckBox(parent, model) {
+		const widget = this.$new(LabeledCheckBox, {mode: this.mode});
+		widget.placeAt(parent);
+		this._uiWidgets[model.id] = widget;
+	}
+
 
 	_createImage(parent, model) {
 		/**
 		 * Since 3.0.41 we add another div so we can rotate
 		 */
-		let imgCntr =  document.createElement("div")
+		const imgCntr =  document.createElement("div")
 		css.add(imgCntr, 'MatchWidgetTypeImageCntr')
 		parent.appendChild(imgCntr)
 		this._imageNodes[model.id] = imgCntr
@@ -816,8 +1067,8 @@ export default class RenderFactory extends Core {
 
 	_createIcon(parent, model) {
 		//css.add(parent, "MatcEventedWidget");
-		var border = this._createBorder(parent, model);
-		var icon = document.createElement("span");
+		const border = this._createBorder(parent, model);
+		const icon = document.createElement("span");
 		this._iconNodes[model.id] = icon;
 		border.appendChild(icon);
 	}
@@ -912,19 +1163,19 @@ export default class RenderFactory extends Core {
 			}
 		} else {
 			/**
+			 * Some styles are not set, if they are not defined,
+			 * we should unset them.
+			 * 
 			 * For design tokens we might have the weird situation, that the
 			 * shadow styles were injected in ModelUtils. After detaching the token,
 			 * the none method would not be called.
 			 */
-			/*
 			if (style['textShadow'] === undefined) {
 				this._set_textShadow(parent, style, model)
 			}
 			if (style['boxShadow'] === undefined) {
 				this._set_boxShadow(parent, style, model)
 			}
-			*/
-
 			for (let p in style) {
 				if (this["_set_" + p]) {
 					this["_set_" + p](parent, style, model);
@@ -932,7 +1183,7 @@ export default class RenderFactory extends Core {
 					if (style[p] != null) {
 						parent.style[p] = style[p];
 					} else {
-						console.warn("The style", p, " is no value!", model);
+						//console.warn("The style", p, " is no value!", model);
 					}
 				}
 			}
@@ -941,6 +1192,14 @@ export default class RenderFactory extends Core {
 
 	_set_fixed() {
 		// do nothing implement in Simulator.createBox()
+	}
+
+	_set_externalImageURL(parent, style, model) {
+		if (!style.backgroundImage && style.externalImageURL) {
+			const url = style.externalImageURL
+			parent.style.backgroundImage = `url(${url})`;
+			parent.style.backgroundSize = "100%";
+		}
 	}
 
 
@@ -1170,6 +1429,17 @@ export default class RenderFactory extends Core {
 		}
 	}
 
+	_set_blurFilter(parent, style) {
+		let blurFilter = style.blurFilter
+		if (blurFilter) {
+			let blur = blurFilter.blur
+			blur = this.getZoomed(blur, this._scaleX)
+			parent.style.filter = `blur(${blur}px)`
+		} else {
+			parent.style.filter = 'none';
+		}
+	}
+
 	_set_filter(parent, style) {
 		let filter = style.filter
 		if (filter) {
@@ -1214,7 +1484,6 @@ export default class RenderFactory extends Core {
 	/**
 	 * color
 	 */
-
 	_set_borderColor(parent, style, model) {
 		var node = this._borderNodes[model.id];
 		if (!node) {
@@ -1296,11 +1565,11 @@ export default class RenderFactory extends Core {
 		if (label) {
 			// reset class.. this is a little hacky! We should not do this too often!
 			label.className = "MatcInlineEditable";
-			if (style.textAlign) {
-				css.add(label, "MatcInlineEditVAlign-" + style.verticalAlign + "-" + style.textAlign);
-			} else {
-				css.add(label, "MatcInlineEditVAlign-" + style.verticalAlign);
-			}
+			// Every rule in widgets.scss is compound ("-top-left", "-middle-
+			// center", ...) - default to 'left' when textAlign is missing,
+			// see the matching note in UIWidget.vue._set_verticalAlign().
+			var textAlign = style.textAlign || "left";
+			css.add(label, "MatcInlineEditVAlign-" + style.verticalAlign + "-" + textAlign);
 		}
 	}
 
@@ -1380,9 +1649,13 @@ export default class RenderFactory extends Core {
 		}
 		var background = style.background;
 		if (background && background.colors) {
-			var value = "(" + background.direction + "deg";
-			for (var i = 0; i < background.colors.length; i++) {
-				var color = background.colors[i];
+			let value = "(" + background.direction + "deg";
+			const sortedColors = background.colors.slice()
+			sortedColors.sort((a, b) => {
+				return a.p - b.p
+			})
+			for (let i = 0; i < sortedColors.length; i++) {
+				const color = sortedColors[i];
 				value += "," + color.c + " " + color.p + "% ";
 			}
 			value + ");";
@@ -1427,11 +1700,14 @@ export default class RenderFactory extends Core {
 		}
 	}
 
+	_set_backgroundImageRepeat() {
+		// will be handled in _set_backgroundImage()
+	}
+
 	/**
 	 * background image
 	 */
 	_set_backgroundImage(parent, style, model) {
-
 		let node = this._borderNodes[model.id];
 		if (node) {
 			parent = node;
@@ -1447,6 +1723,8 @@ export default class RenderFactory extends Core {
 		let img = style.backgroundImage;
 		css.add(parent, "MatcScreenImage");
 		if (img) {
+			css.remove(parent, 'MatcImageIconPlaceholder');
+			parent.innerText = ""
 			if (img.w > img.h) {
 				css.add(parent, "MatcScreenImageHorizontal");
 			} else {
@@ -1477,40 +1755,71 @@ export default class RenderFactory extends Core {
 				parent.style.backgroundPosition = "0 0"; // 100%
 			}
 
-			parent.style.backgroundRepeat = "no-repeat";
+			if (style.backgroundImageRepeat) {
+				parent.style.backgroundRepeat = "repeat";
+			} else {
+				parent.style.backgroundRepeat = "no-repeat";
+			}
+
 			parent.style.border = "none";
 		} else {
+
 			/**
 			 * Images get a placeholder x... mixture of canvas and css border
 			 * to make crisp image... We make to background image 2x larger
 			 * so the browser can smooth a little too
 			 */
+			if (style.externalImageURL) {
+				return
+			}
 			if (model.type == "Image") {
-				var w = model.w * 2;
-				var h = model.h * 2;
-				var c = document.createElement("canvas");
-				var context = c.getContext("2d");
-				c.width = w;
-				c.height = h;
-				h += 0.5;
-				w += 0.5;
-				var n = 0.5;
-				context.moveTo(n, n);
-				context.lineTo(w, h);
-				context.moveTo(w, n);
-				context.lineTo(n, h);
-				context.strokeStyle = "#333";
-				context.strokeWidth = 2;
-				context.imageSmoothingEnabled = false;
-				context.stroke();
-				parent.style.backgroundImage = "url(" + c.toDataURL("image/png") + ")";
-				parent.style.border = "1px solid #777";
+				if (model.has.iconPlaceholder) {
+					this.renderImageIcon(model, parent)
+				} else {
+					this.renderImagePlaceholder(model, parent);
+				}
+				
 			}
 
 		}
 
 	}
 
+	renderImageIcon(model, parent) {
+		const icon = document.createElement("div");
+		css.add(parent, 'MatcImageIconPlaceholder');
+		css.add(icon, 'mdi mdi-image-outline');
+		parent.innerText = ""
+		parent.appendChild(icon)
+		if (model.style.iconPlaceholderBackground) {
+			parent.style.background = model.style.iconPlaceholderBackground
+		}
+		parent.style.backgroundImage = ""
+		const s = Math.round(Math.min(model.w, model.h) * 0.3)
+		icon.style.fontSize = s + 'px'
+	}
+
+	renderImagePlaceholder(model, parent) {
+		let w = model.w * 2;
+		let h = model.h * 2;
+		const c = document.createElement("canvas");
+		const context = c.getContext("2d");
+		c.width = w;
+		c.height = h;
+		h += 0.5;
+		w += 0.5;
+		const n = 0.5;
+		context.moveTo(n, n);
+		context.lineTo(w, h);
+		context.moveTo(w, n);
+		context.lineTo(n, h);
+		context.strokeStyle = "#000";
+		context.strokeWidth = 2;
+		context.imageSmoothingEnabled = false;
+		context.stroke();
+		parent.style.backgroundImage = "url(" + c.toDataURL("image/png") + ")";
+		parent.style.border = "1px solid #000";
+	}
 
 	_set_css(parent, style) {
 		css.add(parent, style.css);
@@ -1599,12 +1908,12 @@ export default class RenderFactory extends Core {
 	}
 
 	destroyWidgetsById(ids) {
-		this.logger.log(-1, "destroyWidgets", "enter > ", ids)
+		this.logger.log(1, "destroyWidgets", "enter > ", ids)
 		ids.forEach(id => {
-			var w = this._uiWidgets[id]
+			const w = this._uiWidgets[id]
 			if (w) {
 				if (this.mode == "simulator" || this.mode == "view") {
-					var widget = this.model.widgets[id];
+					const widget = this.model.widgets[id];
 					if (widget && widget.inherited) {
 						id = widget.inherited;
 					}

@@ -1,32 +1,33 @@
 
 <template>
      <div class="MatcToolbarItem  MatcMultiIcon MatcScreenImportAdd MatcToolbarDropDownButton">
-							<div type="button" data-dojo-attach-point="button">
-								<label data-dojo-attach-point="label" class="">
-									<span data-dojo-attach-point="icon" class=""></span>
-									<span class="mdi mdi-plus-circle MatcTinyIcon"></span>
-								</label>
+		<div type="button" ref="button">
+			<label data-dojo-attach-point="label" class="">
+				<QIcon icon="DeviceMobile" />
 
-							 </div>
-							 <div class="MatcToolbarPopUp" role="menu" data-dojo-attach-point="popup">
-							 	<div class="MatcScreenAddCntr MatcPadding">
-									 <div class="container-fluid">
-										<div class="row">
-											<div class="col-md-6 MatcCenter" data-dojo-attach-point="addCntr">
-											</div>
-											<div class="col-md-6 MatcCenter" data-dojo-attach-point="uploadCntr">
-												<span class="MatcUploaderIcon MatcMiddle mdi mdi-cloud-upload"></span>
-											</div>
-										</div>
-									</div>
-								</div>
+			</label>
 
-							  	<div class="MatcToolbarPopUpArrowCntr">
-								  	<div class="MatcToolbarPopUpArrow">
-								  	</div>
-							  	</div>
-							  </div>
-						  </div>
+			</div>
+			<div class="MatcToolbarPopUp" role="menu" data-dojo-attach-point="popup">
+			<div class="MatcScreenAddCntr MatcPadding">
+					<div class="container-fluid">
+					<div class="row">
+						<div class="col-md-6 MatcCenter" data-dojo-attach-point="addCntr">
+						</div>
+						<div class="col-md-6 MatcCenter" data-dojo-attach-point="uploadCntr">
+							
+						</div>
+						
+					</div>
+				</div>
+			</div>
+
+			<div class="MatcToolbarPopUpArrowCntr">
+				<div class="MatcToolbarPopUpArrow">
+				</div>
+			</div>
+			</div>
+		</div>
 </template>
 <script>
 import DojoWidget from 'dojo/DojoWidget'
@@ -39,29 +40,31 @@ import DomBuilder from 'common/DomBuilder'
 import Util from 'core/Util'
 import RenderFactory from 'core/RenderFactory'
 import _DropDown from './_DropDown'
+import QIcon from 'page/QIcon'
+import _Tooltip from 'common/_Tooltip'
 
 export default {
     name: 'ScreenImportAdd',
-    mixins:[Util, DojoWidget, _DropDown],
+    mixins:[Util, DojoWidget, _DropDown, _Tooltip],
     data: function () {
         return {
             screenWidth: 300,
             screenHeight: 600,
             selectedCategory: "Screen",
             showSubCatgeoryLabels: false,
-						previewSizes : {
-							"default" : {
-								w : 120,
-								h : 70
-							},
-							"Screen" : {
-								w : 160,
-								h : 200
-							}
-						}
+			previewSizes : {
+				"default" : {
+					w : 120,
+					h : 70
+				},
+				"Screen" : {
+					w : 160,
+					h : 200
+				}
+			}
         }
     },
-    components: {},
+    components: {QIcon},
     methods: {
 			setModel (m){
 				this.model = m;
@@ -69,7 +72,9 @@ export default {
 				this.screenHeight = m.screenSize.h;
 				this.renderFactory = new RenderFactory();
 				this.renderFactory.setModel(m);
-				css.add(this.icon, this.getAppTypeIcon(m));
+				// if (this.icon){
+				// 	css.add(this.icon, this.getAppTypeIcon(m));
+				// }
 
 			},
 
@@ -110,6 +115,12 @@ export default {
 				this.stopEvent(e);
 				this.hideDropDown();
 				this.emit("onImport", e);
+			},
+
+			onDesignGPT (e) {
+				this.stopEvent(e);
+				this.hideDropDown();
+				this.emit("onDesignGPT", e);
 			},
 
 
@@ -171,6 +182,7 @@ export default {
 			}
     },
     mounted () {
+		this.addTooltip(this.$el, this.getNLS("tooltip.screen"))
     }
 }
 </script>

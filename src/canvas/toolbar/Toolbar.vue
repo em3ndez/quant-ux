@@ -2,164 +2,157 @@
 <template>
      <div class="MatcToolbar" @dblclick="onDoubleClick">
 
-
-		<div class="MatcToobarPropertiesSection MatcToolbarSectionHidden" data-dojo-attach-point="propertiesCntr">
-		</div>
-
 		<div class="" data-dojo-attach-point="layerListCntr">
 		</div>
 
 
-		<div class="MatcToobarLeft" data-dojo-attach-point="toolsSection">
 
-			<div class="hidden" data-dojo-attach-point="importSection"></div>
-
-			<div class="MatcToolbarItem MatcToolbarItemActive" data-dojo-attach-point="editTool">
-				<span class="mdi mdi-cursor-default"></span>
-			</div>
-
-			<div class="" data-dojo-attach-point="addScreenSection"></div>
-
-			<div class="" data-dojo-attach-point="addSection"></div>
-
-			<div class="MatcToolbarItem MatcMultiIcon" data-dojo-attach-point="rectangleTool" >
-				<span class="mdi mdi-square-outline" ></span>
-				<span class="mdi mdi-plus-circle MatcTinyIcon MatcTinyIconAnimated"></span>
-			</div>
-
-			<div class="MatcToolbarItem MatcMultiIcon" data-dojo-attach-point="textTool" >
-				<span class="mdi mdi-format-text" ></span>
-				<span class="mdi mdi-plus-circle MatcTinyIcon MatcTinyIconAnimated"></span>
-			</div>
-
-			<div class="MatcToolbarItem MatcMultiIcon" data-dojo-attach-point="hotspotTool" >
-				<span class="mdi mdi-select" ></span>
-				<span class="mdi mdi-plus-circle MatcTinyIcon MatcTinyIconAnimated"></span>
-			</div>
-
-			<div class="MatcToolbarItem MatcMultiIcon " data-dojo-attach-point="addLogicSection" >
-				<span class="mdi mdi-rhombus-outline" ></span>
-				<span class="mdi mdi-plus-circle MatcTinyIcon MatcTinyIconAnimated"></span>
-			</div>
-
-			<div class="MatcToolbarItem MatcMultiIcon " data-dojo-attach-point="addRestSection" v-show="showRestTool">
-				<span class="mdi mdi-cloud-outline" ></span>
-				<span class="mdi mdi-plus-circle MatcTinyIcon MatcTinyIconAnimated"></span>
-			</div>
-
-			<div class="MatcToolbarItem MatcToolbarMove" data-dojo-attach-point="moveTool" >
-				<span class="mdi mdi-cursor-move" ></span>
-			</div>
-
-
-			<div class="MatcToolbarItem MatcMultiIcon" data-dojo-attach-point="selectBtn">
-				<span class="mdi mdi-selection"></span>
-				<span class="mdi mdi-cursor-default MatcTinyIcon"></span>
-			</div>
-
-			<div class="" data-dojo-attach-point="commentSection">
-				<div class="MatcToolbarItem MatcMultiIcon" data-dojo-attach-point="commentBtn">
-					<span class="mdi mdi-comment"></span>
-
-				</div>
-			</div>
-
-		</div>
 
 		<div class="MatcToolbarTop">
-				<div class=" MatcToobarHomeSection MatcToobarItemBig" data-dojo-attach-point="home"></div>
+				<div class="MatcToolbarTopHome" :style="'width:'+ layerListWidth +'px'">
+					<HomeMenu @select="onHomeMenu" :name="modelName" @change="onChangeModelName"/>
+				</div>
+			
 
-				<div class="MatcToolbarTopCntr">
-						<div class=" MatcToobarSimulatorSection MatcToolbarSection" data-dojo-attach-point="simulatorSection">
-							<a class="MatcToolbarItem MatcToolbarIconNoSmooth" data-dojo-attach-point="simulatorButton">
-								<span class="mdi mdi-play" style="vertical-align:middle" data-dojo-attach-point="simulatorIcon"></span>
-								<span class="MatcToolbarLabel MatcToolbarResponsiveLabel">{{ $t('toolbar.simulate')}}</span>
-							</a>
-						</div>
-						<div class="MatcToolbarSection" data-dojo-attach-point="undoSection">
-							<a class="MatcToolbarItem MatcToolbarIconNoSmooth MatcToolbarItemDisbaled" data-dojo-attach-point="undo">
-								<span class="mdi mdi-undo"></span>
-							</a>
-							<a class="MatcToolbarItem MatcToolbarIconNoSmooth MatcToolbarItemDisbaled" data-dojo-attach-point="redo">
-								<span class="mdi mdi-redo"></span>
-							</a>
-						</div>
+				<div class="MatcToolbarTopCntr" :style="'width:calc(100% - '+ layerListWidth +'px)'">
 
+			
+						<div v-show="svgEditorVisible" class="MatcToolbarSection MatcToolbarMaxSection">							
+							<div class="MatcToolbarItem">
+								<div class="MatcToobarPrimaryButton" @click="onToolSVGEnd" >
+									{{$t('toolbar.svgStop')}}
+								</div>
+							</div>
+						</div> 
 
-						<div class="MatcToolbarSection" data-dojo-attach-point="copyPasteDiv">
-							<a class="MatcToolbarItem MatcToolbarItemDisbaled " data-dojo-attach-point="copyBtn">
-								<span class="mdi mdi-content-copy"></span>
-							</a>
-							<a class="MatcToolbarItem MatcToolbarItemDisbaled" data-dojo-attach-point="pasteBtn">
-								<span class="mdi mdi-content-paste"></span>
-							</a>
-							<a class="MatcToolbarItem MatcToolbarItemDisbaled" data-dojo-attach-point="copyStyleBtn">
-								<span class="mdi mdi-format-paint"></span>
-							</a>
-							<a class="MatcToolbarItem MatcToolbarItemDisbaled" data-dojo-attach-point="deleteBtn">
-								<span class="mdi mdi-close-circle"></span>
-							</a>
-						</div>
+						<div class="MatcToolbarSection" v-show="!svgEditorVisible" >				
+							<div :class="['MatcToolbarItem MatcToolbarPrimaryItem vommondToolTipCntr', {'MatcToolbarItemSelected': selectedButton === 'edit'} ]" data-dojo-attach-point="editBtn"  @click="onEdit" v-show="hasScreens">
+								<QIcon icon="Edit" />
+							</div> 
 
 
-
-
-
-						<div class="MatcToolbarSection MatcToolbarSectionHidden" data-dojo-attach-point="toolsCntrDiv">
-
-							<div class="MatcToolbarSubSection" data-dojo-attach-point="toolsDiv">
+							<div :class="['MatcToolbarItem MatcToolbarPrimaryItem vommondToolTipCntr', {'MatcToolbarItemSelected': selectedButton === 'move'} ]" data-dojo-attach-point="moveBtn"  @click="onMove" v-show="hasScreens">
+								<QIcon icon="EditMove" />
+							</div>
+						
+							<div :class="['MatcToolbarItem MatcMarginLeft MatcToolbarPrimaryItem vommondToolTipCntr', {'MatcToolbarItemSelected': selectedButton === 'addScreen'}]"  @click="onToolCreateScreen" data-dojo-attach-point="addScreenBtn">
+								<QIcon icon="DeviceMobile" v-if="screenType === 'smartphone'"/>
+								<QIcon icon="DeviceDesktop" v-else/>
+								<!-- <span class="MatcToolbarResponsiveLabel">Screen</span>    						 -->
 							</div>
 
+							<CreateBasicButton @add="onToolBasic" :mode="mode" v-show="hasScreens" class="MatcMarginLeft"/>
+							<CreateButton ref="createButton" :mode="mode" v-show="hasScreens"/>												
+							<CreateVectorButton @add="onToolSVG" :mode="mode" v-show="hasScreens" />	
 
 
-							<div class="MatcToolbarSubSection" data-dojo-attach-point="groupDIV">
-								<a class="MatcToolbarItem" data-dojo-attach-point="groupBTN">
-									<span class="mdi mdi-link-variant-plus"></span>
-									<label class="MatcToolbarLabel MatcToolbarResponsiveLabel">
-										{{ $t('toolbar.group')}}
-									</label>
-								</a>
+							<div :class="['MatcToolbarItem MatcToolbarPrimaryItem MatcMarginLeft vommondToolTipCntr', {'MatcToolbarItemSelected': selectedButton === 'addComment'} ]" data-dojo-attach-point="commentBtn"  @click="onNewComment" v-show="hasScreens">
+								<QIcon icon="Comment" />
+							</div>		
+							
+						</div>
+							
+
+						<div class="MatcToolbarTopCenterCntr"  v-show="!svgEditorVisible" >
+							<div class="MatcToolbarSection MatcToolbarDenseSection MatcToolbarSectionTools MatcToolbarSectionHidden" data-dojo-attach-point="toolsCntrDiv">
+							
+								<div class="MatcToolbarSubSection" data-dojo-attach-point="groupDIV">
+									<div class="MatcToolbarItem MatcToolbarPrimaryItem" data-dojo-attach-point="groupBTN" @click="onToolGroup">						
+										<QIcon icon="Group" />					
+									</div>
+									<div class="MatcToolbarItem MatcToolbarPrimaryItem" data-dojo-attach-point="ungroupBTN" @click="onToolGroup">					
+										<QIcon icon="UnGroup" />					
+									</div>
+									<!-- <div :class="['MatcToolbarItem MatcToolbarPrimaryItem', {'MatcToolbarItemSelected': selectedButton === 'distribute'}]" data-dojo-attach-point="distributeBtn" @click="onToolbarDistribute">
+										<QIcon icon="Distribute" />					
+									</div> -->
+								
+								</div>
+
+								<!-- <div :class="['MatcToolbarItem MatcToolbarPrimaryItem', {'MatcToolbarItemSelected': selectedButton === 'gridResize'}]" data-dojo-attach-point="distributeBtn" @click="onToolbarGridResize">
+										<QIcon icon="ResiseGrid" />					
+								</div> -->
+
+								<div class="MatcToolbarSubSection" data-dojo-attach-point="templateDiv">
+									<div :class="['MatcToolbarItem MatcToolbarPrimaryItem', {'MatcToolbarItemSelected': selectedButton === 'replicate'}]" data-dojo-attach-point="replicateBtn" @click="onToolbarReplicate">																		
+											<QIcon icon="Replicate" />				
+									</div>	
+									<TemplateButton 
+										ref="templateBTN" 
+										@create="onToolCreateTemplate"
+										@remove="onToolRemoveTemplate"
+										@update="onToolUpdateTemplate">
+									</TemplateButton>																		
+								</div>
+
+								<div class="MatcToolbarSubSection" data-dojo-attach-point="toolsDiv">
+									<LayerButton @select="onToolWidgetLayer"/>
+								</div>
+
+								<div class="MatcToolbarSubSection" data-dojo-attach-point="developerDiv">
+								</div>
 							</div>
-
-							<div class="MatcToolbarSubSection" data-dojo-attach-point="templateDiv">
-							</div>
-
-							<div class="MatcToolbarSubSection" data-dojo-attach-point="magicCopyDiv">
+							<div v-if="isDeveloperMode" class="MatcToolbarSection MatcToolbarNinjaSection" @click="showThemeCreateDialog">
+								<QIcon icon="mdi mdi-ninja" class="MatcToolbarNinja"/>										
 							</div>
 						</div>
 
-						<div class="MatcToolbarSubSection" data-dojo-attach-point="developerDiv">
-						</div>
-
+					
+									
 						<div class="MatcToolbarNotificationSection MatcToolbarSection" data-dojo-attach-point="notificationSection">
 							<div class="MatcToolbarSection">
 								<CollabUser :users="collabUsers" @select="onCollabUserClicked" />
+							</div>		
+										
+							<div class="MatcToolbarArrowDropDown" data-dojo-attach-point="simulatorButton"  v-show="hasScreens">			
+								<div class="MatcToolbarItem MatcToolbarPrimaryItem" @click="startSimilator">																
+									<QIcon icon="Play" />												
+								</div>
 							</div>
-							<div class="MatcToolbarSection">
-								<EditModeButton :value="canvasViewConfig" @change="onChangeCanvasViewConfig"  @canvasViewMode="setCanvasViewMode"/>
-							</div>
-							<ViewConfig :value="canvasViewConfig" @change="onChangeCanvasViewConfig" v-if="hasViewConfigVtn"/>
-							<HelpButton :hasNotifications="true" :hasToolbar="true"/>
-						</div>
 
-						<div class="MatcToobarSignUpSection MatcToolbarSection MatcToolbarSectionHidden" data-dojo-attach-point="signupSection">
-							<a class="MatcToolbarItem MatcToolbarIconNoSmooth" data-dojo-attach-point="saveButton">
-							<span class="MatcToolbarLabel">{{ $t('toolbar.sign-up')}}</span>
-							</a>
+							<!-- <div class="MatcToolbarArrowDropDown" data-dojo-attach-point="simulatorButton"  v-show="hasScreens">			
+								<div class="MatcToolbarItem MatcToolbarPrimaryItem" @click="showSharing">																
+									<QIcon icon="Share" />												
+								</div>
+							</div> -->
+
+						
+							<ViewConfig :value="canvasViewConfig" @change="onChangeCanvasViewConfig" v-if="hasViewConfigVtn"/>	
+							<HeatmapToggleButton :value="'Design'" @change="$emit('viewModeChange', $event)"/>		
+						
+							<div class="MatcToolbarItem" @click="showSharing">
+								<div class="MatcToobarPrimaryButton">									
+									Share						
+								</div>
+							</div> 
+							
 						</div>
 
 				</div>
+			</div>
+
+			<div class="MatcToobarPropertiesSection MatcToolbarSectionHidden" data-dojo-attach-point="propertiesCntr">
+				<div class="MatcToolbarSection" >
+					<div class=" MatcToolbarSectionContent">
+					<EditModeButton 
+				
+						:value="canvasViewConfig" 
+						@change="onChangeCanvasViewConfig" 
+						@canvasViewMode="setCanvasViewMode" 
+						ref="editModeButton"/>
+					</div>
+				</div>
+				
 			</div>
 
 		</div>
 
 </template>
+
 <script>
 import DojoWidget from 'dojo/DojoWidget'
 import css from 'dojo/css'
 import lang from 'dojo/_base/lang'
-import on from 'dojo/on'
-import touch from 'dojo/touch'
 import hash from 'dojo/hash'
 import Util from 'core/Util'
 import topic from 'dojo/topic'
@@ -168,12 +161,22 @@ import _Tools from 'canvas/toolbar/mixins/_Tools'
 import _Render from 'canvas/toolbar/mixins/_Render'
 import _Dialogs from 'canvas/toolbar/mixins/_Dialogs'
 import _Show from 'canvas/toolbar/mixins/_Show'
-import ToolbarDropDownButton from 'canvas/toolbar/components/ToolbarDropDownButton'
 import ViewConfig from 'canvas/toolbar/components/ViewConfig'
 import EditModeButton from "canvas/toolbar/components/EditModeButton"
 import CollabUser from "canvas/toolbar/components/CollabUser"
-import HelpButton from 'help/HelpButton'
+import ModelUtil from '../../core/ModelUtil';
+import * as LayoutContainerUtil from '../../core/LayoutContainerUtil'
 
+import CreateVectorButton from './components/CreateVectorButton'
+// import CreateLogicButton from './components/CreateLogicButton'
+import CreateBasicButton from './components/CreateBasicButton'
+import CreateButton from './components/CreateButton.vue'
+import HomeMenu from './components/HomeMenu'
+import LayerButton from './components/LayerButton.vue'
+import TemplateButton from './components/TemplateButton.vue'
+import HeatmapToggleButton from './components/HeatmapToggleButton.vue'
+
+import QIcon from 'page/QIcon'
 
 
 export default {
@@ -182,81 +185,76 @@ export default {
 	props:['pub'],
     data: function () {
         return {
+			modelName: "Loading...",
 			canvasViewMode: 'design',
 			value: false,
 			isPublic: false,
 			active: true,
 			redirectAfterExit: true,
 			showRestTool: true,
+			showScriptTool: false,
 			hasViewConfigVtn: true,
 			canvasViewConfig: {},
 			settings: {},
 			collabUsers:[],
-			isDeveloperMode: false
+			showLabels:false,
+			isDeveloperMode: false,
+			mode: 'edit',
+			subMode: '',
+			hasScreens: false,
+			layerListWidth: 256,
+			hasEditModeButton: true,
+			screenType: 'mobile'
         }
     },
 	components: {
 		'ViewConfig': ViewConfig,
-		'HelpButton': HelpButton,
+		//'HelpButton': HelpButton,
 		'EditModeButton': EditModeButton,
-		'CollabUser': CollabUser
+		'CollabUser': CollabUser,
+		'CreateVectorButton': CreateVectorButton,
+		//'CreateLogicButton': CreateLogicButton,
+		'CreateBasicButton': CreateBasicButton,
+		'CreateButton': CreateButton,
+		'HomeMenu': HomeMenu,
+		'LayerButton': LayerButton,
+		'TemplateButton': TemplateButton,
+		'HeatmapToggleButton': HeatmapToggleButton,
+		'QIcon': QIcon
 	},
 	computed: {
+		selectedButton () {
+			if (this.mode === 'edit' && this.subMode) {
+				return this.subMode
+			}
+			return this.mode
+		},
 		hasProtoMoto () {
 			return this.settings && this.settings.hasProtoMoto
-		}
+		},
+		svgEditorVisible () {
+			return this.mode === 'svg'
+		},
 	},
     methods: {
-      postCreate: function(){
+      	postCreate (){
 			this.logger = new Logger("Toolbar");
 			this.logger.log(3, "constructor", "entry > " + this.pub);
-
-			this.own(on(this.undo, touch.press, lang.hitch(this, "onUndo")));
-			this.own(on(this.redo, touch.press, lang.hitch(this, "onRedo")));
-
-			this.own(on(this.copyBtn, touch.press, lang.hitch(this, "onCopy")));
-			this.own(on(this.pasteBtn, touch.press, lang.hitch(this, "onPaste")));
-			this.own(on(this.deleteBtn, touch.press, lang.hitch(this, "onDelete")));
-			this.own(on(this.copyStyleBtn, touch.press, lang.hitch(this, "onToolCopyStyle")));
-			this.own(on(this.commentBtn, touch.press, lang.hitch(this, "onNewComment")));
-
-			this.own(on(this.editTool, touch.press, lang.hitch(this, "onEdit")));
-			this.own(on(this.moveTool, touch.press, lang.hitch(this, "onMove")));
-			this.own(on(this.signupSection, touch.press, lang.hitch(this, "showSignUpDialog")));
-
-			this.own(on(this.selectBtn, touch.press, lang.hitch(this, "onToolSelect", "select")));
-			this.own(on(this.groupBTN, touch.press, lang.hitch(this, "onToolGroup")));
-			this.own(on(this.hotspotTool, touch.press, lang.hitch(this, "onToolHotspot")));
-			this.own(on(this.textTool, touch.press, lang.hitch(this, "onToolText")));
-			this.own(on(this.rectangleTool, touch.press, lang.hitch(this, "onToolBox")));
-
-			var btn = this.$new(ToolbarDropDownButton,{arrowPosition:false});
-			btn.updateLabel = false;
-			btn.setLabel('<span class="mdi mdi-menu"></span>');
-			btn.setOptions(this.getMainMenu());
-			btn.placeAt(this.home);
-			css.add(btn.domNode, "MatcToolbarItem");
 		},
 
-
-		getMainMenu   () {
-
-			var options = [
- 			  {label : this.$i18n.t('toolbar.menu.start'), callback:lang.hitch(this, "startSimilator") },
-			  {label : this.$i18n.t('toolbar.menu.settings'), callback:lang.hitch(this, "onShowSettings")},
-			  {label : this.$i18n.t('toolbar.menu.shortcuts'), callback:lang.hitch(this, "showShortCuts")},
-			  {label : this.$i18n.t('toolbar.menu.share'), callback:lang.hitch(this, "showSharing")},
-			  {label : this.$i18n.t('toolbar.menu.import'), callback:lang.hitch(this, "showImportDialog")},
-			  {label : this.$i18n.t('toolbar.menu.export'), callback:lang.hitch(this, "showDownloadDialog")},
-			  {css:"MatcToolbarPopUpLine"},
-			  {label : this.$i18n.t('toolbar.menu.change-screen-size'), callback:lang.hitch(this, "onChangeScreenSize")},
-			  {label :this.$i18n.t('toolbar.menu.save-as'), callback:lang.hitch(this, "onSaveAs")},
-			  {css:"MatcToolbarPopUpLine"},
-			  {label : this.$i18n.t('toolbar.menu.exit'), callback:lang.hitch(this, "onExit")},
-			]
-			return options
+		setLayerListWidth (w) {
+			this.logger.log(1,"setLayerListWidth", "entry", w);
+			this.layerListWidth = w
 		},
 
+		onHomeMenu (option, e) {
+			this.logger.log(1,"onHomeMenu", "entry", e);
+			if (this[option.value]) {
+				this[option.value](e)
+			}
+		},
+
+	
 		setController (c){
 			this.logger.log(3,"setController", "entry");
 			this.controller = c;
@@ -277,6 +275,21 @@ export default {
 			this.context = context;
 		},
 
+		setCommentService (s) {
+			this.logger.log(3,"setCommentService", "entry");
+			this.commentService = s
+		},
+
+		setModelService (s) {
+			this.logger.log(3,"setModelService", "entry");
+			this.modelService = s
+		},
+
+		setCurrentTool (t) {
+			this.logger.log(3,"setCurrentTool", "entry");
+			this.currentTool = t
+		},
+
 		setModelFactory (f){
 			this.logger.log(3,"setModelFactory", "entry");
 			this.factory = f;
@@ -284,8 +297,17 @@ export default {
 
 		setModel (m){
 			this.model = m;
+			if (m) {
+				this.modelName = m.name
+			}
+			this.screenType = m.type
 			this.renderToolbar();
 			this.renderProperties()
+			this.showCanvas()
+		},
+
+		setTreeIndex(treeIndex) {
+			this.treeIndex = treeIndex
 		},
 
 		setPublic (isPublic) {
@@ -296,7 +318,13 @@ export default {
 		setMode (mode){
 			this.logger.log(3,"setMode", "entry > '" + mode + "'");
 			this.mode = mode;
+			this.subMode = ''
 			this.onModeChange();
+		},
+
+		setSubMode (subMode) {
+			this.logger.log(3,"setSubMode", "entry > '" + subMode + "'");
+			this.subMode = subMode
 		},
 
 		setLayerList (layerlist){
@@ -310,7 +338,7 @@ export default {
 		},
 
 		addCollabUser (user) {
-			this.logger.log(-1,"addCollabUser", "entry ", user);
+			this.logger.log(1,"addCollabUser", "entry ", user);
 			const found = this.collabUsers.find(u => u.id === user.id)
 			if (!found) {
 				this.collabUsers.push(user)
@@ -318,7 +346,7 @@ export default {
 		},
 
 		removeCollabUser (user) {
-			this.logger.log(-1,"addCollabUser", "entry ", user);
+			this.logger.log(1,"removeCollabUser", "entry ", user);
 			this.collabUsers = this.collabUsers.filter(u => u.id !== user.id)
 		},
 
@@ -333,14 +361,28 @@ export default {
 			this.canvasViewConfig = viewConfig
 		},
 
+		setNextCanvasViewConfig() {
+			this.logger.log(1,"setNextCanvasViewConfig", "entry > ");
+			if (this.$refs.editModeButton) {
+				this.$refs.editModeButton.nextView()
+			}
+		},
+
 		onChangeCanvasViewConfig (key, value) {
 			if (this.canvas) {
 				this.canvas.setCanvasViewConfig(key, value)
 			}
 		},
 
+		startPrototypingView () {
+			this.logger.log(1,"startPrototypingView", "entry > ");
+			if (this.$refs.editModeButton) {
+				this.$refs.editModeButton.setPrototype()
+			}
+		},
+
 		setCanvasViewMode (mode) {
-			this.logger.log(-1,"setCanvasViewMode", "entry > " + mode);
+			this.logger.log(1,"setCanvasViewMode", "entry > " + mode);
 			this.canvasViewMode = mode
 			if (this.canvas) {
 				this.canvas.setViewMode(mode)
@@ -353,6 +395,16 @@ export default {
 			if (this.canvas && this.user.id !== user.id) {
 				this.canvas.moveToCollabUser(user)
 			}
+		},
+
+		onFadeOut (){
+			this.logger.log(-1,"onFadeOut", "entry ");
+			css.add(this.layerListCntr, "MatcLayerListFadeOut");
+		},
+
+		onFadeIn (){
+			this.logger.log(-1,"onFadeIn", "entry ");
+			css.remove(this.layerListCntr, "MatcLayerListFadeOut");
 		},
 
 		/********************************************************
@@ -399,6 +451,11 @@ export default {
 		},
 
 
+		onChangeModelName (name) {
+			this.logger.log(-1, "onChangeModelName", "enter" , name);
+			this.controller.setModelName(name)
+		},
+
 
 		/********************************************************
 		 * Selection handlers!
@@ -427,12 +484,12 @@ export default {
 		},
 
 		onWidgetSelected (widget){
-			this.logger.log(-1, "onWidgetSelected", "entry : active:" + this.active);
-
+			this.logger.log(1, "onWidgetSelected", "entry : active:" + this.active);
+	
 			/**
 			 * Make this faster. Just updating the view costs 30ms
 			 */
-			if (this.active){
+			if (this.active && widget){
 				try{
 					/**
 					 * We might want to blur some stuff
@@ -497,6 +554,7 @@ export default {
 						this._selectionID = screen.id;
 						this._selectedScreen = screen;
 						this.showScreenProperties(screen);
+						this.showScreenTools();
 						this.showCopyPaste();
 						this.showDevTools()
 					} else {
@@ -526,6 +584,7 @@ export default {
 					this._selection = "multi";
 					this._selectedMulti = selection;
 					this.showCopyPaste();
+					this.showTemplateMerge(selection);
 					this.showTools();
 					this.showMultiProperties(this._selectedMulti);
 				}catch(e){
@@ -560,9 +619,10 @@ export default {
 
 		onCanvasSelected (){
 			this.cleanUp();
-
 			this.showCanvas()
 		},
+
+
 
 
 		/**
@@ -641,6 +701,8 @@ export default {
 
 			this._selectedRuler = null
 
+			this._selectionPaths = null
+
 			/**
 			 * UGLY: Make sure the widget drop down is closed. We should have a loop for all
 			 * drop downs!
@@ -650,11 +712,15 @@ export default {
 
 		_blurInputFields (){
 
-			var nodes = document.getElementsByTagName("input");
-			for(var x = 0; x < nodes.length; x++){
+			let nodes = document.getElementsByTagName("input");
+			for(let x = 0; x < nodes.length; x++){
 				nodes[x].blur();
 			}
 
+			nodes = document.getElementsByTagName("textarea");
+			for(let x = 0; x < nodes.length; x++){
+				nodes[x].blur();
+			}
 		},
 
 		_flushInputFields (){
@@ -662,14 +728,30 @@ export default {
 			 * a little bit hacky. we flush the screen name now!
 			 * FIXME; This can cause errors in case of undo and redo!
 			 */
-			this.setScreenName(this.stripHTML(this.screenName.value));
+			if (this.isPrototypeView) {
+				if (this.screenName) {
+					this.setScreenName(this.stripHTML(this.screenName.value));
+				}
+				
+				if (this.widgetName) {
+					this.setWidgetName(this.stripHTML(this.widgetName.value));
+				}
 
-			this.setWidgetName(this.stripHTML(this.widgetName.value));
-
-			this.setGroupName(this.stripHTML(this.groupName.value));
+				if (this.groupName) {
+					this.setGroupName(this.stripHTML(this.groupName.value));
+				}
+			}
 
 			if(this.widgetSize.isDirty()){
 				this.widgetSize.update();
+			}
+
+			if (this.tooltipSettings) {
+				this.tooltipSettings.blur()
+			}
+
+			if (this.validationWidget) {
+				this.validationWidget.blur()
 			}
 		},
 
@@ -679,11 +761,18 @@ export default {
 		 */
 		onModelNameChange (id, type, txt){
 			if (type == "widget"){
-				this.widgetName.value = txt
+				if (this.widgetName) {
+					this.widgetName.value = txt
+				}
+				
 			} else if (type == "screen"){
-				this.screenName.value = txt
+				if (this.screenName) {
+					this.screenName.value = txt
+				}
 			} else if (type == "group"){
-				this.groupName.value = txt
+				if (this.groupName) {
+					this.groupName.value = txt
+				}
 			}
 		},
 
@@ -692,6 +781,211 @@ export default {
 		/**********************************************************************
 		 * Add & Remove Events
 		 **********************************************************************/
+
+		onToolCreateScreen(e) {
+			this.logger.log(-1,"onToolCreateScreen", "entry >", e);
+			let scrn = this.createEmptyScreen(0, 0, 'Screen')
+			this.emit("newThemedScreen", {"obj" : scrn, "event" : e});
+		},
+
+		onToolBasic (v, e) {
+			this.logger.log(-1,"onToolBasic", "entry >", v.value, e);
+			this.stopEvent(e);
+			topic.publish("matc/canvas/click", "");
+
+
+			if (v.value === 'screen') {
+				let scrn = this.createEmptyScreen(0, 0, 'Screen')
+				this.emit("newThemedScreen", {"obj" : scrn, "event" : e});
+				return		
+			}
+	
+			if (v.value === 'box') {
+				this.onToolBox(e)
+				return
+			}
+
+			if (v.value === 'text') {
+				this.onToolText(e)
+				return
+			}
+
+			// if (v.value === 'designgpt') {
+			// 	this.showDesignGPT(e)
+			// 	return
+			// }
+
+			if (v.value === 'rest') {
+				this.onNewRestObject(e)
+				return		
+			}
+
+			if (v.value === 'hotspot') {
+				this.onToolHotspot(e)
+				return		
+			}
+	
+			if (v.value === 'logic') {
+				this.onNewLogicObject(e, "OR", false)
+				return
+			}
+
+			if (v.value === 'ab') {
+				this.onNewLogicObject(e, "AB", true)
+				return		
+			}
+
+			if (v.value === 'script') {
+				this.onNewScriptObject(e)
+				return
+			}
+
+			if (v.type === 'vector') {
+				this.onToolSVG(v)
+				return
+			}
+
+			if (v.value === 'ai') {
+				this.onToolAI(v)
+				return
+			}
+
+			if (v.value === 'audio') {
+				this.onNewAudioObject(e)
+				return
+			}
+
+
+			if (v.value === 'gridContainer') {
+				this.onNewGridContainer(e)
+				return
+			}
+
+		},
+
+		onToolLogicAndRest (v, e) {
+			this.logger.log(-1,"onToolLogicAndRest", "entry >", v.value, e);
+			this.stopEvent(e);
+			topic.publish("matc/canvas/click", "");
+
+			if (v.value === 'rest') {
+				this.onNewRestObject(e)
+				return		
+			}
+	
+			if (v.value === 'logic') {
+				this.onNewLogicObject(e)
+				return
+			}
+
+			if (v.value === 'script') {
+				this.onNewScriptObject(e)
+				return
+			}
+		},
+
+		onNewScriptObject (e) {
+			this.logger.log(-1,"onNewScriptObject", "entry > ");
+
+				var obj = {
+				"id" : "Script",
+				"name" : "Script",
+				"type":"Script",
+				"x": 0,
+				"y": 0,
+				"w": 64,
+				"h": 64,
+				"props" : {
+					"script": ''
+				},
+				"has" :{
+					"script" : true
+				},
+				"style" : {
+			        "background": "#777"
+				}
+			};
+			this.emit("onNewScriptObject", {"obj" : obj, "event":e});
+		},
+
+		onNewAudioObject (e) {
+			this.logger.log(-1,"onNewAudioObject", "entry > ");
+
+			var obj = {
+				"id" : "AudioLogic",
+				"name" : "Audio",
+				"type":"AudioLogic",
+				"x": 0,
+				"y": 0,
+				"w": 64,
+				"h": 64,
+				"props" : {
+					"file": ''
+				},
+				"has" :{
+					"script" : true
+				},
+				"style" : {
+			        "background": "#777"
+				}
+			};
+			this.emit("onNewScriptObject", {"obj" : obj, "event":e});
+		},
+
+		onNewGridContainer (e) {
+			const obj = {
+				"id" : "GridContainer",
+				"type" : "GridContainer",
+				"name" : "Grid Container",
+				"x" : 0,
+				"y" : 0,
+				"w": 320,
+				"h": 320,
+				"z" : 0,
+				"props" : {
+					"layout": "grid",
+				    "rows": 2,
+					"columns": 2,
+					"rowGap": 16,
+					"rowHeight": 64,
+					"columnWidth": 128,
+					"columnGap": 24              
+				},
+				"has" : {
+					"onclick" : true,
+					"borderRadius" : true,
+					"backgroundColor": true,
+					"border": true,
+					"padding":true
+				},
+				"actions":{},
+				"style" : {
+					"background" : "#ffffff",
+					"paddingBottom" : 16,
+					"paddingLeft" : 16,
+					"paddingRight" : 16,
+					"paddingTop" : 16,
+					"selectColor" : "#000000",
+					"borderTopWidth" : 1,
+					"borderBottomWidth" : 1,
+					"borderRightWidth" : 1,
+					"borderLeftWidth" : 1,
+					"borderTopRightRadius" : 8,
+					"borderTopLeftRadius" : 8,
+					"borderBottomRightRadius" : 8,
+					"borderBottomLeftRadius" : 8,
+					"borderTopColor" : "#c5c5c5",
+					"borderBottomColor" : "#c5c5c5",
+					"borderRightColor" : "#c5c5c5",
+					"borderLeftColor" : "#c5c5c5",
+					"borderTopStyle" : "solid",
+					"borderBottomStyle" : "solid",
+					"borderRightStyle" : "solid",
+					"borderLeftStyle" : "solid"
+				}
+			}
+			this.emit("onNewScriptObject", {"obj" : obj, "event":e});
+		},
 
 		onNewRestObject (e) {
 			this.logger.log(-1,"onNewLogicObject", "entry > ");
@@ -702,10 +996,9 @@ export default {
 				"type":"Rest",
 				"x": 0,
 				"y": 0,
-				"w": 80,
-				"h": 90,
+				"w": 64,
+				"h": 64,
 				"props" : {
-					"label" : "Rest",
 					"rest": {
 						"method": "GET",
 						"url": "",
@@ -735,19 +1028,20 @@ export default {
 			this.emit("onNewRestObject", {"obj" : obj, "event":e});
 		},
 
-		onNewLogicObject (e){
-			this.logger.log(0,"onNewLogicObject", "entry > ");
+		onNewLogicObject (e, label="OR", isRandom=false){
+			this.logger.log(-1,"onNewLogicObject", "entry > " + isRandom);
 
 			var obj = {
 				"id" : "Or",
-				"name" : "Or",
+				"name" : label,
 				"type":"LogicOr",
 				"x": 0,
 				"y": 0,
-				"w": 80,
-				"h": 80,
+				"w": 64,
+				"h": 64,
 				"props" : {
-					"label" : "Or"
+					"label" : label,
+					"isRandom": isRandom
 				},
 				"has" :{
 					"logic" : true
@@ -888,36 +1182,42 @@ export default {
 
 		linkDesignToken (designToken, cssProps) {
 			this.logger.log(-1,"linkDesignToken", "entry");
-			var state = this._getViewStyleModelKey();
+			const state = this._getViewStyleModelKey();
 			if(this._selectedWidget){
 				this.controller.linkDesignToken(this._selectedWidget.id, designToken.id,state, cssProps, 'widget');
-			}
+			} 
 			if(this._selectedScreen){
 				this.controller.linkDesignToken(this._selectedScreen.id, designToken.id, state, cssProps,'screen');
+			} 
+			
+			if (this._selectedMulti){
+				this.controller.linkDesignTokenMulti(this._selectedMulti, designToken.id, state, cssProps, 'widget' )
 			}
 		},
 
 		unlinkDesignToken (designToken) {
 			this.logger.log(-1,"unlinkDesignToken", "entry", designToken);
-
-			var state = this._getViewStyleModelKey();
+			const state = this._getViewStyleModelKey();
 			if(this._selectedWidget){
 				this.controller.unlinkDesignToken(this._selectedWidget.id, designToken.id,state, 'widget');
 			}
 			if(this._selectedScreen){
 				this.controller.unlinkDesignToken(this._selectedScreen.id, designToken.id, state, 'screen');
 			}
+			if (this._selectedMulti){
+				this.canvas.showError("Not supported")
+			}
 		},
 
 		changeDesignToken (designToken) {
 			this.logger.log(-1,"changeDesignToken", "entry");
-
 			this.controller.updateDesignToken(designToken.id, designToken.name, designToken.value);
-
 		},
 
-		removeDesignToken () {
+		deleteDesignToken (designToken) {
 			this.logger.log(-1,"deleteDesignToken", "entry");
+			this.controller.deleteDesignToken(designToken.id);
+			this.designTokenList.setModel(this.model)
 		},
 
 		/**********************************************************************
@@ -1056,12 +1356,7 @@ export default {
 
 		removeWidget (){
 			if(this._selectedWidget){
-				var group = this.getParentGroup(this._selectedWidget.id);
-				if(!group){
-					this.controller.removeWidget(this._selectedWidget.id);
-				} else {
-					this.controller.removeGroupAndWidgets(group.id);
-				}
+				this.controller.removeWidget(this._selectedWidget.id);	
 				this.cleanUp();
 			}
 			return false;
@@ -1100,6 +1395,17 @@ export default {
 			this.showThemeCreateDialog(e);
 		},
 
+		// onToolChangeTemplate(type, e){
+		// 	this.stopEvent(e);
+		// 	this.logger.log(-1,"onToolChangeTemplate", "entry : " + type);
+		// 	if (type === 'update') {
+		// 		this.onToolUpdateTemplate(e)
+		// 	}
+		// 	if (type === 'remove') {
+		// 		this.onToolRemoveTemplate(e)
+		// 	}
+		// },
+
 		onToolRemoveTemplate (e) {
 			this.logger.log(1,"onToolRemoveTemplate", "entry : " + this._selectedWidget);
 			this.stopEvent(e);
@@ -1114,14 +1420,19 @@ export default {
 		onToolUpdateTemplate (e) {
 			this.stopEvent(e);
 			this.logger.log(1,"onToolUpdateTemplate", "entry : " + this._selectedWidget);
-			this.controller.updateTemplateStyle(this._selectedWidget.id);
+			if (this._selectedWidget){
+				this.controller.updateTemplateStyle(this._selectedWidget.id);
+			} 
+			if (this._selectedGroup){
+				this.controller.updateGroupTemplateStyle(this._selectedGroup.id);
+			}
 		},
 
 		onToolCreateTemplate (e){
 			this.stopEvent(e);
 			this.logger.log(1,"onToolCreateTemplate", "entry : " + this._selectedWidget);
 
-			var name = this.$i18n.t("toolbar.templates.new");
+			let name = this.getNLS("toolbar.templates.new");
 			if(this._selectedWidget && this._selectedWidget.name){
 				name = this._selectedWidget.name;
 			}
@@ -1141,20 +1452,19 @@ export default {
 			this.stopEvent(e);
 			this.logger.log(1,"onToolbarReplicate", "entry : " + this._selectedWidget);
 			this.canvas.onReplicate();
-			if (this.replicateBtn){
-				css.toggle(this.replicateBtn, "MatcToolbarItemActive");
-			}
 		},
 
 		onToolbarDistribute (e){
 			this.stopEvent(e);
 			this.logger.log(1,"onToolbarDistribute", "entry : " + this._selectedWidget);
 			this.canvas.onDistribute();
-			if (this.distributeBtn){
-				css.toggle(this.distributeBtn, "MatcToolbarItemActive");
-			}
 		},
 
+		onToolbarGridResize (e) {
+			this.stopEvent(e);
+			this.logger.log(-1,"onToolbarGridResize", "entry : " + this._selectedWidget);
+			this.canvas.onGridResize()
+		},
 
 		onToolCopyStyle (e){
 			this.stopEvent(e);
@@ -1169,15 +1479,15 @@ export default {
 
 
 		onToolAlignElements (value, e){
-			this.logger.log(1,"onAlignElements", "entry : " + this._selection);
+			this.logger.log(-1,"onAlignElements", "entry : " + this._selection + ' > ' + e.ctrlKey);
 			this.stopEvent(e);
-
+			const ignoreGroups = e.shiftKey
 
 			if(this._selectedMulti){
 				/**
 				 * in case we are in a selction we will align to the selection!
 				 */
-				this.controller.alignWidgets(value, this._selectedMulti, this._selectedMulti);
+				this.controller.alignWidgets(value, this._selectedMulti, this._selectedMulti, true);
 
 			} else if (this._selectedWidget) {
 				/**
@@ -1188,7 +1498,14 @@ export default {
 				// this.canvas.onAlignStart(value);
 				const parentScreen = this.getParentScreen(this._selectedWidget);
 				if (parentScreen) {
-					this.controller.alignWidgets(value, [this._selectedWidget.id], [parentScreen.id]);
+					// Since 5.0.24 we handle layout containers
+					// as virtual groups.
+					if (LayoutContainerUtil.isLayoutContainerWidget(this._selectedWidget)) {
+						const children = LayoutContainerUtil.getLayoutContainerChildren(this._selectedWidget.id, this.model, this.treeIndex)
+						this.controller.alignWidgets(value, children, [parentScreen.id]), false;
+					} else {
+						this.controller.alignWidgets(value, [this._selectedWidget.id], [parentScreen.id]);
+					}
 				} else {
 					this.logger.log(1,"onAlignElements", "exit not parent : ", this._selectedWidget);
 				}
@@ -1199,25 +1516,35 @@ export default {
 				const widgetID = this._selectedGroup.children[0]
 				const widget = this.model.widgets[widgetID]
 				if (widget) {
-					var parentScreen = this.getParentScreen(widget);
+					const parentScreen = this.getParentScreen(widget);
 					if (parentScreen) {
-						this.controller.alignWidgets(value, this._selectedGroup.children, [parentScreen.id]);
+
+						/**
+						 * Groups can have multiple children
+						 */
+						const allChildren = this.getAllGroupChildren(this._selectedGroup)
+						if (ignoreGroups) {
+							this.controller.alignWidgets(value, allChildren, allChildren, true);
+						} else {
+							this.controller.alignWidgets(value, allChildren, [parentScreen.id]), false;
+						}
+				
 					} else {
 						this.logger.log(1,"onAlignElements", "exit not parent : ", this._selectedGroup);
 					}
 				}
 			}
-
-
 		},
 
 
 		onToolDistributeElements (value, e){
-			this.logger.log(0,"onToolDistributeElements", "entry : " + this._selection);
+			this.logger.log(-1,"onToolDistributeElements", "entry : " + this._selection);
 			this.stopEvent(e);
 
-			if(this._selectedMulti){
+			if(this._selectedMulti && this._selectedMulti.length > 2){
 				this.controller.distributeWidgets(value, this._selectedMulti);
+			} else {
+				this.canvas.showError("Select more than 2 elements")
 			}
 		},
 
@@ -1270,12 +1597,7 @@ export default {
 		onToolHotspot (e){
 			this.logger.log(1,"onToolHotspot", "entry >");
 			this.stopEvent(e);
-
 			topic.publish("matc/canvas/click", "");
-
-			/**
-			 * toggle between modes!
-			 */
 			if(this.mode == "hotspot"){
 				this.controller.setMode("edit");
 			} else {
@@ -1283,14 +1605,43 @@ export default {
 			}
 		},
 
+		onToolSVG (tool, e){
+			this.logger.log(-1,"onToolSVG", "entry >", tool);
+			this.stopEvent(e);
+			topic.publish("matc/canvas/click", "");
+		
+			this.controller.setMode("svg");
+			this.emit("onNewSVG", {"event":e, 'type': tool.value});
+		},
+
+		onToolEditSVG () {
+			if (this._selectedWidget) {
+				this.controller.setMode("svg");
+				this.emit("onEditSVG", {'id': this._selectedWidget.id});
+			}
+		},
+
+
+		onToolSVGEnd () {
+			this.logger.log(1,"onToolSVGEnd", "entry >");
+			if (this.canvas) {
+				this.canvas.endSVG()
+			}
+		},
+
+		onToolAI (tool){
+			this.logger.log(-1,"onToolAI", "entry >", tool);
+			topic.publish("matc/canvas/click", "");
+			this.controller.setMode("ai");
+			this.emit("onNewAI", {'type': tool.value});
+		},
+
+
 		onToolGroup (e){
 			this.logger.log(1,"onToolGroup", "entry");
 			this.stopEvent(e);
 
 			if(this._selectedGroup){
-				/**
-				 * Ungroup
-				 */
 				this.controller.removeGroup(this._selectedGroup.id);
 			}
 
@@ -1307,40 +1658,68 @@ export default {
 		},
 
 
-		onToolWidgetLayer (value){
+		onToolWidgetLayer (option){
+			const value = option.value ? option.value : option
+			this.logger.log(-1,"onToolWidgetLayer", "entry > "+ value);	
+			let selection = this._getSelectedWidgets();
+			if (selection.length > 0) {
+				let topId = false
+				/**
+				 * Since 4.0.60 we have a single selection in a group, 
+				 * can we boost the entire group to top?
+				 */		
+				if (selection.length === 1 && (value === 'front' || value === 'back')) {
+					const widget = this.model.widgets[selection[0]];
+					if (widget) {
+						let parentGroup = this.getTopParentGroup(widget.id)
+						
+						if (parentGroup) {
+							topId = widget.id
+							selection = this.getAllGroupChildren(parentGroup)
+						} else if (LayoutContainerUtil.isLayoutContainerWidget(widget)) {
+							// Since 5.0.24 we handle layout containers
+							// as virtual groups.
+							selection = LayoutContainerUtil.getLayoutContainerChildren(widget.id, this.model, this.treeIndex)
+						}
+					}
+					
+				}
 
-			this.logger.log(1,"onToolWidgetLayer", "entry > "+ value);
+				let parent
+				for(let i=0;i< selection.length; i++){
+					const widget = this.model.widgets[selection[i]];
+					if (widget) {
+						parent = this.getParentScreen(widget, this.model)
+					}
+				}
+				
+				const widgets = this.model.widgets;
+				const oldValues =  ModelUtil.getZValuesForScreen(this.model, parent?.id); //this.getZValues(widgets); // can we scope this to a screen. Check layer list
+				const offset = this._getZOffset(selection, oldValues);
+				const max = this.getMaxZValue(widgets);
+				const min = this.getMinZValue(widgets);
 
-
-			var selection = this._getSelectedWidgets();
-
-			if(selection.length > 0){
-				var widgets = this.model.widgets;
-				var oldValues = this.getZValues(widgets);
-				var offset = this._getZOffset(selection, oldValues);
 				switch(value) {
 				    case "front":
-				    	var max = this.getMaxZValue(widgets);
 				    	for(let i=0;i< selection.length; i++){
 				    		let id =selection[i];
-				    		oldValues[id] = max +1 + offset[id];
+				    		oldValues[id] = max + 1 + offset[id];
 				    	}
 				    	break;
 				    case "forward":
-				    	for(let i=0;i< selection.length; i++){
+						for(let i=0;i< selection.length; i++){
 				    		let id =selection[i];
-				    		oldValues[id]++;
+				    		oldValues[id]+=1.1; // we add a little more than one, to make sure we do not collide with other
 				    	}
 				        break;
 				    case "backward":
 				    	for(let i=0;i< selection.length; i++){
 				    		let id =selection[i];
-				    		oldValues[id]--;
+				    		oldValues[id]-=1.1;  // we add a little more than one, to make sure we do not collide with other
 				    	}
 				    	break;
 				    default:
-				    	var min = this.getMinZValue(widgets);
-				    	var l = selection.length;
+				    	var l = selection.length + max;				
 					    for(let i=0;i< selection.length; i++){
 				    		let id =selection[i];
 				    		oldValues[id] = min - l + offset[id];
@@ -1348,40 +1727,45 @@ export default {
 				        break;
 				}
 
+			
+				/**
+				 * Since 4.0.60 we move groups as well up or down
+				 */
+				if (topId) {
+					if (value === 'front') {
+						oldValues[topId] = max + 10 + selection.length
+					}
+					if (value === 'back') {
+						oldValues[topId] = min - 10 - (selection.length +max)
+					}
+				}
+				
+
 				/**
 				 * normalize z-values to have the model a little bit better. Lowest value should be
 				 * zero, not more than one step between layers
 				 */
-				var newValues = this.getNormalizeWidgetZValues(oldValues);
-
-
+				const newValues = this.getNormalizeWidgetZValues(oldValues);
 				this.controller.setWidgetLayers(newValues);
-
 			}
-
-
 		},
 
 		_getZOffset (selection, values){
-			var offsets = {};
-
-			var min = 100000;
-
+			const offsets = {};
+			let min = 100000;
 			for(let i=0;i< selection.length; i++){
-		    	let id =selection[i];
+		    	const id =selection[i];
 		    	min = Math.min(min, values[id]);
 			}
-
 			for(let i=0;i< selection.length; i++){
-			    let id =selection[i];
+			    const id =selection[i];
 			    offsets[id] = values[id] - min;
 			}
-
 			return offsets;
 		},
 
 		_getSelectedWidgets (){
-			var selection = [];
+			let selection = [];
 			if(this._selectedWidget){
 				selection.push(this._selectedWidget.id);
 			} else if(this._selectedGroup){
@@ -1403,8 +1787,6 @@ export default {
 
 		toggleLineHide (value){
 			this.logger.log(3,"toggleLineHide", "entry >" + value);
-
-
 			if(this._selectedWidget){
 				let line = this.getLineFrom(this._selectedWidget);
 				if(line){
@@ -1474,7 +1856,6 @@ export default {
 			this.logger.log(1,"setWidgetSize", "entry > ");
 
 			if(this._selectedWidget){
-
 				this.controller.updateWidgetPosition(this._selectedWidget.id, pos, true);
 			}
 
@@ -1484,7 +1865,7 @@ export default {
 		enableInheritedWidget () {
 			this.logger.log(1,"enableInheritedWidget", "entry > ");
 			if(this._selectedWidget){
-				var newWidget = this.controller.enableInheritedWidget(this._selectedWidget);
+				const newWidget = this.controller.enableInheritedWidget(this._selectedWidget);
 				if(newWidget){
 					/**
 					 * Trigger Selecion in Canvas which will also trigger back the selection
@@ -1502,7 +1883,6 @@ export default {
 			this.logger.log(0,"setScreenSize", "entry > "+ pos.w + "/" + pos.h);
 
 			if(this._selectedScreen){
-
 				this.controller.updateScreenWidthAndHeight(this._selectedScreen.id, pos);
 			}
 			return false;
@@ -1549,12 +1929,14 @@ export default {
 			} else if(this._selectedMulti){
 				this.controller.updateMultiProperties(this._selectedMulti, newSytle, modelKey);
 			}else if(this._selectedGroup){
-				this.controller.updateMultiProperties(this._selectedGroup.children, newSytle, modelKey);
+				const children = this.getAllGroupChildren(this._selectedGroup)
+				this.controller.updateMultiProperties(children, newSytle, modelKey);
 			}
 			return false;
 		},
 
 
+		
 		setWidgetMultiStyle (newStyle){
 			this.logger.log(2,"setWidgetMultiStyle", "entry");
 			var modelKey = this._getViewStyleModelKey();
@@ -1565,6 +1947,23 @@ export default {
 			}
 			return false;
 		},
+
+		setWidgetMultiProps (newProps){
+			this.logger.log(1,"setWidgetMultiProps", "entry", JSON.stringify(newProps));
+			if(this._selectedWidget && this._selectedWidget.style){
+				this.controller.updateWidgetProperties(this._selectedWidget.id, newProps, "props");
+			}
+			return false;
+		},
+
+		setWidgetDataBinding (dataBinding, schema, data){
+			this.logger.log(-1,"setWidgetDataBinding", "entry > ", dataBinding, schema);
+			if(this._selectedWidget){
+				this.controller.updateWidgetDataBinding(this._selectedWidget.id, dataBinding, schema, data)
+			}
+			return false;
+		},
+
 
 		_getViewStyleModelKey (){
 			return this.widgetViewModeBtn.getValue();
@@ -1579,6 +1978,11 @@ export default {
 					newProps[key] = value;
 					this.controller.updateWidgetProperties(this._selectedWidget.id, newProps, "props");
 				}
+			}
+			if(this._selectedMulti) {	
+				const newProps = {};
+				newProps[key] = value;
+				this.controller.updateMultiProperties(this._selectedMulti, newProps, "props");			
 			}
 			return false;
 		},
@@ -1646,15 +2050,11 @@ export default {
 		},
 
 		setTempWidgetStyle (key, value){
-			this.logger.log(2,"setTempWidgetStyle", "entry > " + key + " - "+ value);
-			var modelKey = this._getViewStyleModelKey();
-			if ("style" == modelKey) {
-				var newStyle = {};
+			this.logger.log(2,"setTempWidgetStyle", "entry > " + key + " : "+ value);
+			const modelKey = this._getViewStyleModelKey();
+			if ("style" === modelKey) {
+				const newStyle = {};
 				newStyle[key] = value;
-				/**
-				 * FIXME: What does this do?
-				 */
-				modelKey = this._getViewStyleModelKey();
 				if(this._selectedWidget && this._selectedWidget.style){
 					this.canvas.setTempWidgetStyle(this._selectedWidget.id, newStyle);
 				} else if(this._selectedMulti){
@@ -1666,14 +2066,31 @@ export default {
 			return false;
 		},
 
-		setTempMultiWidgetStyle (newStyle){
-			this.logger.log(0,"setTempMultiWidgetStyle", "entry > " + newStyle);
-
+		setTempWidgetProps (key, value){
+			this.logger.log(-2,"setTempWidgetProps", "entry > " + key + " : "+ value);
+			const newProps = {};
+			newProps[key] = value;
 			if(this._selectedWidget && this._selectedWidget.style){
-				this.canvas.setTempWidgetStyle(this._selectedWidget.id, newStyle);
+				this.canvas.setTempWidgetProps(this._selectedWidget.id, newProps);
 			} else if(this._selectedMulti){
 				for (var i=0; i < this._selectedMulti.length; i++){
-					this.canvas.setTempWidgetStyle(this._selectedMulti[i], newStyle);
+					this.canvas.setTempWidgetProps(this._selectedMulti[i], newProps);
+				}
+			}
+			return false;
+		},
+
+
+		setTempMultiWidgetStyle (newStyle){
+			this.logger.log(0,"setTempMultiWidgetStyle", "entry > " + newStyle);
+			const modelKey = this._getViewStyleModelKey();
+			if ("style" === modelKey) {
+				if(this._selectedWidget && this._selectedWidget.style){
+					this.canvas.setTempWidgetStyle(this._selectedWidget.id, newStyle);
+				} else if(this._selectedMulti){
+					for (var i=0; i < this._selectedMulti.length; i++){
+						this.canvas.setTempWidgetStyle(this._selectedMulti[i], newStyle);
+					}
 				}
 			}
 			return false;
@@ -1804,6 +2221,25 @@ export default {
 		},
 
 
+		getParentLayoutContainer(ids) {	
+			if (!ids) {
+				return []
+			}
+			if (this.treeIndex) {
+				for (let id of ids) {
+					const parent = this.treeIndex.getParentWidget(id)
+					if (parent) {
+						const res = LayoutContainerUtil.isLayoutContainerWidget(parent)				
+						if (res) {
+							this.logger.log(1, 'isInLayoutContainer', 'true')
+							return parent
+						}
+					}			
+				}
+			}
+			return null
+		},
+
 		/**********************************************************************
 		 * Undo  & Redo
 		 **********************************************************************/
@@ -1845,8 +2281,29 @@ export default {
 		},
 
 		setSettings (v){
-			this.logger.log(-1,"setSettings", "entry > ", v);
+			this.logger.log(1,"setSettings", "entry > ", v);
 			this.settings = v;
+			if (this.settings.hasProtoMoto) {
+				this.showScriptTool = true
+			} else {
+				this.showScriptTool = false
+			}
+		},
+
+		showScriptDialog (widget) {
+			this.logger.log(-1,"showScriptDialog", "entry > ", widget);
+			if (this.dataWidget) {
+				this.dataWidget.setValue(widget);
+				this.dataWidget._renderScriptDialog()
+			}
+		},
+
+		showRestDialog (widget) {
+			this.logger.log(-1,"showRestDialog", "entry > ", widget);
+			if (this.dataWidget) {
+				this.dataWidget.setValue(widget);
+				this.dataWidget._renderRestDialog()
+			}
 		},
 
 

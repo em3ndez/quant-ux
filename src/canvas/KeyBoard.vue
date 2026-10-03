@@ -24,17 +24,25 @@ export default {
 			  this.own(on(win.body(), "keyup", lang.hitch(this,"onKeyUp")));
       },
 
+      registerKeyBoardListener (listener) {
+        this._keyBoardKeyBoardListener = listener
+      },
+
+      cleanUpKeyBoardListener () {
+        delete this._keyBoardKeyBoardListener
+      },
+
       onKeyPress (e){
 
+     
         this._currentKeyEvent = e;
-        var k = e.keyCode ? e.keyCode : e.which;
-        var target = e.target;
-        var isMeta = e.altKey || e.ctrlKey || e.metaKey;
-        var isCntrl = e.ctrlKey || e.metaKey;
-        var isShift = e.shiftKey
+        const k = e.keyCode ? e.keyCode : e.which;
+        const target = e.target;
+        const isMeta = e.altKey || e.ctrlKey || e.metaKey;
+        const isCntrl = e.ctrlKey || e.metaKey;
+        const isShift = e.shiftKey
 
 
-        // console.debug("onKeyPress", target, isMeta, css.contains(target, "MatcIgnoreOnKeyPress"))
 
         /**
          * Cancel listeners must be always fired.
@@ -46,10 +54,18 @@ export default {
           return
         }
 
+        if (this._keyBoardKeyBoardListener) {
+          try {
+            this._keyBoardKeyBoardListener(e, false)
+          } catch (err) {
+             this.logger.log(1 ,"onKeyPress", "error in listener", err);
+          }
+        }
+
         /**
          * IF we have a dialog open, we return
          */
-        if (this.state == "simulate" || this.state == "dialog" || Dialog.getCurrentDialog()) {
+        if (this.state == "simulate" || this.state == "dialog" || Dialog.getCurrentDialog() || this._commentWidget) {
           this.logger.log(1 ,"onKeyPress", "exit because of dialog");
           return;
         }
@@ -61,6 +77,14 @@ export default {
           return;
         }
 
+        if (this.currentTool) {
+          const stop = this.currentTool.onKeyDown(e)
+          if (stop) {
+            return
+          }
+        }
+     
+
         this._currentKeyPressed = k;
 
         /**
@@ -68,6 +92,15 @@ export default {
          */
         if (this._inlineEditStarted ){
           this.onSelectionKeyPress(e);
+        /**
+         * TAB for DesignGPT
+         */
+        } else if (k == keys.TAB){ 
+          if (this.toolbar) {
+            // move to next view mode
+            this.stopEvent(e);
+            this.toolbar.setNextCanvasViewConfig(e)
+          }
         /**
          * Arrow dispatch if cntrl is not pressed
          */
@@ -91,6 +124,10 @@ export default {
             this.onArrowUp(e, isShift);
             this.stopEvent(e);
           }
+        } else if (k == 81) { // q for AI
+           //this.openAIEditor()
+           console.debug(this.getViewPort())
+
         } else if (k == 65) { // a for select
 
           if(!this._inlineEditStarted && !this._resizeStartPos && !this._selectionToolStart){
@@ -107,7 +144,7 @@ export default {
           if(!this._inlineEditStarted && !this._resizeStartPos && !this._dragNDropBoxWidgetStart){
             if(this.mode == "edit"){
               this.setMode("distance");
-              if(this._selectWidget){
+              if(this.getSelectedWidget()){
                 this.renderScreenDistance();
               }	else {
                 if(this._lastHoverWidget){
@@ -137,7 +174,31 @@ export default {
               }
             }
           }
-
+        /**
+         * 1 dispatch...
+         */
+        } else if(k == 49){
+            if(!this._inlineEditStarted && !this._selectionToolStart){
+              this.setZoomFactor(1)
+              this.stopEvent(e);
+            }
+        /**
+         * 2 dispatch...
+         */
+        } else if(k == 50){
+            if(!this._inlineEditStarted && !this._selectionToolStart){
+              this.setZoomFactor(0.5)
+              this.stopEvent(e);
+            }
+        /**
+         * 3 dispatch...
+         */
+        } else if(k == 51){
+            if(!this._inlineEditStarted && !this._selectionToolStart){
+              this.setZoomFactor(0.25)
+              this.stopEvent(e);
+            }
+          
         /**
          * H dispatch...
          */
@@ -148,6 +209,13 @@ export default {
             this.showHint("Mark the area where to create the hotspot...");
             this.stopEvent(e);
           }
+          
+        /**
+         * I dispatch...
+         */
+        } else if(k == 73){
+        
+          this.startEyeDropper(isShift, isCntrl)
         /**
          * R dispatch...
          */
@@ -164,7 +232,7 @@ export default {
          */
         } else if(k == 67 && !isMeta){
           if(!this._inlineEditStarted  && !this._selectionToolStart){
-            if (this._selectWidget || this._selectGroup || this._selectMulti) { // _selectGroup
+            if (this.getSelectedWidget() || this.getSelectedGroup() || this.getMultiSelection()) { // _selectGroup
               this.onReplicate();
               this.stopEvent(e);
               e.cancelBubble = true
@@ -177,6 +245,7 @@ export default {
          */
         } else if(k == 76){
           if(!this._inlineEditStarted  && !this._selectionToolStart){
+            this.startPrototypingView()
             this.addLineAtSelected(e)
           }
         /**
@@ -184,12 +253,13 @@ export default {
          */
         } else if(k == 68 && !isMeta){
           if(!this._inlineEditStarted  && !this._selectionToolStart){
-            if (this._selectMulti) {
-              this.onDistribute();
+            if (this.getMultiSelection() || this.getSelectedGroup() || this.getSelectedScreen()) {
+              this.onGridResize()
+              //this.onDistribute();
               this.stopEvent(e);
               e.cancelBubble = true
             } else {
-              this.showHint("Select multiple widgets to distribute equally...");
+              this.showHint("Select multiple widgets to to start grid resizing");
             }
           }
         /**
@@ -201,6 +271,14 @@ export default {
             this.showHint("Mark the area where to create the txt...");
             this.stopEvent(e);
           }
+
+        /**
+         * V dispatch...
+         */
+        } else if(k == 86 && !(e.altKey || e.ctrlKey || e.metaKey)){
+          if(!this._inlineEditStarted  && !this._selectionToolStart){
+            this.addSVG({type:'bezier'})
+          }
         /**
          * W dispatch...
          */
@@ -211,12 +289,19 @@ export default {
             }
           }
         /**
+         * G dispatch...
+         */
+        } else if(k == 71 && !(e.altKey || e.ctrlKey || e.metaKey)){
+          if(!this._inlineEditStarted){
+            console.debug('G')
+          }
+        /**
          * S dispatch...
          */
         } else if(k == 83){
           if(!this._inlineEditStarted){
             if(this.toolbar){
-              this.toolbar.showScreenSelector();
+              this.toolbar.onToolCreateScreen();
             }
           }
 
@@ -261,14 +346,15 @@ export default {
               this.stopEvent(e);
             }
             if(k == 90){// ctrl-z
-              this.controller.undo();
-              this.stopEvent(e);
+              if ((e.ctrlKey || e.metaKey) && e.shiftKey) { // ctrl+shift+z is the shortcut for redo
+                this.controller.redo(); 
+                this.stopEvent(e);
+              } else {
+                this.controller.undo();
+                this.stopEvent(e);
+              }
             }
-            if(k == 89){// ctrl-y
-              this.controller.redo();
-              this.stopEvent(e);
-            }
-
+  
             if(k == 68){ // ctrl-d
               this.onDuplicate();
               this.stopEvent(e);
@@ -291,6 +377,20 @@ export default {
             if(k == 71){ // ctrl-g
               this.onGroup();
               this.stopEvent(e);
+            }
+            
+            if(k == 221) { // ] : to send layer forward  
+              if(this.toolbar){
+                this.stopEvent(e);
+                this.toolbar.onToolWidgetLayer("forward");
+              }
+            }
+
+            if(k == 219)  { // [ : to send layer backward
+              if(this.toolbar){
+                this.stopEvent(e);
+                this.toolbar.onToolWidgetLayer("backward");
+              }  
             }
           }
 
@@ -318,13 +418,27 @@ export default {
           return;
         }
 
-        var target = e.target;
+        const target = e.target;
         if(css.contains(target, "MatcIgnoreOnKeyPress")){
           return
         }
 
-        var k = e.keyCode ? e.keyCode : e.which;
+       if (this._keyBoardKeyBoardListener) {
+         try {
+            this._keyBoardKeyBoardListener(e, true)
+          } catch (err) {
+             this.logger.log(1 ,"onKeyUp", "error in listener", err);
+          }
+        }
 
+        if (this.currentTool) {
+          const stop = this.currentTool.onKeyUp(e)
+          if (stop) {
+            return
+          }
+        }
+
+        const k = e.keyCode ? e.keyCode : e.which;
         if(this._inlineEditStarted ){
           /**
            * Do nothing...

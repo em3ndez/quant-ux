@@ -1,18 +1,21 @@
 
 <template>
-     <div class="MatcToolbarRadius">
-		 <span class="MatcToolbarItemLabel" style="vertical-align: middle;">Radius</span>
-	</div>
+     <div class="MatcToolbarRadius ">
+		 <QIcon icon="BorderRadius"/>
+		</div>
 </template>
 <script>
 import DojoWidget from 'dojo/DojoWidget'
 import lang from 'dojo/_base/lang'
 import on from 'dojo/on'
-import ToolbarSlider from './ToolbarSlider'
+//import ToolbarSlider from './ToolbarSlider'
+import InputDropDownButton from './InputDropDownButton'
+import QIcon from 'page/QIcon'
+import _Tooltip from 'common/_Tooltip'
 
 export default {
     name: 'Radius',
-    mixins:[DojoWidget],
+    mixins:[DojoWidget, _Tooltip],
     data: function () {
         return {
             value: false,
@@ -20,11 +23,10 @@ export default {
             inputEvent: "change"
         }
     },
-    components: {},
+    components: {
+		'QIcon': QIcon
+	},
     methods: {
-        postCreate: function(){
-
-		},
 
 		render  (){
 			if(!this.rendered){
@@ -36,9 +38,12 @@ export default {
 		},
 
 		renderIntBox  (parent){
-			var input = this.$new(ToolbarSlider,{max:32});
+			const input = this.$new(InputDropDownButton);
+			input.setOptions([0, 2, 3, 4, 8, 12, 16, 18, 24, 32, 64, 128]);
+			input.reposition = true;
 			input.placeAt(parent);
-			input.render();
+			this.addTooltip(input.domNode, "Border Radius");
+			//input.render();
 			return input;
 		},
 
@@ -70,7 +75,6 @@ export default {
 		},
 
 
-
 		update  (){
 
 		},
@@ -96,11 +100,11 @@ export default {
 		getDelta  (value){
 			var delta = {};
 			for(var key in value){
-				var o = this.orginalValue[key];
+				//var o = this.orginalValue[key];
 				var n = value[key];
-				if(o != n){
+				//if(o != n){
 					delta[key] = n;
-				}
+				//}
 			}
 			return delta;
 		},

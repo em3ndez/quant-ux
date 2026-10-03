@@ -1,25 +1,29 @@
-import Screen from './Screen'
+import Responsive from './Responsive'
 import lang from '../../dojo/_base/lang'
 import * as TextUtil from '../../core/TextUtil'
+import * as DistributionUtil from '../../core/DistributionUtil'
+import ResponsiveLayout from '../../core/responsive/ResponsiveLayout'
+import * as ResponsiveUtil from '../../core/responsive/ResponsiveUtil'
+import * as LayoutContainerUtil from '../../core/LayoutContainerUtil'
 
-export default class Widget extends Screen {
+export default class Widget extends Responsive {
 
 	enableInheritedWidget (widget){
 		this.logger.log(-1,"enableInheritedWidget", "enter > " +widget.id);
 
 		if(widget.inherited) {
-			var source = this.model.widgets[widget.inherited];
-			var targetScreen = this.model.screens[widget.inheritedScreen];
+			const source = this.model.widgets[widget.inherited];
+			const targetScreen = this.model.screens[widget.inheritedScreen];
 			if (source && targetScreen) {
 
-				var sourcePos = this.getWidgetPostionInScreen(source);
-				var targetPos = {
+				const sourcePos = this.getWidgetPostionInScreen(source);
+				const targetPos = {
 					x: targetScreen.x + sourcePos.x,
 					y: targetScreen.y + sourcePos.y,
 					w: sourcePos.w,
 					h: sourcePos.h
 				}
-				var newWidget = this.addInheritedWidget(source, targetPos, targetScreen);
+				const newWidget = this.addInheritedWidget(source, targetPos, targetScreen);
 				this.logger.log(4,"enableInheritedWidget", "enter > " +widget.id + " -> " + newWidget.id);
 				return newWidget
 			} else {
@@ -33,8 +37,9 @@ export default class Widget extends Screen {
 	addInheritedWidget (widget, pos, targetScreen){
 		this.logger.log(-1,"addInheritedWidget", "enter > "+ widget.id) ;
 
+		this.startModelChange()
 		// like onCopyWidget
-		var newWidget = this._copyWidget(widget, targetScreen);
+		const newWidget = this._copyWidget(widget, targetScreen);
 		newWidget.copyOf = widget.id;
 		newWidget.name = widget.name // make sure we get the same name! Otherwise we would get box1 or so...
 		newWidget.id = "w"+this.getUUID();
@@ -52,7 +57,7 @@ export default class Widget extends Screen {
 		newWidget.hover = {}
 		newWidget.props = {}
 
-		var command = {
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "CopyWidget",
 			model : newWidget,
@@ -60,7 +65,11 @@ export default class Widget extends Screen {
 		this.addCommand(command);
 
 		this.modelAddWidget(newWidget);
+
+		this.updateScreenLayout({pos})
+
 		this.render();
+		this.commitModelChange()
 		return newWidget;
 	}
 
@@ -69,11 +78,12 @@ export default class Widget extends Screen {
 	 **********************************************************************/
 
 
-	distributeWidgets (type, widgets){
-		this.logger.log(0,"distributeWidgets", "enter > " +type);
+	distributeWidgets (type, selectedIDs){
+		this.logger.log(1,"distributeWidgets", "enter > " +type, selectedIDs);
 
-		var bbx = this.getBoundingBox(widgets);
-		var positions = this._distributedPositions(type, widgets, bbx).positions;
+		selectedIDs = selectedIDs.filter(id => this.model.widgets[id])
+		const bbx = this.getBoundingBox(selectedIDs);
+		const positions = this._distributedPositions(type, selectedIDs, bbx).positions;
 
 		this.updateMultiWidgetPosition(positions, true);
 
@@ -87,76 +97,152 @@ export default class Widget extends Screen {
 	 * Alignment
 	 **********************************************************************/
 
-	alignWidgets (direction, source, target) {
-		this.logger.log(-1, "alignWidgets", "enter > " + direction, target);
+	alignWidgets (direction, source, target, ignoreGroups = false) {
+		this.logger.log(-1, "alignWidgets", "enter > " + direction + ' > ignore: ' + ignoreGroups, target, ignoreGroups);
 
-		var targetBox = this.getBoundingBox(target);
-		var positions = {};
+		
+		/**
+		 * Since 5.0.3 multi selections can have groups.
+		 * we just ignore
+		 */
+		source = source.filter(id => this.model.widgets[id])
 
-		for (var i=0; i < source.length; i++){
-			var widgetID = source[i];
-			var widget = this.model.widgets[widgetID];
-
-			if (widget) {
-				/**
-				 * We copy the old position
-				 */
-				var widgetPos = { x: widget.x, y : widget.y, h: widget.h, w: widget.w};
-				var sourceBox = widgetPos
-				positions[widgetID] = widgetPos;
-				var offset = {x:0,y:0};
-				/**
-				 * In case there is a group, we set an offset!
-				 *
-				 */
-				var group = this.getParentGroup(widgetID);
-				if (group){
-					var boundingBox = this.getBoundingBox(group.children);
-					offset.x = widgetPos.x - boundingBox.x;
-					offset.y = widgetPos.y - boundingBox.y;
-					/**
-					 * 2.1.7: We use the bounding box as source box
-					 */
-					sourceBox = boundingBox
-				}
-
-				switch(direction) {
-					case "top":
-						widgetPos.y = (targetBox.y + offset.y);
-						break;
-					case "bottom":
-						widgetPos.y = ((targetBox.y + targetBox.h) -sourceBox.h) + offset.y;
-						break;
-					case "left":
-						widgetPos.x = targetBox.x + + offset.x;
-						break;
-					case "right":
-						widgetPos.x = ((targetBox.x + targetBox.w) -sourceBox.w) +  offset.x;
-						break;
-					case "horizontal": {
-						let m = (targetBox.y + targetBox.h / 2);
-						widgetPos.y = Math.round(m - sourceBox.h / 2) +  offset.y;
-						break;
-					}
-					case "vertical": {
-						let m = (targetBox.x + targetBox.w / 2);
-						widgetPos.x = Math.round(m -sourceBox.w / 2) + offset.x;
-						break;
-					}
-					default:
-						console.error("alignWidgets() > No method for " + direction);
-						break;
-				}
-
-			} else {
-				console.error("alignWidgets() > No widget with id", widgetID);
-			}
+		const hasLayoutContainer = source.some(id => {
+			const type = this.model.widgets[id].type
+			return type === "GridContainer" || type === "FlexContainer"
+		})
+		if (hasLayoutContainer) {
+			this.showError("Grid and Flex Containers cannot be aligned.")
+			return
 		}
+
+		const positions = {};
+		const targetBBox = this.getBoundingBox(target);
+		const sourceBBox = this.getBoundingBox(source)
+		/**
+		 * First, we get just all the main boxes
+		 */
+		const boxes = DistributionUtil.getBoxesInSelection(this.model, source)
+		for (let i=0; i < boxes.length; i++){
+			/**
+			 * Second, we align the box
+			 */
+			const box = boxes[i]
+			const newBox = { x: box.x, y : box.y, h: box.h, w: box.w}
+			let sourceOffset = {top:0,left:0, right:0, bottom:0};
+			
+
+			if (ignoreGroups) {
+				this.getAlignedPosition(direction, targetBBox, box, box, sourceOffset, newBox)
+			} else {
+				sourceOffset = {
+					top: box.y - sourceBBox.y,
+					bottom: (sourceBBox.h + sourceBBox.y) - (box.h + box.y),
+					left: box.x - sourceBBox.x,
+					right: (sourceBBox.w + sourceBBox.x) - (box.w + box.x)
+				}
+				this.getAlignedPosition(direction, targetBBox, sourceBBox, box, sourceOffset, newBox)
+			}
+
+			// const dif = {
+			// 	x: box.x - newBox.x,
+			// 	y: box.y - newBox.y
+			// }
+			// console.debug('', box.name, sourceOffset.top, sourceOffset.bottom, '===', dif.y)
+			// //console.debug('', box.name, sourceOffset.left, sourceOffset.right, '===', dif.x)
+
+			/**
+			 * Third, we transpose all children relative to the box
+			 */
+			box.children.forEach(id => {
+				const widget = this.model.widgets[id]
+				if (widget) {		
+					const boxOffset = {
+						x: widget.x - box.x,
+						y: widget.y - box.y
+					}
+					//console.debug('  - ', id, boxOffset)
+
+					const widgetPos = { 
+						x: newBox.x + boxOffset.x, 
+						y: newBox.y + boxOffset.y, 
+						h: widget.h, 
+						w: widget.w
+					}
+					positions[id] = widgetPos;
+				} else {
+					console.error('alignWidgets() > no widget', id)
+				}
+			 })			
+
+		}
+
 
 		this.updateMultiWidgetPosition(positions, true);
 
 		this.render();
 		this.renderAlignEnd();
+	}
+
+	getAlignedPosition (direction, targetBox, sourceBox, box, offset, widgetPos) {
+		switch(direction) {
+			case "top":
+				widgetPos.y = (targetBox.y + offset.top);
+				break;
+			case "bottom":
+				console.debug('bottom')
+				widgetPos.y = (targetBox.y + targetBox.h) - box.h - offset.bottom;
+				break;
+			case "left":
+				widgetPos.x = targetBox.x + offset.left;
+				break;
+			case "right":
+				widgetPos.x = ((targetBox.x + targetBox.w) - box.w) - offset.right;
+				break;
+			case "horizontal": {
+				let m = (targetBox.y + targetBox.h / 2);
+				let y = m - (sourceBox.h / 2)
+				widgetPos.y = Math.round(y + (offset.top));
+				break;
+			}
+			case "vertical": {
+				let m = (targetBox.x + targetBox.w / 2);
+				let x = m - (sourceBox.w / 2)
+				widgetPos.x = Math.round(x + offset.left);
+				break;
+			}
+		}
+	}
+
+	getParentGroupIfInSelection(widgetID, selection,) {
+		const group = this.getParentGroup(widgetID);
+		if (group) {
+			const allChildren = this.getAllGroupChildren(group)
+			if (allChildren.length > selection.length) {
+				this.logger.log(-3,"getParentGroupIfInSelection", "exit > Group has more children than selection");
+				return
+			}
+			const selectedIDs = {}
+			selection.forEach(id => {
+				selectedIDs[id] = true
+			})
+
+			let count = 0
+			for (let i=0; i< allChildren.length; i++) {
+				const childID = allChildren[i]
+				if (!selectedIDs[childID]) {
+					this.logger.log(-3,"getParentGroupIfInSelection", `exit > Group child not selected ${childID}`);
+					return
+				} else {
+					count++
+				}
+			}
+			if (count == selection.length) {
+				this.logger.log(-3,"getParentGroupIfInSelection", `exit > All group children selected`, widgetID);
+				//return
+			}
+		}
+		return group
 	}
 
 	incMultiWidgetPosition (ids, x, y){
@@ -190,6 +276,75 @@ export default class Widget extends Screen {
 	 * Align
 	 **********************************************************************/
 
+	updateWidgetDataBinding (id, databinding, schema, data) {
+		this.logger.log(-1,"updateWidgetDataBinding", "enter > " + id, JSON.stringify(databinding));
+
+		const widget = this.model.widgets[id]
+		if (!widget) {
+			this.logger.log(-1,"updateWidgetDataBinding", "Error NO Widget > ", id);
+			return
+		}
+
+
+		this.startModelChange()
+		const command = {
+			timestamp : new Date().getTime(),
+			type : "UpdateDataBinding",
+			modelId : id,
+			n: {
+				databinding: lang.clone(databinding),
+				schema: lang.clone(schema),
+				data: lang.clone(data)
+			},
+			o: {
+				databinding: lang.clone(widget.props.databinding),
+				schema: lang.clone(this.model.schema),
+				data: lang.clone(this.model.data)
+			}
+		};
+
+		this.modelUpdateDataBindingAndSchema(id, databinding, schema, data)
+
+
+		//console.debug('updateWidgetDataBinding() > exit', JSON.stringify(this.model.widgets, null, 2))
+
+
+		this.addCommand(command);
+		this.render();
+		this.commitModelChange()
+
+		//console.debug('updateWidgetDataBinding() > exit', JSON.stringify(this.model.widgets, null, 2))
+	}
+
+	modelUpdateDataBindingAndSchema (id, databinding, schema, data) {
+		const widget = this.model.widgets[id]
+		if (!widget) {
+			this.logger.log(-1,"modelUpdateDataBindingAndSchema", "Error NO Widget > ", id);
+			return
+		}
+
+		if (!widget.props) {
+			widget.props = {}
+		}
+
+		widget.props.databinding = databinding
+		this.model.schema = schema
+		this.model.data = data
+
+		this.onModelChanged([{type: 'widget', action:"change", id: id}])
+	}
+
+	redoUpdateDataBinding(command) {
+		this.logger.log(-3,"redoUpdateDataBinding", "enter > " + command.id);
+		this.modelUpdateDataBindingAndSchema(command.modelId, command.n.databinding, command.n.schema, command.n.data);
+		this.render();
+	}
+
+	undoUpdateDataBinding(command) {
+		this.logger.log(-3,"undeUpdateDataBinding", "enter > " + command.id);
+		this.modelUpdateDataBindingAndSchema(command.modelId, command.o.databinding, command.o.schema, command.o.data);
+		this.render()
+	}
 
 
 	/**********************************************************************
@@ -199,38 +354,18 @@ export default class Widget extends Screen {
 	updateBoundingBox (ids, pos) {
 		if(pos.snapp) {
 
-			/**
-			 * Get bounding box in model
-			 */
+			const modelBoundingBox = this.getBoundingBox(ids);
 
-			/**
-			 * FIXME: This where are the positions comming from?
-			 */
-			console.warn('updateBoundingBox', ids, pos)
-			//ids = [];
-			// for(id in positions){
-			//	ids.push(id);
-			//}
-			var modelBoundingBox = this.getBoundingBox(ids);
+			const boundingBox = this.getUnZoomedBox(lang.clone(pos), this._canvas.getZoomFactor());
 
-			/**
-			 * Unzoomed
-			 */
-			var boundingBox = this.getUnZoomedBox(lang.clone(pos), this._canvas.getZoomFactor());
-			/**
-			 * FIXME: We had here again the issue of writing to a wrong variable boundingBox vs boundingBVox
-			 */
-			boundingBox = this._correctBoundindBox(boundingBox, modelBoundingBox);
-
-
-			var dif ={
+			const dif ={
 				x: boundingBox.x *1.0 / modelBoundingBox.x,
 				y: boundingBox.y *1.0 / modelBoundingBox.y,
 				w: boundingBox.w *1.0 / modelBoundingBox.w,
 				h: boundingBox.h *1.0 / modelBoundingBox.h
 			};
 
-			var positions = {};
+			const positions = {};
 			for(var i=0; i< ids.length; i++){
 				var id = ids[i];
 				var widget = this.model.widgets[id];
@@ -246,19 +381,108 @@ export default class Widget extends Screen {
 
 	}
 
-	updateMultiWidgetPosition (positions, fromToolbar, boundingbox, hasCopies){
-		this.logger.log(-1,"updateMultiWidgetPosition", "enter > " + fromToolbar);
+	/**********************************************************
+	 * Responsive position change
+	 **********************************************************/
 
-		var command = {
+	updateMultiWidgetSizeResponsive (pos, resizeModel, fromToolbar, hasCopies, layoutContainerChange){
+		this.logger.log(2, "updateMultiWidgetSizeResponsive", "enter", fromToolbar, hasCopies);
+
+	
+		// 1) zoom & snapp pos
+		const zoom = this._canvas.getZoomFactor();
+		const unZoomedPos = this.getUnZoomedBox(lang.clone(pos),zoom, zoom);
+
+		// 2) make new resizeModel
+		const unzoomedResizeModel = this.getBoundingBox(resizeModel.children);
+		unzoomedResizeModel.children = resizeModel.children;
+					
+		// 3) call responsiveLayout
+		const responsiveLayouter = new ResponsiveLayout(1)
+       	responsiveLayouter.initSelection(this.model, unzoomedResizeModel, unzoomedResizeModel.children, true, true, false)
+		
+		this.startModelChange()
+
+		const newPositions = ResponsiveUtil.getResponsiveResizePositions(
+			unZoomedPos,
+			unzoomedResizeModel,
+			unzoomedResizeModel.children,
+			responsiveLayouter
+		);
+
+		let forceRenderForGridContainers = false
+		for (let id in newPositions) {
+			const pos = newPositions[id];
+			const widget = this.model.widgets[id];
+			// if we have a grid container, we force render
+			if (widget?.type === "GridContainer" || widget?.type === "FlexContainer") {
+				forceRenderForGridContainers = true
+			}
+
+			if (widget) {
+				widget.modified = new Date().getTime()
+				widget.x = pos.x;
+				widget.y = pos.y;
+				widget.w = pos.w;	
+				widget.h = pos.h;
+			} else {
+				console.warn('updateMultiWidgetSizeResponsive() > no widget', id)
+			}
+		}
+
+
+		if (fromToolbar || hasCopies || forceRenderForGridContainers) {
+			this.logger.log(-1,"updateMultiWidgetPosition", "exit > with render > forceRenderForGridContainers:", forceRenderForGridContainers);
+			this.render();
+		} else {
+			this.onWidgetPositionChange()
+		}
+
+		this.onModelChanged(Object.keys(newPositions).map(id => {
+			return {type: 'widget', action:"change", "prop": "position", id: id}
+		}))
+
+
+		this.commitModelChange()
+
+		//this.updateMultiWidgetPosition(positions, fromToolbar, boundingbox, hasCopies);
+	}
+
+
+
+	getSnappedBoundingBox(pos, boundingbox) {
+		const snapp = pos.snapp;
+		const unZoomedBoundingbox = this.getUnZoomedBox(boundingbox, this._canvas.getZoomFactor());
+		const screen = this.getHoverScreen(unZoomedBoundingbox);
+		if(screen && snapp?.type !== "All"){
+			this.snappResize(unZoomedBoundingbox,screen, pos, snapp)
+		}
+		return unZoomedBoundingbox
+	}
+
+
+	
+	/**********************************************************
+	 * Normal position change
+	 ******************************************************/
+
+	updateMultiWidgetPosition (positions, fromToolbar, boundingbox, hasCopies, layoutContainerChange){
+		this.logger.log(1,"updateMultiWidgetPosition", "enter > " + fromToolbar, layoutContainerChange);
+
+	
+	
+		this.startModelChange()
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "MultiCommand",
 			label : "UpdateMultiWidgetPos",
 			children :[]
 		};
 
-		var correctPosition = true;
+		let correctPosition = true;
 
-		if(boundingbox && boundingbox.snapp && boundingbox.type=="boundingbox"){
+		/**Not sure why I would have this check? Maybe from teh otehr alignment method */
+		if (boundingbox && boundingbox.snapp && (boundingbox.type === "boundingbox" || boundingbox?.isFlex)){
 
 			/**
 			 * So we got the position of the bounding box.
@@ -277,27 +501,27 @@ export default class Widget extends Screen {
 			 *
 			 * 7) surpress the normal position correction...
 			 */
-			var snapp = boundingbox.snapp;
-			if(snapp.type=="All"){
+			const snapp = boundingbox.snapp;
+			if (snapp.type=="All"){
 
 				/**
 				 * Get bounding box in model and also the offset
 				 */
-				var ids = [];
+				const ids = [];
 				for(let id in positions){
 					ids.push(id);
 				}
-				var modelBoundingBox = this.getBoundingBox(ids);
+				let modelBoundingBox = this.getBoundingBox(ids);
 
 
 				/**
 				 * Get bounding box in editor
 				 */
-				var boxes = [];
+				const boxes = [];
 				for(let id in positions){
 					boxes.push(positions[id]);
 				}
-				var b = this.getBoundingBoxByBoxes(boxes);
+				const b = this.getBoundingBoxByBoxes(boxes);
 				boundingbox.x = b.x;
 				boundingbox.y = b.y;
 
@@ -305,15 +529,11 @@ export default class Widget extends Screen {
 				 * Unzoomed
 				 */
 				boundingbox = this.getUnZoomedBox(lang.clone(boundingbox), this._canvas.getZoomFactor());
-				/**
-				 * FIXME, here was a bug that the corect* methdo was writting to a different variable
-				 */
-				boundingbox = this._correctBoundindBox(boundingbox, modelBoundingBox);
-
+				console.debug("updateMultiPle", boundingbox)
 				/**
 				 * Get hover screen
 				 */
-				var screen = this.getHoverScreen(boundingbox);
+				const screen = this.getHoverScreen(boundingbox);
 				if(screen) {
 					this.snappAll(modelBoundingBox, screen, boundingbox, snapp);
 				}
@@ -321,8 +541,8 @@ export default class Widget extends Screen {
 				/**
 				 * compare difference between snapped bbox and model bbox
 				 */
-				var difX = modelBoundingBox.x - boundingbox.x;
-				var difY = modelBoundingBox.y - boundingbox.y;
+				const difX = modelBoundingBox.x - boundingbox.x;
+				const difY = modelBoundingBox.y - boundingbox.y;
 				this.logger.log(0,"updateMultiWidgetPosition", "correct > " + difX + " > " + difY);
 				/**
 				 * Update move positions
@@ -337,35 +557,59 @@ export default class Widget extends Screen {
 				}
 				correctPosition = false;
 			}
+
+			
 		}
 
+		// fixme. Here something is super slow
 		for(let id in positions){
-			let pos = positions[id];
-			var child = this.createWidgetPositionCommand(id, pos, fromToolbar, correctPosition);
+			const pos = positions[id];
+			const child = this.createWidgetPositionCommand(id, pos, fromToolbar, correctPosition);
 			command.children.push(child);
-			this.modelWidgetUpdate(id, pos);
+			this.modelWidgetUpdate(id, pos, false);
 		}
+
+
+		const hasLayoutChange = this.updateLayoutContainers(layoutContainerChange, Object.keys(positions))
+		if (hasLayoutChange) {
+			Object.keys(positions).forEach(id => {
+				positions[id] = this.model.widgets[id]
+			})
+		}
+
 
 		this.addCommand(command);
 
 		/**
-		 * FIXME: We could show here some validation messages,
-		 * if all widgets are inside the thing.... Should be done in the
-		 * for loop.
+		 * We must render of the repositioning was called by the toolbar,
+		 * e.g. align. If it was from DND, not
 		 */
-
-		/**
-		 * Do not render
-		 */
-		if (fromToolbar || hasCopies) {
-			this.logger.log(-1,"updateMultiWidgetPosition", "exit > with render");
+		if (fromToolbar || hasCopies || hasLayoutChange) {
+			this.logger.log(1,"updateMultiWidgetPosition", "exit > with render");
 			this.render();
+		} else {
+			this.onWidgetPositionChange()
 		}
+	
+
+		this.checkTemplateAutoUpdate(Object.keys(positions).map(id => {
+			return {id: id, type:'widget', prop:'position', action:'change'} 
+		}))	
+
+		
+		this.onModelChanged(Object.keys(positions).map(id => {
+			return {type: 'widget', action:"change", "prop": "position", id: id}
+		}))
+
+		this.commitModelChange()
+
+		return positions
 	}
 
 	removeMultiWidget (selection){
-		this.logger.log(-1,"removeMultiWidget", "enter > ", selection);
+		this.logger.log(1,"removeMultiWidget", "enter > ", selection);
 		this.unSelect();
+		this.startModelChange()
 
 		let command = {
 			timestamp: new Date().getTime(),
@@ -374,35 +618,36 @@ export default class Widget extends Screen {
 			children: []
 		};
 
+		const positions  = []
 		for (let i=0; i < selection.length; i++){
 			let id = selection[i];
-			let widget = this.model.widgets[id];
-
+			let widget = this.model.widgets[id];	
+			positions.push(widget)
 			if (widget) {
-				let group = this.getParentGroup(id)
-
-				/**
-				 * Also check groups
-				 */
-				if (group) {
-					this.logger.log(-1,"removeMultiWidget", "remove group > ", group);
-					let groupRemoveCmd = this.createRemoveGroupCommand(group)
-					command.children.push(groupRemoveCmd);
-					this.modelRemoveGroup(group, groupRemoveCmd.line);
-				}
-
+				// create first the command,, whcih contain a group
 				let widgetRemoveCmd = this.createWidgetRemoveCommand(id);
 				command.children.push(widgetRemoveCmd);
-				this.modelRemoveWidgetAndLines(widget, widgetRemoveCmd.lines, widgetRemoveCmd.refs);
-
 			} else {
 				console.warn('removeMultiWidget() Could not find widget', id)
 			}
 		}
 
+		this.checkTemplateAutoUpdate(selection.map(id => {
+			return {id: id, type:'widget', action:'remove'}
+		}))
 
-		this.render();
+		// once all groups are stored, fire the commands.
+		command.children.forEach(cmd => {
+			this.modelRemoveWidgetAndLines(cmd.model, cmd.lines, cmd.refs, false, cmd.group);
+		})
+		
 		this.addCommand(command);
+
+		// layout everything
+		this.updateScreenLayout({positions})
+		
+		this.render();
+		this.commitModelChange()
 	}
 
 	/**********************************************************************
@@ -412,7 +657,7 @@ export default class Widget extends Screen {
 	setWidgetName (id, value){
 
 		if (value === '') {
-			this.logger.warn("setWidgetName", "exit EMPYT name > " + id);
+			this.logger.info("setWidgetName", "exit EMPYT name > " + id);
 			return
 		}
 
@@ -420,12 +665,12 @@ export default class Widget extends Screen {
 		/**
 		 * check first if there was really a change. This method might get called alot.
 		 */
-		var widget = this.model.widgets[id];
+		const widget = this.model.widgets[id];
 		if(widget && widget.name!= value){
 
 			this.logger.log(-1,"setWidgetName", "enter > " + id + " > " + value);
-
-			var command = {
+			this.startModelChange()
+			const command = {
 				timestamp : new Date().getTime(),
 				type : "WidgetName",
 				o :widget.name,
@@ -438,14 +683,21 @@ export default class Widget extends Screen {
 			 * do the model update
 			 */
 			this.modelWidgetName(id, value);
+			this.commitModelChange()
 		}
 
 	}
 
 	modelWidgetName (id, value){
-		var widget = this.model.widgets[id];
+		const widget = this.model.widgets[id];
 		if(widget){
 			widget.name = value;
+			if (this.model.templates && widget.isRootTemplate) {
+				const template = this.model.templates[widget.template]
+				if (template) {
+					template.name = value
+				}
+			}
 			this.onModelChanged([{type: 'widget', action:"change", id: id}])
 			this.onWidgetNameChange(widget)
 		}
@@ -467,14 +719,12 @@ export default class Widget extends Screen {
 	updateWidgetLabel(id, label){
 		this.logger.log(5,"updateWidgetLabel", "enter > " + id);
 
-		/**
-		 * make command
-		 */
-		var widget = this.model.widgets[id];
+		const widget = this.model.widgets[id];
 		if (widget) {
+			this.startModelChange()
 			let width = TextUtil.getTextWidth(label, widget)
-			this.logger.log(-1,"updateWidgetLabel", "enter > " + label + ' == ' + width);
-			var command = {
+			this.logger.log(-1,"updateWidgetLabel", "enter > " + label + ' => ' + width + 'px');
+			const command = {
 				timestamp : new Date().getTime(),
 				type : "WidgetLabel",
 				o: {
@@ -490,18 +740,23 @@ export default class Widget extends Screen {
 
 			this.modelUpdateWidgetText(id, label, width)
 			this.render();
+
+			this.checkTemplateAutoUpdate([{id: id, type:'widget', prop:'props', action:'change'}])
+			this.commitModelChange()	
+			return command;
+		} else {
+			this.logger.log(-1,"updateWidgetLabel", "no widget: ", id);
 		}
-		return command;
 	}
 
 	modelUpdateWidgetText(id, label, width) {
-		var widget = this.model.widgets[id];
+		const widget = this.model.widgets[id];
 		if (widget) {
 			widget.props.label = label
 			widget.w = width
+			this.logger.log(-1,"modelUpdateWidgetText", "width ", widget.w);
 			this.onModelChanged([{type: 'widget', action:"change", id: id}])
 		}
-
 	}
 
 	undoWidgetLabel (command){
@@ -523,17 +778,26 @@ export default class Widget extends Screen {
 
 
 
-	updateWidgetPosition (id, pos, fromToolbar, hasCopies){
+	updateWidgetPosition (id, pos, fromToolbar, hasCopies, layoutContainerChange){
 		this.logger.log(1,"updateWidgetPosition", "enter > " + id );
 
-		var command = this.createWidgetPositionCommand(id, pos,fromToolbar, true);
+		const widget = this.model.widgets[id];
+		if (!widget) {
+			this.logger.error("updateWidgetPosition", "No widget with id > " + id );
+			return
+		}
+
+		this.startModelChange()
+		/**
+		 * This also correct the positoin
+		 */
+		const command = this.createWidgetPositionCommand(id, pos,fromToolbar, true);
 		this.addCommand(command);
 
 		/**
 		 * get the old screen
 		 */
-		var widget = this.model.widgets[id];
-		var oldScreen = this.getHoverScreen(widget);
+		const oldScreen = this.getHoverScreen(widget);
 
 		/**
 		 * Update the model
@@ -541,9 +805,17 @@ export default class Widget extends Screen {
 		this.modelWidgetUpdate(id, pos);
 
 		/**
+		 * Check and Update FlexStuff if needed
+		 */
+		const hasLayoutChange = this.updateLayoutContainers(layoutContainerChange, [id])
+		if (hasLayoutChange) {
+			pos = this.model.widgets[id]
+		}
+
+		/**
 		 * show message
 		 */
-		var newScreen = this.getHoverScreen(widget);
+		const newScreen = this.getHoverScreen(widget);
 		if(newScreen){
 			if(!oldScreen || (oldScreen && oldScreen.id != newScreen.id)){
 				this.showSuccess("Great! A new widget was added to screen "+ newScreen.id);
@@ -562,17 +834,23 @@ export default class Widget extends Screen {
 		 * FIXME: If we call render directly after and DnD from Canvas We have huge bumps.
 		 * Somehow the GridRuler rounds the grid stupid
 		 */
-		if(fromToolbar || hasCopies){
+		if(fromToolbar || hasCopies || hasLayoutChange){
 			this.render();
 		} else {
 			this.onWidgetPositionChange()
 		}
+
+		const prop = pos?.snapp?.type === 'All' ? 'position' : 'resize'
+		this.checkTemplateAutoUpdate([{id: id, type:'widget', prop:prop, action:'change'}])
+		this.commitModelChange()		
 		return pos;
 	}
 
+	
 
 	createWidgetPositionCommand (id, pos,fromToolbar, correctPosition){
 
+	
 		/**
 		 * get the correct coordinates in the
 		 * un-zoomed model or do the snapping to
@@ -585,9 +863,9 @@ export default class Widget extends Screen {
 		/**
 		 * make command
 		 */
-		var widget = this.model.widgets[id];
-		var delta = this.getDeltaBox(widget, pos);
-		var command = {
+		const widget = this.model.widgets[id];
+		const delta = this.getDeltaBox(widget, pos);
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "WidgetPosition",
 			delta :delta,
@@ -597,254 +875,9 @@ export default class Widget extends Screen {
 		return command;
 	}
 
-	correctPostion (id, pos, fromToolbar){
-
-		if(!fromToolbar){
-			pos = this.getUnZoomedBox(pos, this._canvas.getZoomFactor());
-		}
-
-		if(pos.snapp){
-			/**
-			 * Group snapps do not have a .snapp object
-			 */
-			var snapp = pos.snapp;
-			var screen = this.getHoverScreen(pos);
-			var widget = this.model.widgets[id];
-			if(screen && widget) {
-				if(snapp.type=="All"){
-					this.snappAll(widget,screen, pos, snapp);
-				}else {
-					this.snappResize(widget,screen, pos, snapp)
-				}
-			}
-		}
-		return pos;
-	}
-
-	snappResize (widget,screen, pos, snapp){
-		this.logger.log(0,"snappResize", "enter > " + snapp.type);
-		var type = snapp.type;
-
-
-		if(snapp.x || snapp.y){
-			/**
-			 * We have snapping, so we ensure here that the all not changed values stay the same.
-			 * hence we copy the values form the unzoomed model and update only the snapped
-			 * values
-			 */
-			if(snapp.x){
-				let line = snapp.x;
-				let x = this.getSnappXValue(line, screen);
-
-				if(type=="RightDown" || type=="RightUp" || type =="East"){
-					pos.w = x - widget.x;
-					/**
-					 * Snapp pos.x to old x to avoid jumps
-					 */
-					pos.x = widget.x;
-				} else if(type=="LeftUp" || type=="LeftDown" || type =="West"){
-					pos.w = widget.w+ (widget.x -x);
-					pos.x = x;
-				} else {
-					console.warn("snappResize() : X with unsupported type", type, snapp.x);
-				}
-
-
-			}
-
-			if(snapp.y){
-				let line = snapp.y;
-				let y = this.getSnappYValue(line, screen);
-				if(type=="RightDown" || type=="South" || type =="LeftDown"){
-					pos.h = y - widget.y;
-					/**
-					 * Snapp pos.y to old y to avoid jumps
-					 */
-					pos.y = widget.y;
-				} else if(type=="LeftUp" || type=="RightUp" || type =="North"){
-					pos.h = widget.h+ (widget.y -y);
-					pos.y = y;
-				} else {
-					console.warn("snappResize() : X with unsupported type", type, snapp.x);
-				}
-			}
-		}
-
-
-		/**
-		 * If there is no snapp, there might be a pos.x / pos.y value that has been updated
-		 * in the canvas and has a pixel rounding error because of zooming. This we stop here
-		 */
-		if(type == "South" || type=="North"){
-			pos.x = widget.x;
-		}
-
-		if(type == "East" || type=="West"){
-			pos.y = widget.y;
-		}
-
-		if(snapp.square){
-			var min = Math.min(pos.w, pos.h);
-			pos.h = min;
-			pos.w = min;
-		}
-	}
-
-	snappAll (widget,screen, pos, snapp){
-		this.logger.log(0,"snappAll", "enter > ");
-
-		if(snapp.x){
-			pos.x = widget.x;
-			pos.w = widget.w;
-			let line = snapp.x;
-			let x = this.getSnappXValue(line, screen);
-			if (x > 0) {
-				if(snapp.x.middle){
-					/**
-					 * Should not happen for grid lines and groups!
-					 * We filter before so no problem...
-					 */
-					pos.x = x - Math.floor(pos.w/2);
-				} else if(snapp.left){
-					pos.x = x;
-				} else {
-					pos.x = x - pos.w;
-				}
-			} else {
-				this.logger.error("snappAll", " getSnappXValue return 0");
-			}
-		}
-
-		if(snapp.y){
-			let line = snapp.y;
-			pos.y = widget.y;
-			pos.h = widget.h;
-			let y = this.getSnappYValue(line, screen);
-			if (y > 0) {
-				if(snapp.y.middle){
-					/**
-					 * Should not happen for grid lines and groups!
-					 */
-					pos.y = y - Math.floor(pos.h/2);
-				} else if(snapp.top){
-					pos.y = y;
-				} else {
-					pos.y = y - pos.h;
-				}
-			} else {
-				this.logger.error("snappAll", " getSnappYValue return 0");
-			}
-		}
-	}
-
-	getSnappXValue (line, screen){
-		if("Grid" == line.type){
-
-			if (line.column === true){
-
-				var columnCount = this.model.grid.columnCount * 1;
-				var columnOffset = this.model.grid.columnOffset * 1;
-				var columnGutter = this.model.grid.columnGutter * 1;
-				var columnWidth =  this.model.grid.columnWidth * 1;
-
-				/**
-				 * FIXME: we reproduce here the method from the rendering and GridAndRuler...
-				 */
-				var count = 0;
-				var lastX = columnOffset;
-				for (let i=0; i< columnCount; i++){
-					if (line.line == count){
-						return (screen.x + lastX);
-					}
-					count++;
-					let x = lastX + columnWidth;
-					if (line.line == count){
-						return (screen.x + x);
-					}
-					count++;
-					lastX = x + columnGutter;
-				}
-				return (screen.x + screen.w);
-			} else {
-				return (screen.x + this.model.grid.w * line.line);
-			}
-
-		} else if("Screen" == line.type || "Widget" == line.type){
-			let box = this.getBoxById(line.id);
-			return this.getSnappValue(box, line);
-		} else if ("Mirror" == line.type) {
-			let box = this.getBoxById(line.id);
-			let difX = box.x - screen.x;
-			return (screen.x + screen.w) - difX
-		} else if ("Ruler" == line.type) {
-			let rulers = this.getAllRulers(this.model, screen)
-			if (rulers) {
-				let ruler = rulers.find(r => r.id === line.id)
-				if (ruler) {
-					return screen.x + ruler.v
-				} else {
-					this.logger.error("getSnappXValue", "No ruler with id " + line.id);
-					this.logger.sendError(new Error('Could not snapp to X ruler'));
-				}
-			}
-		} else {
-			console.warn("getSnappXValue() >Unsupported snapp type for x", line.type);
-		}
-		return 0;
-	}
-
-	getSnappYValue (line, screen){
-		if("Grid" == line.type){
-			return (screen.y + (this.model.grid.h * line.line));
-		}else if("Screen" == line.type || "Widget" == line.type){
-			let box = this.getBoxById(line.id);
-			return this.getSnappValue(box, line);
-		} else if ("Mirror" == line.type) {
-			let box = this.getBoxById(line.id);
-			let difY = box.y - screen.y;
-			return (screen.y + screen.h) - difY
-		} else if ("Ruler" == line.type) {
-			let rulers = this.getAllRulers(this.model, screen)
-			if (rulers) {
-				let ruler = rulers.find(r => r.id === line.id)
-				if (ruler) {
-					return screen.y + ruler.v
-				} else {
-					this.logger.error("getSnappYValue", "No ruler with id " + line.id);
-					this.logger.sendError(new Error('Could not snapp to Y ruler'));
-				}
-			}
-		} else {
-			console.warn("getSnappYValue() > Unsupported snapp type for ", line.type);
-		}
-		return 0;
-	}
-
-	getSnappValue(box, line){
-		var pos = line.pos;
-		switch(pos){
-			case "top":
-				return box.y;
-			case "bottom":
-				return box.y + box.h;
-			case "left":
-				return box.x;
-			case "right":
-				return box.x+ box.w;
-			case "middleY":
-				return box.y+ Math.round(box.h/2);
-			case "middleX":
-				return box.x+ Math.round(box.w/2);
-			default:
-				console.warn("Not supported line position", pos, line);
-		}
-		return 0;
-	}
-
-
-
-	modelWidgetUpdate (id, pos){
-		var widget = this.model.widgets[id];
+	
+	modelWidgetUpdate (id, pos, callModelChange = true){
+		const widget = this.model.widgets[id];
 		widget.modified = new Date().getTime()
 
 		/**
@@ -870,7 +903,7 @@ export default class Widget extends Screen {
 		/**
 		 * update parent screen
 		 */
-		var screen = this.getHoverScreen(widget);
+		const screen = this.getHoverScreen(widget);
 		if(screen){
 			screen.children.push(widget.id);
 		}
@@ -878,7 +911,10 @@ export default class Widget extends Screen {
 		/**
 		 * call model change
 		 */
-		this.onModelChanged([{type: 'widget', action:"change", id: id}])
+		if (callModelChange) {
+			this.onModelChanged([{type: 'widget', action:"change", "prop": "position", id: id}])
+		}
+
 	}
 
 	undoWidgetPosition (command){
@@ -905,10 +941,9 @@ export default class Widget extends Screen {
 	}
 
 	cleanUpGroup (widget){
-
-		var currentGroup = this.getParentGroup(widget.id);
+		let currentGroup = this.getParentGroup(widget.id);
 		if(currentGroup){
-			var i = currentGroup.children.indexOf(widget.id);
+			let i = currentGroup.children.indexOf(widget.id);
 			if(i != -1) {
 				this.logger.log(2,"cleanUpGroup", "remove " + widget.id  +" from " + currentGroup.id);
 				currentGroup.children.splice(i, 1);
@@ -916,49 +951,75 @@ export default class Widget extends Screen {
 		}
 	}
 
+	
+
 	/**********************************************************************
 	* Widget props
 	**********************************************************************/
+
 	updateWidgetProperties (id, props, type, doNotRender, forceCompleteRender = false){
-		this.logger.log(-1,"updateWidgetProperties", "enter > " + type+ " > doNotRender: "+ doNotRender);
+		this.logger.log(1,"updateWidgetProperties", "enter > " + type+ " > doNotRender: "+ doNotRender);
+		this.startModelChange()
 
-		/**
-		* make command
-		*/
-		var widget = this.model.widgets[id];
-		var command = this.createWidgetPropertiesCommand(id, props, type);
-		var inlineEdit = this.getInlineEdit();
 
+		const widget = this.model.widgets[id];
+
+
+		this.removeOverwrittenDesignTokens(widget, props, type)
+
+
+
+		const oldWidget = lang.clone(widget);
+
+		const command = this.createWidgetPropertiesCommand(id, props, type);
+		const inlineEdit = this.getInlineEdit();
 		if(command){
-			this.addCommand(command);
+			this.addCommand(command);	
 			this.modelWidgetPropertiesUpdate(id, props, type, doNotRender);
+			this.updateLayoutContainerChange(oldWidget)
 		}
-
+	
 		if(!doNotRender){
+			// fast if not templates
 			this.renderWidget(widget, type);
 		}
 
 		if (inlineEdit) {
 			this.logger.log(-1,"updateWidgetProperties", "force rerender because of inline edit");
-			this.render();
+			forceCompleteRender = true
+			//this.render();
 		}
+
+		
+		const parent = this.getTreeParent(id)
+		if (this.flexChildPropsHaveChanged(props) && LayoutContainerUtil.isLayoutContainerWidget(parent)) {
+			this.logger.log(-1,"updateWidgetProperties", "FlexChild");
+			this.updateScreenLayout({widget})
+			forceCompleteRender = true
+		}
+		
 
 		if (forceCompleteRender) {
 			this.logger.log(-1,"updateWidgetProperties", "force rerender !");
 			this.render()
 		}
+
+		this.checkTemplateAutoUpdate([{id: id, type:'widget', action:'change', prop:type}])
+		this.commitModelChange()
 	}
 
+
+
 	createWidgetPropertiesCommand (id, props, type, inlineLabel){
-		var widget = this.model.widgets[id];
+		const widget = this.model.widgets[id];
 		if (widget){
 			if (!widget[type]){
 				this.logger.log(0,"createWidgetPropertiesCommand", "add key > " + type);
 				widget[type]={};
 			}
 
-			var delta = this.getPropertyDelta(widget, props, type);
-			var command = {
+			const delta = this.getPropertyDelta(widget, props, type);
+			const command = {
 				timestamp : new Date().getTime(),
 				type : "WidgetProperties",
 				delta :delta,
@@ -974,12 +1035,12 @@ export default class Widget extends Screen {
 	}
 
 	modelWidgetPropertiesUpdate (id, props, type){
-		this.logger.log(1,"modelWidgetPropertiesUpdate", "enter > " + id+ " > " + type);
+		this.logger.log(1,"modelWidgetPropertiesUpdate", "enter > " + id+ " > " + type, props);
 
-		var widget = this.model.widgets[id];
+		const widget = this.model.widgets[id];
 		if(widget && widget[type]){
 			widget.modified = new Date().getTime()
-			for(var p in props){
+			for(let p in props){
 				widget[type][p] = props[p];
 			}
 		}else {
@@ -1003,62 +1064,73 @@ export default class Widget extends Screen {
 	}
 
 	/**********************************************************************
-		* Widget add
-		**********************************************************************/
-
+	 * Widget add
+	 **********************************************************************/
 	addWidget (model, pos, fromTool){
-		this.logger.log(0,"addWidget", "enter > " + fromTool);
+		this.logger.log(-1,"addWidget", "enter > " + fromTool);
 
+		this.startModelChange()
 		pos = this.getUnZoomedBox(pos, this._canvas.getZoomFactor());
-		var targetScreen = this.getHoverScreen(pos);
+		const targetScreen = this.getHoverScreen(pos);
 
 		/**
-			* Create the model. Attention! The passed model might say that it was from a
-			* template. In that case we need to create a templated model! We assume the
-			* template exists!
-			*/
-		var widget = this._createWidgetModel(model);
+		 * Create the model. Attention! The passed model might say that it was from a
+		 * template. In that case we need to create a templated model! We assume the
+		 * template exists!
+		 */
+		const widget = this._createWidgetModel(model);
 		if (targetScreen) {
 			widget.name = this.getWidgetName(targetScreen.id, widget.name);
 		}
 		widget.id = "w"+this.getUUID();
-		widget.z = this.getMaxZValue(this.model.widgets) + 1;
-
+		widget.z = this.getMaxZValue(this.model.widgets) + 1;		
 		widget.x =  pos.x;
 		widget.y =  pos.y;
-		if(fromTool){
+		if( fromTool){
 			widget.w =  pos.w;
 			widget.h =  pos.h;
 		}
 
-		var command = this._createAddWidgetCommand(widget);
+		// make sure there is one root template
+		if (widget.template && this.model.templates) {
+			let template = this.model.templates[widget.template]
+			if (template) {
+				this.setRootTemplateIfNeeded(widget, template)
+			}
+		}
+
+		const command = this._createAddWidgetCommand(widget);
 		this.addCommand(command);
 
 		/**
-			* Update model
-			*/
+		 * Update model
+		 */
 		this.modelAddWidget(widget);
 
-		this.render();
+		
+		/**
+		 * Fix the flex and so
+		 */
+		this.updateScreenLayout({pos})
 
-		var screen = this.getHoverScreen(widget);
+		this.render();
+		const screen = this.getHoverScreen(widget);
 		if(screen){
 			this.showSuccess("Great! A new widget was added to screen "+ screen.id);
 		} else {
 			if(widget.has && !widget.has.logic){
-				this.showError("Great! A new widget was added, tut is does not belong to any screen! It will not be shown in the simulator.");
+				this.showError("Great! A new widget was added, but is does not belong to any screen! It will not be shown in the simulator.");
 			}
 		}
-
+		this.commitModelChange()
 		return widget;
-
 	}
 
 	_createAddWidgetCommand (widget){
 		/**
-			* create the command
-			*/
-		var command = {
+		 * create the command
+		 */
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "AddWidget",
 			model : widget
@@ -1068,9 +1140,9 @@ export default class Widget extends Screen {
 
 
 	/**
-		* create the new model. the model element must have a parameter "type",
-		* "template" or "theme"!
-		*/
+	 * create the new model. the model element must have a parameter "type",
+	 * "template" or "theme"!
+	 */
 	_createWidgetModel (model){
 
 		/**
@@ -1089,6 +1161,7 @@ export default class Widget extends Screen {
 		if(!this.model.widgets[widget.id]){
 			widget.created = new Date().getTime()
 			this.model.widgets[widget.id] = widget;
+			this.onElementCreated(widget)
 		} else {
 			console.warn("Could not add widget because id wxists", widget);
 		}
@@ -1096,13 +1169,10 @@ export default class Widget extends Screen {
 		/**
 		* also check if we have dropped on a screen
 		*/
-		var screen = this.getHoverScreen(widget);
+		const screen = this.getHoverScreen(widget);
 		if (screen){
 			screen.children.push(widget.id);
 		}
-
-		// this.setParentWidgets(widget)
-
 		if(!ignoreModelChange){
 			this.onModelChanged([{type: 'widget', action:"add", id: widget.id}]) // pass teh screen as well?
 		}
@@ -1123,48 +1193,54 @@ export default class Widget extends Screen {
 
 	undoAddWidget (command){
 		this.logger.log(3,"undoAddWidget", "enter > " + command.id);
-		var widget = command.model;
+		const widget = command.model;
 		this.modelRemoveWidget(widget);
 		this.render();
 	}
 
 	redoAddWidget (command){
 		this.logger.log(3,"redoAddWidget", "enter > " + command.id);
-		var widget = command.model;
+		const widget = command.model;
 		this.modelAddWidget(widget);
 		this.render();
 	}
 
 
 	/**********************************************************************
-		* Widget remove
-		**********************************************************************/
+	* Widget remove
+	**********************************************************************/
 
 	removeWidget (id){
 		this.logger.log(3,"removeWidget", "enter > " +id);
+		const widget = this.model.widgets[id];
+		if (widget) {
+			this.startModelChange()
+			const command = this.createWidgetRemoveCommand(id);
+			this.addCommand(command);
+			this.unSelect();
+			this.checkTemplateAutoUpdate([{id: id, type:'widget', action:'remove'}])
+			this.modelRemoveWidgetAndLines(command.model, command.lines, command.refs, false, command.group);
 
-		var command = this.createWidgetRemoveCommand(id);
-		this.addCommand(command);
-
-		var widget = this.model.widgets[id];
-		var lines = this.getLines(widget);
-		var refs = this.getReferences(widget);
-
-		this.unSelect();
-		this.modelRemoveWidgetAndLines(widget, lines, refs);
-		this.render();
+			// layout screen
+			this.updateScreenLayout({widget})
+			this.render();
+			this.commitModelChange()
+		}
+		
 	}
 
 	createWidgetRemoveCommand (id){
-		var widget = this.model.widgets[id];
-		var lines = this.getLines(widget);
-		var refs = this.getReferences(widget);
-
+		const widget = this.model.widgets[id];
+		const lines = this.getLines(widget);
+		const refs = this.getReferences(widget);
+		const group = this.getParentGroup(widget.id)
+	
 		var command = {
 			timestamp : new Date().getTime(),
 			type : "RemoveWidget",
-			model :widget,
-			lines : lines,
+			model: widget,
+			lines: lines,
+			group: lang.clone(group),
 			refs : refs,
 			modelId : id
 		};
@@ -1198,8 +1274,8 @@ export default class Widget extends Screen {
 		return result;
 	}
 
-	modelRemoveWidgetAndLines (widget, lines, refs, doNotCallModelChanged){
-
+	modelRemoveWidgetAndLines (widget, lines, refs, doNotCallModelChanged, group){
+	
 		if (this.model.widgets[widget.id]) {
 			delete this.model.widgets[widget.id];
 			this.cleanUpParent(widget);
@@ -1243,6 +1319,18 @@ export default class Widget extends Screen {
 			console.warn("modelRemoveWidgetAndLines() > Missing refs parameter");
 		}
 
+		if (group) {
+			const groupId = group.id
+			if (this.model.groups && this.model.groups[groupId]) {
+				group = this.model.groups[groupId]
+				group.children = group.children.filter(id => id!== widget.id)
+				// remove not needed groups before the model fixer will do
+				if (group.children.length === 0) {
+					delete this.model.groups[groupId]
+				}
+			}
+		}
+
 		if(!doNotCallModelChanged){
 			this.onModelChanged([])
 		}
@@ -1251,15 +1339,15 @@ export default class Widget extends Screen {
 	}
 
 
-	modelAddWidgetAndLines (widget, lines, refs){
+	modelAddWidgetAndLines (widget, lines, refs, group){
 
 		if(!this.model.widgets[widget.id]){
 			this.model.widgets[widget.id] = widget;
 
 			/**
-				* also check if we have dropped on a screen
-				*/
-			var screen = this.getHoverScreen(widget);
+			 * also check if we have dropped on a screen
+			 */
+			const screen = this.getHoverScreen(widget);
 			if(screen){
 				screen.children.push(widget.id);
 			}
@@ -1306,46 +1394,92 @@ export default class Widget extends Screen {
 			console.warn("modelAddWidgetAndLines() > Missing lines parameter");
 		}
 
+
+		if (group) {
+			if (!this.model.groups) {
+				this.model.groups = {}
+			}
+			this.model.groups[group.id] = group
+		}
+
 		this.onModelChanged([]);
 	}
 
 
 	undoRemoveWidget (command){
-		var widget = command.model;
-		this.modelAddWidgetAndLines(widget, command.lines, command.refs);
+		const widget = command.model;
+		this.modelAddWidgetAndLines(widget, command.lines, command.refs, command.group);
 		this.render();
 	}
 
 	redoRemoveWidget (command){
-		var widget = command.model;
-		this.modelRemoveWidgetAndLines(widget, command.lines, command.refs);
+		const widget = command.model;
+		this.modelRemoveWidgetAndLines(widget, command.lines, command.refs, false, command.group);
 		this.render();
 	}
 
 
 	/**********************************************************************
-		* Add Multi Widgets (from uplaod)
-		**********************************************************************/
+	 * Add Multi Widgets (from uplaod)
+	 **********************************************************************/
 
-	addMultiImageWidgets (widgets, parentScreen){
-		this.logger.log(0,"addMultiImageWidgets", "enter > " + parentScreen.name);
+	addMultiWidgets (widgets){
+		this.logger.log(0,"addMultiImageWidgets", "enter > ");
 
-		var command = {
+		this.startModelChange()
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "MultiCommand",
 			label : "addMultiImageWidgets",
 			children :[]
 		};
 
-		let z = this.getMaxZValue(this.model.widgets) + 1;
+		const z = this.getMaxZValue(this.model.widgets) + 1;
+		const positions = []
+		for (let i=0; i< widgets.length; i++){
+			const widget = widgets[i];
+			widget.id = "w"+this.getUUID();
+			widget.z = z + 1 + i
+			const child = {
+				timestamp : new Date().getTime(),
+				type : "AddWidget",
+				model : widget
+			};
+			command.children.push(child);
+			positions.push(child)
+			this.modelAddWidget(widget);
+		}
+
+		this.addCommand(command);
+
+		// render on multi enter
+		this.updateScreenLayout({positions})
+
+		this.render();
+		this.commitModelChange()
+	}
+
+
+	addMultiImageWidgets (widgets){
+		this.logger.log(0,"addMultiImageWidgets", "enter > ");
+
+		this.startModelChange()
+		const command = {
+			timestamp : new Date().getTime(),
+			type : "MultiCommand",
+			label : "addMultiImageWidgets",
+			children :[]
+		};
+
+		const z = this.getMaxZValue(this.model.widgets) + 1;
 		for (let i=0; i< widgets.length; i++){
 			/**
 				* Set id
 				*/
-			var widget = widgets[i];
+			const widget = widgets[i];
 
-			var img = widget.style.backgroundImage;
-			var scaleRatio = img.h / img.w;
+			const img = widget.style.backgroundImage;
+			const scaleRatio = img.h / img.w;
 
 			widget.id = "w"+this.getUUID();
 			widget.z = z + 1 + i
@@ -1360,47 +1494,41 @@ export default class Widget extends Screen {
 
 			widget.h = Math.floor(widget.w * scaleRatio);
 
-
-			/**
-				* Create Child Command
-				*/
-			var child = {
+			const child = {
 				timestamp : new Date().getTime(),
 				type : "AddWidget",
 				model : widget
 			};
 			command.children.push(child);
-
-			/**
-				* update model
-				*/
 			this.modelAddWidget(widget);
 		}
 
 		this.addCommand(command);
 
 		this.render();
-
+		this.commitModelChange()
 	}
 
 	/**********************************************************************
-		* Widget name
-		**********************************************************************/
+	* Widget Z
+	**********************************************************************/
 
 	setWidgetLayers (zValues){
 		this.logger.log(0,"setWidgetLayers", "enter > ");
-
-		var old = {};
-		var widgets = this.model.widgets;
-		for(var id in widgets){
-			var newZ = zValues[id];
-			var widget = widgets[id];
+		this.startModelChange()
+		const old = {};
+		const widgets = this.model.widgets;
+		const positions = []
+		for(let id in widgets){
+			const newZ = zValues[id];
+			const widget = widgets[id];
 			if(widget.z != newZ){
 				old[id] = widget.z;
 			}
+			positions.push(widget)
 		}
 
-		var command = {
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "WidgetLayers",
 			o : old,
@@ -1410,29 +1538,35 @@ export default class Widget extends Screen {
 		this.addCommand(command);
 		this.modelWidgetLayers(zValues);
 
+		// render on multi enter
+		this.updateScreenLayout({positions})
+
+		this.render();
+		this.commitModelChange()
 	}
 
 	modelWidgetLayers (zValues){
-		var widgets = this.model.widgets;
-		let modified = new Date().getTime()
-		for(var id in zValues){
-			var widget = widgets[id];
-			widget.modified = modified
+		const widgets = this.model.widgets;
+		const modified = new Date().getTime()
+		for(let id in zValues){
+			const widget = widgets[id];
 			if(widget){
+				widget.modified = modified
 				widget.z = zValues[id];
 			} else {
-				console.warn("Could not set z Valoue for ", id);
+				console.warn("modelWidgetLayers() > Could not set z Valoue for ", id);
 			}
 		}
 		this.onModelChanged([]);
-		this.render();
 	}
 
 	undoWidgetLayers (command){
 		this.modelWidgetLayers(command.o);
+		this.render();
 	}
 
 	redoWidgetLayers (command){
 		this.modelWidgetLayers(command.n);
+		this.render();
 	}
 }

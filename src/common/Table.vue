@@ -12,6 +12,7 @@ import lang from "dojo/_base/lang";
 import touch from "dojo/touch";
 import Logger from "common/Logger";
 import DomBuilder from "common/DomBuilder";
+import {iconDOM} from "../page/QIconUtil";
 
 export default {
   name: "Table",
@@ -57,6 +58,7 @@ export default {
     setValue: function(data) {
       this.logger.log(8, "setValue", "entry");
       this.rows = data;
+      this.totalCount = data.length
       this.render();
       this.logger.log(10, "setValue", "exit");
     },
@@ -76,7 +78,7 @@ export default {
 
       var db = new DomBuilder();
 
-      var table = db.table("table is-hoverable").build();
+      var table = db.table("vommondTable table is-hoverable").build();
 
       this.renderHeader(table, db);
 
@@ -115,10 +117,10 @@ export default {
           if (this.sortBy == column.query) {
             if (this.order) {
               span.innerHTML =
-                '<span class="glyphicon glyphicon-chevron-up"></span>';
+                '<span class="mdi mdi-chevron-up"></span>';
             } else {
               span.innerHTML =
-                '<span class="glyphicon glyphicon-chevron-down"></span';
+                '<span class="mdi mdi-chevron-down"></span';
             }
           } else {
             span.innerHTML = " ";
@@ -181,7 +183,7 @@ export default {
             let a = db.a(action.css, action.label).build(td);
 
             if (action.icon) {
-              db.span(action.icon, "").build(a);
+              a.appendChild(iconDOM(action.icon))
             }
             if (action.callback) {
               this.tempOwn(
@@ -218,7 +220,7 @@ export default {
 
     createPagging: function() {
       this.logger.log(
-        3,
+        -3,
         "createPagging",
         "entry > total : " +
           this.totalCount +

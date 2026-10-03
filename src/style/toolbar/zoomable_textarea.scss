@@ -1,0 +1,268 @@
+@import "../variables.scss";
+
+@property --matc-zoomable-border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes MatcZoomableBorderRotate {
+  to {
+    --matc-zoomable-border-angle: 360deg;
+  }
+}
+
+.MatcAiChat {
+  .MatcAiChatFooter {
+    .MatcZoomableTextArea {
+      height: 128px;
+      width: 100%;
+
+      .MatcZoomableTextAreaBackdrop {
+        transition: all, 0.2s;
+        height: 100%;
+      }
+
+      .MatcQIconSVG {
+        width: 14px;
+        height: 14px;
+        transition: opacity 0.2s;
+        opacity: 0.5;
+        cursor: pointer;
+        &:hover {
+          opacity: 1;
+        }
+      }
+
+      .MatcZoomableTextAreaIconInput {
+        padding: 4px;
+      }
+
+      .MatcZoomableTextAreaCloseIcon {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+      }
+
+      .MatcZoomableTextAreaActionInfo{
+        opacity: 0.5;
+        padding: 0px 16px;
+      }
+
+      .MatcZoomableTextAreaAction {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+       
+        .MatcZoomableTextAreaActionIcons {
+          display: flex;
+          align-items: center;
+        }
+      }
+
+      .MatcZoomableTextAreaActionSend{
+        background: $primary_color;
+        color:#fff;
+        border-radius: 50%;
+        .MatcQIconSVG {
+          opacity: 1;
+        }
+      }
+
+      textarea {
+        border-radius: $toolbar_form_radius;
+        width: 100%;
+        height: calc(100% - 24px);
+        padding-bottom: 32px;
+        padding-right: 16px;
+        scroll-padding: 24px;
+        line-height: 1.4;
+      }
+
+      .MatcZoomableTextAreaActionPopup {
+        position: relative;
+        margin-left: 4px;
+
+        .MatcZoomableTextAreaActionPopupLabel {
+          opacity: 0.5;
+          cursor: pointer;
+          font-size: $font-size-xxs;
+          white-space: nowrap;
+          transition: opacity 0.2s;
+          margin-left: 8px;
+
+          &::after {
+            content: "";
+            display: inline-block;
+            margin-left: 4px;
+            margin-top: 1px;
+            width: 5px;
+            height: 5px;
+            transform: rotate(45deg);
+            border: none;
+            border-left: 1px solid currentColor;
+            border-top: 1px solid currentColor;
+            vertical-align: middle;
+            transition: all 0.2s;
+          }
+
+          &:hover,
+          &.MatcZoomableTextAreaActionPopupLabelActive {
+            opacity: 1;
+          }
+
+          &.MatcZoomableTextAreaActionPopupLabelActive::after {
+            margin-top: -2px;
+            transform: rotate(225deg);
+          }
+        }
+
+        .MatcZoomableTextAreaActionPopupMenu {
+          position: absolute;
+          bottom: calc(100% + 8px);
+          left: 0%;
+          margin: 0;
+          min-width: 130px;
+          list-style: none;
+          border-radius: $popup_radius;
+          box-shadow: $page_drop_shadow_more;
+          z-index: 10;
+          overflow: hidden;
+
+          &::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            right: 12px;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid $popup_background;
+          }
+
+          li {
+            padding: 6px 8px;
+            font-size: $font-size-xxs;
+            white-space: nowrap;
+            cursor: pointer;
+          }
+        }
+      }
+    }
+  }
+
+  .MatcZoomableTextAreaMax .MatcZoomableTextAreaBackdrop {
+    position: fixed;
+    top: 0px;
+    left: 0px;
+    height: 100%;
+    width: 100%;
+    background: #33333374;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+
+  
+    .MatcZoomableTextAreaActionIcons {
+      display: none;
+    }
+
+    .MatcZoomableTextAreaIconInput,
+    .MatcZoomableTextAreaIconInput:hover,
+    .MatcZoomableTextAreaIconInput.MatcToobarInputFocus {
+      width: 400px;
+      box-shadow: 0px 0px 24px rgba(0, 0, 0, 0.1);
+      background: #fff;
+      height: 320px;
+      border-radius: 8px;
+      border: none;
+
+      textare {
+        font-size: 16px;
+      }
+
+      // keep the rotating gradient ring for the toolbar-sized input only
+      &::before {
+        display: none;
+      }
+    }
+    textarea.MatcToobarInputBorder {
+      height: 256px;
+      border: 0px;
+      border: none;
+      padding: 16px;
+      font-size: 16px;
+
+      &:focus {
+        background: none;
+      }
+    }
+  }
+}
+
+.MatcZoomableTextAreaMax.MatcZoomableTextArea{
+    border-radius: 8px;
+}
+
+
+.MatcAiChat .MatcAiChatFooter .MatcZoomableTextAreaMax textarea {
+  font-size: 16px;
+}
+
+.MatcZoomableTextAreaDisabled .MatcZoomableTextAreaIconInput {
+  cursor: progress;
+  > * {
+    visibility: hidden;
+  }
+}
+
+.MatcZoomableTextAreaIconInput {
+  height: 100%;
+  position: relative;
+  border-radius: $toolbar_form_radius;
+
+  // Same 1px border as MatcToobarInputBorder by default, but on focus
+  // it is hidden and replaced by a rotating blue gradient ring below.
+  &.MatcToobarInputFocus {
+    border-color: transparent;
+    background: $toolbar_form_background_hover;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      box-sizing: border-box;
+      border-radius: inherit;
+      padding: 1px;
+      background: conic-gradient(
+        from var(--matc-zoomable-border-angle),
+        #123f76 0deg,
+        $primary_color 90deg,
+        #a210ad 180deg,
+        $primary_color 270deg,
+        #123f76 360deg
+      );
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: MatcZoomableBorderRotate 3s linear infinite;
+      pointer-events: none;
+    }
+  }
+}
+
+.MatcLight .MatcToobarInputFocus {
+  &::before {
+    background: conic-gradient(
+        from var(--matc-zoomable-border-angle),
+        #e50df4 0deg,
+        $primary_color 90deg,
+        #3b8aea 180deg,
+        $primary_color 270deg,
+        #e50df4 360deg
+      );
+  }
+}

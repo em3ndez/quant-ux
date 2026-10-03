@@ -1,26 +1,28 @@
 <template>
   <div class="MatcTest">
-    <section class="section">
-      <div class="container">
+    <section class="" v-if="false">
+
         <div class="box is-shadowless">
           <div class="level">
             <div class="level-left">
-              <h2 class="level-item title">Dashboard</h2>
+              <h3 class="level-item title">
+                  Dashboard <HelpButton topic="analytics"  :hasNotifications="false"
+            /></h3>
             </div>
             <div class="level-right">
               <div class="level-item">
-                <a class="button is-primary is-outlined" @click="downloadCSV">Download Test Data</a>
+                <a class="MatcButton MatcButtonSecondary MatcButtonXS" @click="downloadCSV">Download Test Data</a>
               </div>
             </div>
           </div>
           <AnalyticsHeader :value="summary" />
         </div>
-      </div>
+
     </section>
     <!-- header -->
 
-    <section class="section" data-dojo-attach-point="sectionTask">
-      <div class="container">
+    <section class="" data-dojo-attach-point="sectionTask">
+ 
         <div class="box is-shadowless">
           <AnalyticTaskList
             :hash="hash"
@@ -32,11 +34,25 @@
             @change="onTaskChange"
           />
         </div>
-      </div>
+
     </section>
 
-     <section class="section" data-dojo-attach-point="sectionTask">
-      <div class="container">
+    <section class="" data-dojo-attach-point="sectionScatter">
+
+        <div class="box is-shadowless">
+          <DistributionSection
+            :pub="pub"
+            :test="test"
+            :app="app"
+            :events="events"
+            :annotation="annotation"/>
+        </div>
+
+    </section>
+
+
+     <section class="" data-dojo-attach-point="sectionTask">
+
         <div class="box is-shadowless">
           <SurveySection
             :pub="pub"
@@ -45,25 +61,9 @@
             :events="events"
             :annotation="annotation"/>
         </div>
-      </div>
+
     </section>
 
-
-    <section class="section">
-      <div class="container">
-        <div class="box is-shadowless">
-          <h2 class="title">Comments</h2>
-          <Comment
-            v-if="app"
-            :appID="app.id"
-            type="overview_dash"
-            reference
-            contentID
-            insertPosition="top"
-          />
-        </div>
-      </div>
-    </section>
   </div>
 </template>
 <script>
@@ -73,10 +73,12 @@ import lang from "dojo/_base/lang";
 import DataFrame from "common/DataFrame";
 import Plan from "page/Plan";
 import Util from "core/Util";
+import PerformanceMonitor from 'core/PerformanceMonitor'
 import AnalyticsHeader from "views/apps/analytics/AnalyticsHeader";
 import AnalyticTaskList from "views/apps/analytics/AnalyticTaskList";
 import SurveySection from "views/apps/analytics/SurveySection";
-import Comment from "page/Comment";
+import DistributionSection from "views/apps/analytics/DistributionSection";
+import HelpButton from "help/HelpButton";
 
 export default {
   name: "Test",
@@ -85,14 +87,16 @@ export default {
   data: function() {
     return {
       MIN_REQUIERED_USERS: 40,
-      summary: {}
+      summary: {},
+      hasComments: false
     };
   },
   components: {
-    'Comment': Comment,
     'AnalyticsHeader': AnalyticsHeader,
     'AnalyticTaskList': AnalyticTaskList,
-    'SurveySection': SurveySection
+    'SurveySection': SurveySection,
+    'DistributionSection': DistributionSection,
+    'HelpButton': HelpButton
   },
   computed: {
     imageHash () {
@@ -152,6 +156,7 @@ export default {
       }
     },
     show() {
+      PerformanceMonitor.start('AnalyticsTab.show()')
       /**
        * remove all sessions that are invalid!
        */
@@ -160,23 +165,23 @@ export default {
       /**
        * Just use actionable events
        */
-      var actionEvents = this.getActionEvents(new DataFrame(events));
+      const actionEvents = this.getActionEvents(new DataFrame(events));
       events = actionEvents.as_array();
-      var df = new DataFrame(events);
+
+      const df = new DataFrame(events);
       df.sortBy("time");
 
       this._addTestKPI(df, this.app);
-      // does any body use this?
-      // this._addTagData(tags,df);
-      // this._addScreenData(df,app);
-      // this._addScreenList(events, app);
+
+      PerformanceMonitor.end('AnalyticsTab.show()')
     },
 
-    _addTestKPI: function(df, app) {
-      var sessionGroup = df.groupBy("session");
-      var count = df.count("session");
-      var min = sessionGroup.min("time");
-      var max = sessionGroup.max("time");
+    _addTestKPI (df, app) {
+      PerformanceMonitor.start('AnalyticsTab._addTestKPI()')
+      const sessionGroup = df.groupBy("session");
+      const count = df.count("session");
+      const min = sessionGroup.min("time");
+      const max = sessionGroup.max("time");
       max.minus(min);
 
       /**
@@ -184,7 +189,7 @@ export default {
        */
 
 
-      let summary = {};
+      const summary = {};
       summary.sessionCount = count.size();
       summary.sessionCountMean = Math.round(count.mean());
       summary.sessionCountStd = Math.round(count.std());
@@ -198,9 +203,9 @@ export default {
         summary.sessionDurationStd = 0;
       }
 
-      var screenCount = this.getObjectLength(app.screens);
-      var uniqueScreenPerSession = sessionGroup.unique("screen");
-      var expRate = uniqueScreenPerSession.mean() / screenCount;
+      const screenCount = this.getObjectLength(app.screens);
+      const uniqueScreenPerSession = sessionGroup.unique("screen");
+      let expRate = uniqueScreenPerSession.mean() / screenCount;
       if (isNaN(expRate)) {
         expRate = 0;
       }
@@ -209,12 +214,18 @@ export default {
       }
       summary.expRate = expRate;
       this.summary = summary;
+      PerformanceMonitor.end('AnalyticsTab._addTestKPI()')
     }
   },
   watch: {
     test(v) {
       this.logger.info("watch", "test >", v);
       this.test = v;
+    },
+    events(v) {
+      this.logger.info("watch", "events >", v);
+      this.events = v;
+      this.show()
     }
   },
   async mounted() {

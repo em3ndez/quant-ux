@@ -4,6 +4,9 @@ import topic from "dojo/topic";
 import domGeom from "dojo/domGeom";
 import css from "dojo/css";
 import CoreUtil from 'core/CoreUtil'
+import * as LayoutContainerUtil from 'core/LayoutContainerUtil'
+import * as ResponsiveUtil from 'core/responsive/ResponsiveUtil'
+import ResponsiveLayout from 'core/responsive/ResponsiveLayout'
 
 export default {
   name: "DnD",
@@ -102,27 +105,111 @@ export default {
      * Screen DnD
      **********************************************************************/
 
-    onScreenDndStart (id) {
+    onScreenDndStart (id, div, pos) {
       this.logger.log(3, "onScreenDndStart", "entry");
       this.beforeDND();
       this._dragNDropBoxPositions = {};
-      var screen = this.model.screens[id];
+
+
+      this._resizeCursor = "MatcCanvasScreenDND";
+      css.add(this.container, this._resizeCursor);
+
+      const screen = this.model.screens[id];
+      this._addDNGroups(screen?.children, pos)
+      this._addDNDComments(id)
+     
+
       return screen;
+    },
+
+    _addDNDComments(id) {
+      if (this.comments && this.screenComments && this.screenComments["canvas"]) {
+
+        const canvasComments = this.screenComments["canvas"]
+        const id2Div = {}
+        canvasComments.forEach(pair => {
+          id2Div[pair.id] = pair.div
+        })
+
+        this._dragNDropBoxComments = []
+        const scrn = this.model.screens[id];
+        for (let cid in this.comments) {
+          const comment = this.comments[cid]
+          let pos = {
+              x: comment.x,
+              y: comment.y,
+              w: 1,
+              h: 1
+          };
+						
+					pos = this.getZoomedBox(pos, this.zoom, this.zoom);
+          if (this.isCommentInScreen(pos, scrn)) {
+            this._dragNDropBoxComments.push({
+              comment: comment,
+              pos: pos,
+              div: id2Div[cid]
+            })
+          }
+        }
+      }
+   
+      console.debug('_dragNDropBoxComments', this._dragNDropBoxComments)
+    },
+
+    isCommentInScreen(obj, parent) {
+        if (
+            obj.x < parent.x ||
+            parent.x + parent.w < obj.x ||
+            obj.y < parent.y ||
+            parent.y + parent.h < obj.y
+        ) {
+            return false;
+        }
+        return true;
     },
 
     onScreenDndMove (id, div, pos, dif) {
       topic.publish("matc/canvas/click", "", "");
       this.setState(1);
       this.cleanUpDebugLines();
+      
 
       if (!this._alignmentToolInited) {
-        let screen = this.model.screens[id];
-        this.alignmentStart("screen", screen, "All");
+
+        /**
+         * Check only on move if we have to change the selection
+         */
+        if (this._canvasSelection.screens.length === 0) {
+          this.setSelectedScreens([id], false, false)
+        } else if (this._canvasSelection.screens.findIndex(scrn => scrn.id === id) < 0) {
+          this.setSelectedScreens([id], false, false)
+        }
+
+
+        const screenIDs = this._canvasSelection.screens.map(s => s.id)
+        const screen = this.model.screens[id];
+        if (screen) {
+          this.alignmentStart("screen", screen, "All", screenIDs);
+        }
       }
 
-      let screen = this.model.screens[id];
-      let temp = { x: pos.x, y: pos.y, h: screen.h, w: screen.w };
+  		this._canvasSelection.screens.forEach(scrn => {
+        this.renderScreenDND(scrn.id, pos, dif)
+      })
 
+      
+      return true;
+    },
+
+    renderScreenDND(id, pos, dif) {
+      const screen = this.model.screens[id];
+
+      const temp = { 
+        x: screen.x + dif.x, 
+        y: screen.y + dif.y, 
+        h: screen.h, 
+        w: screen.w 
+      };
 
       if (this.isInContainer(temp)) {
         this._dragNDropBoxPositions[id] = temp;
@@ -130,9 +217,9 @@ export default {
         /**
          * update also the background screen & grid
          */
-        let zoomedPos = this.getBackgroundPos(temp, this.zoom, this.zoom);
-        let backgroundDiv = this.screenBackgroundDivs[id];
-        let job = {
+        const zoomedPos = this.getBackgroundPos(temp, this.zoom, this.zoom);
+        const backgroundDiv = this.screenBackgroundDivs[id];
+        const job = {
           zoom: true,
           div: backgroundDiv,
           pos: zoomedPos,
@@ -140,15 +227,23 @@ export default {
         };
         this.addDragNDropRenderJob(job);
 
-
-        let gridDiv = this.screenGridDivs[id];
-        let job2 = {
+        const gridDiv = this.screenGridDivs[id];
+        const job2 = {
           zoom: true,
           div: gridDiv,
           pos: zoomedPos,
-          id: id + "grud"
+          id: id + "grid"
         };
         this.addDragNDropRenderJob(job2);
+
+        const dndDiv = this.screenDivs[id];
+        const job3 = {
+          zoom: false,
+          div: dndDiv,
+          pos: temp,
+          id: id + "DND"
+        };
+        this.addDragNDropRenderJob(job3);
 
         /**
          * Also update resize handlers. The _DragNDrop._dragNDropUpDateUI()
@@ -157,7 +252,7 @@ export default {
          * resizeHnalder.
          */
         if (this._resizeHandlerBox) {
-          let resizePos = {
+          const resizePos = {
             w: this._resizeHandlerBox.w,
             h: this._resizeHandlerBox.h,
             x: this._resizeHandlerBox.x + dif.x,
@@ -169,7 +264,7 @@ export default {
         /**
          * Do not forget to update comments. Implemented in Comment.js
          */
-        this.updateCommentPosition(id, temp);
+        //this.updateCommentPosition(id, temp);
 
         /**
          * also update all contained widgets
@@ -181,9 +276,30 @@ export default {
          */
         this.updateLines(screen);
 
+        this.updateGroupLines(pos)
+
+        this.updateScreenComments(pos, dif)
+
         return true;
       }
-      return false;
+    },
+
+    updateScreenComments (pos, dif) {
+      if (this._dragNDropBoxComments) {
+        for (let i = 0; i < this._dragNDropBoxComments.length; i++) {
+          const c = this._dragNDropBoxComments[i]
+          const pos = c.pos
+          const div = c.div
+          const newPos = {
+            x: dif.x + pos.x,
+            y: dif.y + pos.y,
+            h: pos.h,
+            w: pos.w
+          }
+          c.newPos = newPos
+          this.domUtil.setPos(div, newPos)
+        }
+      }
     },
 
     /**
@@ -225,17 +341,17 @@ export default {
     },
 
     _updateChildWidget (widgetID, pos, dif) {
-      var widget = this.model.widgets[widgetID];
+      const widget = this.model.widgets[widgetID];
       if (widget) {
-        var div = this.widgetDivs[widgetID];
-        var widgetPos = {
+        const div = this.widgetDivs[widgetID];
+        const widgetPos = {
           x: dif.x + widget.x,
           y: dif.y + widget.y,
           h: widget.h,
           w: widget.w
         };
 
-        var job = {
+        const job = {
           div: div,
           pos: widgetPos,
           id: widgetID
@@ -251,15 +367,19 @@ export default {
 
         this.updateLines(widget);
       } else {
-        console.warn("Widget with ", widgetID, " doe snot exits");
+        if (widgetID[0] !== 'g') {
+          console.warn("_updateChildWidget() > Widget with ", widgetID, " does not exits");
+        } else {
+          //console.debug("_updateChildWidget() > NO DND for group", widgetID);
+        }
       }
     },
 
     _updateWidgetBackground (widgetID, pos) {
-      var backgroundDiv = this.widgetBackgroundDivs[widgetID];
+      const backgroundDiv = this.widgetBackgroundDivs[widgetID];
 
       if (backgroundDiv) {
-        var job = {
+        const job = {
           zoom: true,
           div: backgroundDiv,
           pos: this.getBackgroundPos(pos),
@@ -271,31 +391,85 @@ export default {
       }
     },
 
+    _updateWidgetDND (widgetID, pos) {
+        const dndDiv = this.widgetDivs[widgetID];
+        if (dndDiv) {
+          // we do not call a job, because
+          // on Dnd end, the jobs are not executed...
+          requestAnimationFrame(() => {
+            this.domUtil.setPos(dndDiv, pos)
+          })
+        } else {
+         console.warn("_updateWidgetDND", "No DND", widgetID);
+        }
+    },
+
+  
     getBackgroundPos(pos) {
       return CoreUtil.getUnZoomedBoxCopy(pos, this.zoom, this.zoom);
     },
 
-    onScreenDndEnd (id, div, pos, dif) {
+    onScreenDndEnd (id, div, pos) {
       this.logger.log(3, "onScreenDndEnd", "enter > x:" + pos.x + " y:" + pos.y);
 
+      if (this._resizeCursor) {
+        css.remove(this.container, this._resizeCursor);
+      }
+      this.saveScreenComentsDND()
       this.cleanUpAlignment();
-      this.getController().updateScreenPosition(id, lang.clone(pos), true);
+      this.cleanUpScreenDnD();
 
-      this._dragNDropBoxPositions = null;
-      this.onSelectionMoved(pos, dif, id);
+      const screenIDs = this._canvasSelection.screens.map(s => s.id)
+
+      if (screenIDs.length === 1) {
+        this.getController().updateScreenPosition(id, lang.clone(pos), true);
+      } else {
+        this.getController().updateMultiScreenPosition(id, lang.clone(pos), screenIDs);
+      }
+
+
+      this._dragNDropBoxPositions = null;  
+      // we do not need to render, because the model change will trigger
+      // a rerender
+      this.setSelectedScreens(screenIDs, false, false);
       this.setState(0);
     },
 
+    saveScreenComentsDND() {
+      if (this._dragNDropBoxComments) {
+          try {
+            for (let i = 0; i < this._dragNDropBoxComments.length; i++) {
+              const c = this._dragNDropBoxComments[i]
+              const comment = c.comment
+              const newPos = c.newPos
+              const pos = this.getUnZoomedBox(newPos, this.zoom, this.zoom);
+              const x = pos.x
+              const y = pos.y
+              comment.x = x;
+              comment.y = y;
+              comment.reference = 'canvas'
+              this.saveDNDChange(comment);		
+            }
+          } catch (err) {
+            this.logger.error("saveScreenComentsDND", "Could not save > " + err);
+          }
+      }
+    },
+
+    cleanUpScreenDnD () {
+      delete this._dragNDropLineGroups
+      delete this._dragNDropBoxComments
+    },
+
     onScreenDndClick (id, div, pos, e) {
-      this.logger.log(2, "onScreenDndClick", "entry > " + id);
+      this.logger.log(-2, "onScreenDndClick", "entry > " + id);
 
       if (this._boxClickCallback) {
         this.dispatchBoxClickCallback(id, div, pos, e);
         return;
       }
 
-      this.onScreenSelected(id);
-
+      this.setSelectedScreens([id], e.shiftKey);
       this.setState(0);
     },
 
@@ -306,153 +480,228 @@ export default {
     onWidgetDndStart (id, div, pos, e) {
       this.logger.log(1, "onWidgetDndStart", "entry > " + id);
 
-      /**
-       * we must avoid touchpad based misplacements. Thereore we set *only* for
-       * the widgets some delay
-       */
-      var ids = this.getSelectedIds();
+
+      // FIXME: First thing we should do, is to check if the selection has changed.
+
+      const ids = this.getSelectedIds();
       if (ids == null) {
         this.setDnDMinTime(0);
       }
 
+    
       this._dragNDropBoxPositions = {};
+      this._dragNDropLayoutContainerDelta = {}
+      this._dragNDropBoxWidgetStart = pos;
+
       /**
-       * make sure inline edit is flushed,
-       * because a remember or some other stuff might
-       * happen
+       * make sure inline edit is flushed
        */
       this.inlineEditStop();
 
-      this._addDnDChildren(id);
-
       /**
-       * make sure lines are also updated for groups!
+       * Now add all elements
        */
-      var group = this.getTopParentGroup(id);
-      if (group) {
-        // widget has no line??
-        this._dragNDropLineFromBox = group;
-        this._dragNDropBoundingBox = this.getBoundingBox(group.children);
-      }
+      this._addDnDChildren(id,ids, pos);
+      
 
-      /**
-       * add class to dnd widget
-       */
+      //console.debug(this._dragNDropChildren)
+
+      this._addDNGroups(this._dragNDropChildren, pos)
+      this._addDDNOffset(pos)
+     
       if (this.widgetDivs[id]) {
         this._dndMoveDiv = this.widgetDivs[id];
         css.add(this._dndMoveDiv, "MatcBoxMoving");
       }
-
-      this._resizeCursor = "MatcCanvasResizeCursorAll";
+      this._resizeCursor = "MatcCanvasResizeCursorAll  ";
       css.add(this.container, this._resizeCursor);
 
       if (e.ctrlKey) {
-        /**
-         * this will open some stupid dialog, we should stop that!
-         */
         this.stopEvent(e);
       }
 
-      this._dragNDropBoxWidgetStart = pos;
+      // we register here a keybaord listeners, so pressing SHIFT
+      // or OPTION will triggers the onWidetMove
+      this.registerKeyBoardListener(e => this.onWidgetDNDKeyDown(e))
 
-      var widget = this.model.widgets[id];
+      const widget = this.model.widgets[id];
+
+      if (this.flexContainerIndex) {
+        const parent = this.flexContainerIndex.findHoverLayoutContainer(widget)
+        this._dragNDropLayoutContainerDelta.start = parent
+      }
+
       return widget;
     },
 
-    onWidgetDndMove (id, div, pos, dif) {
-      topic.publish("matc/canvas/click", "", "");
-      /**
-       * setup alignment tool. In case of multi or group use bounding
-       * box, but if the group child was explicitly selected (second click)
-       * just use the widget
+    _addDDNOffset(pos) {
+      /** 
+       * For STRG copy we need the offset to make the alignment work correctly
        */
-      if (!this._alignmentToolInited) {
-        let widget = this.model.widgets[id];
-        if (widget) {
-          let group = this.getParentGroup(id);
-          // We only want to move the bounding box, if the moving widgets
-          // as acutually part of the selection!
-          if (this._selectMulti && this._selectMulti.indexOf(id) >= 0) {
-            let boundingBox = this.getBoundingBox(this._selectMulti);
-            boundingBox.id = id;
-            this.alignmentStart("boundingbox", boundingBox, "All", this._selectMulti);
-          } else if (group && !this._dragNDropIgnoreGroup && this._dragNDropChildren) {
-             /**
-             * Since 2.1.3 we have nested groups. The bounding box
-             * is alreadz determined bz the _dragNDropChildren children
-             * which were initlized before!
-             */
-            let children = this._dragNDropChildren
-            let boundingBox = this.getBoundingBox(children);
-            boundingBox.id = id;
-            this.alignmentStart("boundingbox", boundingBox, "All", children);
-          } else {
-            this.alignmentStart("widget", widget, "All");
-          }
-        } else {
-          this.logger.error("onWidgetDndMove", "No widget with id", id);
+      if (this._dragNDropChildren) {
+        const dragNDropBoundingBox = this.getBoundingBox(this._dragNDropChildren);
+        this._dragNDropOffset = {
+          x: dragNDropBoundingBox.x - pos.x,
+          y: dragNDropBoundingBox.y - pos.y
         }
       }
+    },
 
+    _addDNGroups (ids, pos) {
+      if (!ids) {
+        return
+      }
+      const lookupLines = {}
+      for (let id in this.model.lines) {
+        const line = this.model.lines[id]
+        lookupLines[line.from] = line
+      }
+      ids.forEach(id => {
+        /** FIXME: This could does not work for vertain multi selections */
+        const parentGroup = this.getParentGroup(id)
+        if (parentGroup && lookupLines[parentGroup.id]) {
+          this._addDNGroup(parentGroup, pos)
+        }
+      })
+    },
+
+    _addDNGroup (group, pos) {
+      if (!this._dragNDropLineGroups) {
+        this._dragNDropLineGroups = {}
+      }
+      const boundingBox = this.getBoundingBox(group.children);
+      this._dragNDropLineGroups[group.id] = {
+        group: group,
+        boundingBox: boundingBox,
+        offSet: {
+          x: boundingBox.x - pos.x,
+          y: boundingBox.y - pos.y
+        }
+      }     
+    },
+
+
+    _addDnDChildren(id, ids, pos) {
+      //console.debug('addChildren', ids, id, ids?.indexOf(id) === -1)
+      const topGroup = this.getTopParentGroup(id)
+      const selectedGroup = this.getSelectedGroup()
+      const selectedMulti = this.getMultiSelection()
+      /**
+       * We can have here the situation, that a new element is selected
+       * when a DND operation is iniated. For instance group A is selected
+       * but widget B is moved.
+       */
+      if (!ids || ids.indexOf(id) === -1) {
+        this.logger.log(1, "_addDnDChildren", "exit > Change : " + id, topGroup);
+        /**
+         * If there is a top group, we add it's children
+         */
+        if (topGroup) {
+          const allChildren = this.getAllGroupChildren(topGroup)
+          this._dragNDropChildren = allChildren
+          this._addDNGroup(topGroup, pos)
+          return
+        }
+
+        // Since 5.0.24 we move layout container children
+        if (LayoutContainerUtil.isLayoutContainer(id, this.model)) {
+           this._addLayoutDNDChildren(id, ids, pos)
+        }
+
+        return
+      }
+    
+      if (selectedMulti) {
+        if (selectedMulti.indexOf(id) > -1) {
+          this.logger.log(1, "_addDnDChildren", "exit > Multi : " + selectedMulti);
+          /**
+					 * Since 5.0.3 multi selections can have groups.
+					 * we just ignore
+					 */
+          const selectedWidgets = selectedMulti.filter(id => {
+            return this.model.widgets[id]
+          })
+          if (selectedWidgets.length < selectedMulti.length){
+            this.logger.log(-1, "_addDnDChildren", "exit > Removed groups ", selectedWidgets);
+          }
+          this._dragNDropChildren = selectedWidgets;
+        }
+        return
+      }
+
+      if (selectedGroup) {
+        this.logger.log(1, "_addDnDChildren", "exit > Group : " + selectedGroup);
+        const allChildren = this.getAllGroupChildren(selectedGroup)
+        this._dragNDropChildren = allChildren
+        this._addDNGroup(selectedGroup, pos)
+        return
+      }
+
+      // Since 5.0.24 we move layout container children
+      if (LayoutContainerUtil.isLayoutContainer(id, this.model)) {
+        this._addLayoutDNDChildren(id, ids, pos)
+      }
+    },
+
+    _addLayoutDNDChildren(id) {
+        this.logger.log(1, "_addLayoutDNDChildren", "exit > id : " + id);
+        const childIds = LayoutContainerUtil.getLayoutContainerChildren(id, this.model, this.treeIndex)
+        this._dragNDropChildren = childIds
+    },
+
+
+    onWidgetDNDKeyDown (e, isUp= false) {
+      this.logger.log(-1, "onWidgetDNDKeyDown", "enter", isUp)
+      if (!this._dragNDropBoxWidgetStart) {
+        this.logger.error("onWidgetDNDKeyDown", "no start")
+        this.cleanUpKeyBoardListener()
+        return
+      }
+
+      const synthEvent = {
+        pageX: this._lastMouseMoveEvent.pageX,
+        pageY: this._lastMouseMoveEvent.pageY,
+        altKey: e.altKey
+      }
+      this.onDragMove(synthEvent)
+      
+    },
+
+    onWidgetDndMove (id, div, pos, dif, e) {
+     
+      topic.publish("matc/canvas/click", "", "");
+
+      if (!this._alignmentToolInited) {
+        this.startAligmentToolForWidget(id)
+      }
+
+      this.addDNDActive()
       this.setState(2);
       this.cleanUpDebugLines();
 
-      let widget = this.model.widgets[id];
+
+      const widget = this.model.widgets[id];
       if (widget) {
-        let temp = {
+        const temp = {
             x: pos.x,
             y: pos.y,
             h: widget.h,
             w: widget.w,
             type: widget.type
         };
+        // only move if we are in the canvas
         if (this.isInContainer(temp)) {
           this._dragNDropBoxPositions[id] = temp;
 
-          /**
-           * Update the div
-           */
-          this._updateWidgetBackground(id, temp);
+          // update FlexDND here
+          this.updateLayoutContainerDND(id, div, pos, dif, e)
 
-          /**
-           * also update all contained widgets
-           */
-          this.updateChildren(widget, temp, dif);
-
-          /**
-           * Also update resize handlers. The _DragNDrop._dragNDropUpDateUI()
-           * method will perform the updaze  *IF AND ONLY IFF*
-           * this if if the moved widget(s) matches the one of the
-           * resizeHnalder.
-           */
-          if (this._resizeHandlerBox) {
-            this._dragNDropRenderResizeHandlerJob = {
-              w: this._resizeHandlerBox.w,
-              h: this._resizeHandlerBox.h,
-              x: this._resizeHandlerBox.x + dif.x,
-              y: this._resizeHandlerBox.y + dif.y
-            };
-          }
-
-          /**
-           * also update all lines
-           */
-          if (this._dragNDropLineFromBox) {
-            /**
-             * Also update lines for group
-             */
-            var temp2 = {
-              x: pos.x,
-              y: pos.y,
-              h: this._dragNDropBoundingBox.h,
-              w: this._dragNDropBoundingBox.w
-            };
-            this._dragNDropBoxPositions[this._dragNDropLineFromBox.id] = temp2;
-            this.updateLines(this._dragNDropLineFromBox);
+          if (this.isWidgetDNDCopy(e)) {
+            this.renderWidgetDNDCopy(id, temp, widget, dif, pos)
           } else {
-            this.updateLines(widget);
+            this.renderWidgetDND(id, temp, widget, dif, pos)
           }
-
+          
           return true;
         }
       } else {
@@ -462,24 +711,338 @@ export default {
       return false;
     },
 
+    updateLayoutContainerDND (id, div, pos, dif, e) {
+      if (!this.flexContainerIndex) {
+        return
+      }
+      const offsetX = this._dragNDropOffset?.x ? this._dragNDropOffset.x * -1 : 0
+      const offsetY = this._dragNDropOffset?.y ? this._dragNDropOffset.y * -1 : 0
+      /**
+       * The pos from _DragNDrop is just {x,y,w,h}. The index needs the z
+       * (it only accepts containers below the dragged widget) and the id
+       * (so the widget is not mistaken for one of the container's children)
+       */
+      const widget = this.model.widgets[id]
+      const absPos = {
+        x: pos.x,
+        y: pos.y,
+        w: pos.w,
+        h: pos.h,
+        z: widget.z,
+        id: widget.id,
+        name: widget.name
+      }
+      const parent = this.flexContainerIndex.findContainedLayoutContainer(absPos, offsetX, offsetY) 
+      let lastEnd = null
+      if (parent) {
+          this._dragNDropLayoutContainerDelta.end = parent
+      } else {
+        // restore old pos
+        lastEnd = this._dragNDropLayoutContainerDelta.end
+        this._dragNDropLayoutContainerDelta.end = null
+      }
+
+      /**
+       * Live-preview the reflow of the container(s) affected by the drag:
+       * the container the widget came from (children should close the gap)
+       * and the container currently hovered (children should make room).
+       *
+       * The widgets that move with this drag were already collected by
+       * _addDnDChildren() / _addLayoutDDNChildren() into _dragNDropChildren.
+       */
+      //console.debug(this._dragNDropLayoutContainerDelta, lastEnd)
+      // const draggedIds = this.getAllDNDChildren(id)
+      // this.resizeDragNDropLayoutContainer(this._dragNDropLayoutContainerDelta.start, draggedIds, absPos)
+      // this.resizeDragNDropLayoutContainer(this._dragNDropLayoutContainerDelta.end, draggedIds, absPos)
+      // this.resizeDragNDropLayoutContainer(lastEnd, draggedIds, absPos)
+    },
+
+    getAllDNDChildren(id) {
+      return this._dragNDropChildren && this._dragNDropChildren.length > 0
+        ? this._dragNDropChildren
+        : [id]
+    },
+    
+
+    /**
+     * Relayouts one FlexContainer for the live DnD preview.
+     *
+     * The children come from LayoutContainerUtil.getLayoutContainerChildren()
+     * - the same helper _addLayoutDDNChildren() uses, and it returns the
+     * container itself as the first entry - plus the dragged widget(s), but
+     * only those whose live box is really fully contained in the container.
+     *
+     * ResponsiveLayout.initSelection() only reads `widgets` and `groups`
+     * off the model it gets, so we build a throwaway model holding just
+     * those. The widgets are cloned, so nothing here can pollute the real
+     * model, and the dragged one(s) are placed at their live, in-flight
+     * position - this.model still holds their stale pre-drag position,
+     * which only gets committed on drop.
+     */
+    resizeDragNDropLayoutContainer (container, draggedIds, absPos) {
+      if (!container) {
+        return
+      }
+      const containerWidget = this.model.widgets[container.id]
+      if (!containerWidget) {
+        return
+      }
+
+
+
+      // this could be cached in DND start
+      let childrenIDs = LayoutContainerUtil.getLayoutContainerChildren(container.id, this.model, this.treeIndex)
+
+      /**
+       * getLayoutContainerChildren() decides by the position in this.model,
+       * which is still the stale pre-drag one for the dragged widget(s).
+       * So we drop them here and add them back only if their *live* box is
+       * really fully contained in the container. Otherwise a widget dragged
+       * out of a container would still occupy a slot in it.
+       */
+      childrenIDs = childrenIDs.filter(cId => cId === container.id || draggedIds.indexOf(cId) < 0)
+  
+      if (LayoutContainerUtil.isFullContained(container, absPos)) {
+        draggedIds.forEach(dId => {
+            if (!dId || dId === container.id || childrenIDs.indexOf(dId) > -1) {
+              return
+            }
+            childrenIDs.push(dId)        
+        })
+      }
+
+      childrenIDs.push(container.id)
+ 
+     //console.debug('resizeDragNDropLayoutContainer', draggedIds, container.name, childrenIDs)
+
+
+      const widgets = {}
+      childrenIDs.forEach(cId => {
+        const modelWidget = this.model.widgets[cId]
+        if (modelWidget) {
+          const clone = structuredClone(modelWidget)
+          const liveDragPos = this._dragNDropBoxPositions[cId]
+          if (liveDragPos) {
+            clone.x = liveDragPos.x
+            clone.y = liveDragPos.y
+            clone.w = liveDragPos.w
+            clone.h = liveDragPos.h
+          }
+          widgets[cId] = clone
+        }
+      })
+
+      const model = {
+        id: this.model.id,
+        widgets: widgets,
+        groups: this.model.groups
+      }
+
+      console.debug(model)
+
+      const resizeModel = {
+        x: containerWidget.x,
+        y: containerWidget.y,
+        w: containerWidget.w,
+        h: containerWidget.h,
+        // the container has real, fixed bounds. The style marks it as such,
+        // otherwise initSelection() shrinks/grows the layout box to the
+        // bounding box of the children (see isBoundingBoxScreen())
+        style: containerWidget.style || {},
+        children: childrenIDs
+      }
+
+      const responsiveLayouter = new ResponsiveLayout(1)
+      responsiveLayouter.initSelection(model, resizeModel, resizeModel.children, true, true, false)
+      const newPositions = ResponsiveUtil.getResponsiveResizePositions(
+        containerWidget, containerWidget, childrenIDs, responsiveLayouter
+      )
+
+      for (let cId in newPositions) {
+        // never move the container itself, and leave the dragged widget(s)
+        // to the normal DnD rendering - they follow the mouse cursor
+        if (cId === container.id || draggedIds.indexOf(cId) > -1) {
+          continue
+        }
+        const newPos = newPositions[cId]
+        const div = this.widgetDivs[cId]
+        if (div) {
+          const job = {
+            div: div,
+            pos: newPos,
+            id: cId
+          }
+          this.addDragNDropRenderJob(job)
+          this._dragNDropBoxPositions[cId] = newPos
+          this._updateWidgetBackground(cId, newPos)
+        }
+      }
+    },
+
+    renderWidgetDNDCopy (id, temp, widget, dif, pos) {
+  
+      const startPos = this._dragNDropBoxWidgetStart
+      if (!this._dragNDropCopyPlaceHolder) {
+        // create a box
+        const div = this.createBox({
+          x: startPos.w,
+          y: startPos.h,
+          w: pos.w,
+          h: pos.h
+        });
+        css.add(div, "MatcBoxPlaceHolder");
+        this.dndContainer.appendChild(div);
+        this._dragNDropCopyPlaceHolder = div
+
+        // reset dnd position
+        this._updateWidgetBackground(id, startPos);
+        this._updateWidgetDND(id, startPos)
+        this.updateChildren(widget, startPos, {x:0, y:0});
+       
+   
+        // set reference so we can also snapp the copy
+        // to itself
+        if(this._alignmentTool && this._alignmentTool.setCopyReference){ 
+          this._alignmentTool.setCopyReference(id)
+        }
+      }
+
+      const correctedPOs = this.getCorrectedCopyPosition(pos)
+      const job = {
+        zoom: true,
+        div: this._dragNDropCopyPlaceHolder,
+        pos: correctedPOs,
+        id: "dndCopyPlaceHolder"
+      };
+      this.addDragNDropRenderJob(job);
+    },
+
+    getCorrectedCopyPosition (pos) {
+      if (this._dragNDropOffset) {
+          pos = lang.clone(pos)
+          pos.x = pos.x + this._dragNDropOffset.x
+          pos.y = pos.y + this._dragNDropOffset.y
+        }
+      return pos
+    },
+
+    renderWidgetDND (id, temp, widget, dif, pos) {
+        this.cleanUpDNDCopyPlaceHolder()
+        this._updateWidgetBackground(id, temp);
+        this.updateChildren(widget, temp, dif);       
+        this.updateResizeHandlerBox(dif)
+        this.updateGroupLines(pos)
+        this.updateLines(widget);        
+    },
+
+    updateResizeHandlerBox(dif) {
+      /**
+       * Also update resize handlers. The _DragNDrop._dragNDropUpDateUI()
+       * method will perform the updaze  *IF AND ONLY IFF*
+       * this if if the moved widget(s) matches the one of the
+       * resizeHnalder.
+       */
+      if (this._resizeHandlerBox) {
+          this._dragNDropRenderResizeHandlerJob = {
+            w: this._resizeHandlerBox.w,
+            h: this._resizeHandlerBox.h,
+            x: this._resizeHandlerBox.x + dif.x,
+            y: this._resizeHandlerBox.y + dif.y
+          };
+        }
+    },
+
+    updateGroupLines (pos) {
+         /**
+         * Since 4.4.0 we update also group lines
+         */
+         if (this._dragNDropLineGroups) {
+          for (let groupId in this._dragNDropLineGroups) {
+            const groupPos = this._dragNDropLineGroups[groupId]
+            const temp2 = {
+              x: pos.x + groupPos.offSet.x,
+              y: pos.y + groupPos.offSet.y,
+              h: groupPos.boundingBox.h,
+              w: groupPos.boundingBox.w,
+            };
+            this._dragNDropBoxPositions[groupId] = temp2;
+            this.updateLines(groupPos.group);
+          }
+        }
+    },
+
+    updateAllLines () {
+      if (this.renderLines){
+        const zoomedModel = this.model
+				for (let id in zoomedModel.lines){
+					const line = zoomedModel.lines[id];
+					if (!line.hidden){
+						this.renderLine(zoomedModel.lines[id]);
+					}
+				}
+			}
+    },
+
+    startAligmentToolForWidget(id) {
+        /**
+         * setup alignment tool. In case of multi or group use bounding
+         * box, but if the group child was explicitly selected (second click)
+         * just use the widget
+         */
+        const widget = this.model.widgets[id];
+        const selectedMutli = this.getMultiSelection()
+
+        if (widget) {
+          const group = this.getParentGroup(id);
+
+          // We only want to move the bounding box, if the moving widgets
+          // as acutually part of the selection!
+          if (selectedMutli && selectedMutli.indexOf(id) >= 0) {
+            const boundingBox = this.getBoundingBox(selectedMutli);
+            boundingBox.id = id;
+            this.alignmentStart("boundingbox", boundingBox, "All", selectedMutli);
+          } else if (group && !this._dragNDropIgnoreGroup && this._dragNDropChildren) {
+              /**
+             * Since 2.1.3 we have nested groups. The bounding box
+             * is already determined bz the _dragNDropChildren children
+             * which were initlized before!
+             */
+            const children = this._dragNDropChildren
+            const boundingBox = this.getBoundingBox(children);
+            boundingBox.id = id;
+            this.alignmentStart("boundingbox", boundingBox, "All", children);
+          } else {
+            if (LayoutContainerUtil.isLayoutContainer(id, this.model)) {
+              /**
+               * Since 5.0.25 we use the SnappEngine and want the layout children to
+               * be exlucded
+               */
+              this.alignmentStart("widget", widget, "All", this._dragNDropChildren);
+            } else {
+              this.alignmentStart("widget", widget, "All");
+            }
+           
+          }
+        } else {
+          this.logger.error("startAligmentToolForWidget", "No widget with id", id);
+        }
+    },
+
     updateLines (box) {
-      for (var id in this.model.lines) {
-        var line = this.model.lines[id];
+      /** This could be faster. The lookup could be cached */
+      for (let id in this.model.lines) {
+        const line = this.model.lines[id];
         if (line.to == box.id || line.from == box.id) {
-          var from = this._dragNDropBoxPositions[line.from];
+          let from = this._dragNDropBoxPositions[line.from];
           if (!from) {
             from = this.getFromBox(line);
           }
-          var to = this._dragNDropBoxPositions[line.to];
+          let to = this._dragNDropBoxPositions[line.to];
           if (!to) {
             to = this.getToBox(line); //this.model.screens[line.to];
           }
-
           this.updateLine(line, from, to);
         }
-        /**
-         * We have an issue here with group lines. They are not updated
-         */
       }
     },
 
@@ -493,97 +1056,127 @@ export default {
       return false;
     },
 
-    onWidgetDndEnd (id, div, pos, dif) {
+    isWidgetDNDCopy (e) {
+      return e.altKey
+    },
+
+    onWidgetDndEnd (id, div, pos, dif, e) {
       this.logger.log(0, "onWidgetDndEnd", "enter > x:" + pos.x + " y:" + pos.y);
-
-      /**
-       * In Select.js we should recalculate the bounding box.
-       */
-
+      const startPos = this._dragNDropBoxWidgetStart
       this.cleanUpAlignment();
+      this.cleanupDNDActive()
 
-      if (this._dragNDropChildren) {
-        // multi move
-        let positions = {};
-        // Whz is this here???
-        // positions[id] = pos;
+      if (this.isWidgetDNDCopy(e)) {
+          const correctedPOs = this.getCorrectedCopyPosition(pos)
+          this._updateWidgetDND(id, startPos);
+          if (this.getSelectedWidget()) {
+            const copy = this.controller.onCopyWidget(id, correctedPOs);
+            requestAnimationFrame( () => {
+              this.onWidgetSelected(copy.id, true);
+            })
+          }
+      
+          if (this.getMultiSelection()) {
+            const copies = this.getController().onMultiCopyWidget(
+                this.getMultiSelection(), 
+                correctedPOs
+            )
+            requestAnimationFrame( () => {
+              this.onMutliSelected(copies, true);
+            })
+          }
+
+          if (this.getSelectedGroup()) {
+            const group = this.getController().onCopyGroup(this.getSelectedGroup(), correctedPOs)
+            requestAnimationFrame( () => {
+              this.onGroupSelected(group.id, true);
+            })
+         
+          }
+          this.unSelect();
+      } else {
+
+          /**
+           * In Select.js we should recalculate the bounding box.
+           */
+          if (this._dragNDropChildren) {
+            const [positions, hasCopies] = this.getDnDEndPosittions(dif)
+            const updatedPositions = this.getController().updateMultiWidgetPosition(
+              positions, false, pos, hasCopies, this._dragNDropLayoutContainerDelta
+            );
+            this.updateZoomedPositionList(updatedPositions)
+          } else {
+            const widget = this.model.widgets[id];
+            if (widget) {
+              const sourcePos = this.getController().updateWidgetPosition(
+                  id, lang.clone(pos), false, this.isMasterWidget(widget), this._dragNDropLayoutContainerDelta
+              );              
+              if (sourcePos) {
+                pos = this.updateZoomedPosition(widget, sourcePos)
+              } else {
+                this.logger.error("onWidgetDndEnd", "No sourcePos for "+ id);
+                this.logger.sendError(new Error("No sourcePos with id >" + id));
+              }
+
+            } else {
+              this.logger.error("onWidgetDndEnd", "No widget with id >" + id);
+              this.logger.sendError(new Error("No widget with id >" + id));
+            }
+          }
+ 
+          if (!this.isInSelection(id)) {
+            this.setSelectionById(id)
+          } else {
+            this.onSelectionMoved(pos, dif, id);
+            /**
+             * Since 4.4.0 we also update lines
+             */
+            this.updateAllLines()
+          }       
+      }
+
+      this.cleanUpWidgetDnD();
+
+      this.setState(0);
+    },
+
+    getDnDEndPosittions (dif) {
+        const positions = {};
         let hasCopies = false;
         for (let i = 0; i < this._dragNDropChildren.length; i++) {
-          let widgetID = this._dragNDropChildren[i];
-          let widget = this.model.widgets[widgetID];
-          //console.debug(widget.name, widget);
-          hasCopies = hasCopies || this.isMasterWidget(widget);
+          const widgetID = this._dragNDropChildren[i];
+          const widget = this.model.widgets[widgetID];
           if (widget) {
-            let widgetPos = {
+            const widgetPos = {
               x: dif.x + widget.x,
               y: dif.y + widget.y,
               h: widget.h,
               w: widget.w
             };
             positions[widgetID] = widgetPos;
+            hasCopies = hasCopies || this.isMasterWidget(widget);
           } else {
-            console.warn("No Widget", widgetID);
+            console.warn("getDnDEndPosittions() > No Widget", widgetID);
           }
         }
-
-        this.getController().updateMultiWidgetPosition(positions, false, pos, hasCopies, id);
-      } else if (this._selectMulti && this._selectMulti.indexOf(id) >= 0) {
-        // && this._selectMulti.indexOf(id) >=0
-        /**
-         * This should actually nether be called. If we have a multi move, there
-         * should be also dndChildren....
-         */
-        let positions = {};
-        positions[id] = pos;
-        let hasCopies = false;
-        for (let i = 0; i < this._selectMulti.length; i++) {
-          let widgetID = this._selectMulti[i];
-          let widget = this.model.widgets[widgetID];
-          hasCopies = hasCopies || this.isMasterWidget(widget);
-          let widgetPos = {
-            x: dif.x + widget.x,
-            y: dif.y + widget.y,
-            h: widget.h,
-            w: widget.w
-          };
-          positions[widgetID] = widgetPos;
-        }
-        /**
-         * Make sure we pass the second param as false, otherwise we have a full
-         * render.
-         */
-        this.getController().updateMultiWidgetPosition(positions, false, pos, hasCopies, id);
-      } else {
-        // single widgte move
-        let widget = this.model.widgets[id];
-        if (widget) {
-          let sourcePos = this.getController().updateWidgetPosition(id, lang.clone(pos), false, this.isMasterWidget(widget));
-          try {
-            /**
-             * Update position to avoid snapping bumps: Could be called from controller
-             * FIXME: This causes the issues! Why was I doing this? The position
-             * will be done propertlz in the controller. In worst case the current
-             * rendering would be wrong by 1px.
-             */
-            var zoomedPos = CoreUtil.getZoomedBoxCopy(sourcePos, this.getZoomFactor(), this.getZoomFactor());
-            this.setWidgetPosition(widget.id, sourcePos, zoomedPos);
-            pos = zoomedPos;
-          } catch (e) {
-            this.logger.sendError(e);
-          }
-        } else {
-          var e = new Error("No widget with id >" + id);
-          this.logger.error("onWidgetDndEnd", "No widget with id >" + id);
-          this.logger.sendError(e);
-        }
-      }
-
-      this.onSelectionMoved(pos, dif, id);
-
-      this.cleanUpWidgetDnD();
-
-      this.setState(0);
+        return [positions, hasCopies]
     },
+
+    updateZoomedPositionList (updatedPositions) {
+      this.logger.log(1, "updateZoomedPositionList", "enter");
+      for (let id in updatedPositions) {
+        const sourcePos = updatedPositions[id]
+        const zoomedPos = CoreUtil.getZoomedBoxCopy(sourcePos, this.getZoomFactor(), this.getZoomFactor());
+        this.setWidgetPosition(id, sourcePos, zoomedPos);
+      }
+    },
+
+    updateZoomedPosition (widget, sourcePos) {
+      const zoomedPos = CoreUtil.getZoomedBoxCopy(sourcePos, this.getZoomFactor(), this.getZoomFactor());
+      this.setWidgetPosition(widget.id, sourcePos, zoomedPos);
+      return zoomedPos
+    },
+
 
     /**
      * One of the most important methods! It handles the clicks
@@ -591,8 +1184,8 @@ export default {
      *
      */
     onWidgetDndClick (id, div, pos, e) {
-      this.logger.log(-1, "onWidgetDndClick", "entry > " + id);
-
+      this.logger.log(1, "onWidgetDndClick", "entry > " + id);
+      
       this.stopEvent(e);
 
       /**
@@ -614,22 +1207,37 @@ export default {
        * 2) If SHIFT, CTRL or ALT is pressed, we add things to an selection
        */
       if (e && e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+        this._expandSelectionById(id)
+      } else {
+        this.setSelectionById(id)
+      }
+
+      this.cleanUpWidgetDnD();
+      this.setState(0);
+    },
+
+    _expandSelectionById (id) {
+        
         /**
          * FIXME: This is an evil bug! This open in FireFox an popup!
          * Maybe we have to listen to RMC and stop it..
          */
-        if (!this._selectMulti) {
-          this._selectMulti = [];
+        let selectedMulti = this.getMultiSelection()
+        const selectedWidget = this.getSelectedWidget()
+        if (!selectedMulti) {
+          selectedMulti = []
+          this.setMultiSelection(selectedMulti)
         }
 
         /**
          * Expand exiting selections
          */
-        if (this._selectGroup) {
-          this._selectMulti = this._selectMulti.concat(this._selectGroup.children);
+        if (this.getSelectedGroup()) {
+          this.setMultiSelection(selectedMulti.concat(this.getSelectedGroup().children))  
         }
-        if (this._selectWidget) {
-          this._selectMulti.push(this._selectWidget.id);
+
+        if (selectedWidget) {
+          this.setMultiSelection([selectedWidget.id])  
         }
 
         /**
@@ -637,180 +1245,28 @@ export default {
          */
         let group = this.getTopParentGroup(id);
         if (group) {
-          this._selectMulti = this._selectMulti.concat(group.children);
+          this.setMultiSelection(selectedMulti.concat(group.children))  
         } else {
-          if (this._selectMulti.indexOf(id) < 0) {
-            this._selectMulti.push(id);
+          if (this.getMultiSelection().indexOf(id) < 0) {
+            this.setMultiSelection([id], true) 
           } else {
             /**
              * FIXME: remove from selected...
              */
-            //console.debug("remove", id, this._selectMulti.indexOf(id));
-            //this._selectMulti = this._selectMulti.splice(this._selectMulti.indexOf(id),1);
           }
         }
-
-        this.onMutliSelected(this._selectMulti);
-      } else {
-        /**
-         * Since 2.1.3
-         */
-        let group = this.getTopParentGroup(id);
-        /**
-         * If we have a group, we have to dispatch the clicks like follows
-         */
-        if (group) {
-          if (!this._selectGroup) {
-            if (this._selectWidget && this._selectWidget.id == id) {
-              /**
-               * 3) Click => Start in line editing (force parameter not set)
-               */
-              this.onWidgetSelected(id);
-              this._dragNDropIgnoreGroup = true;
-            } else if (this._selectWidget && this._selectWidget.id != id) {
-              /**
-               * We have to to check if we have already a widget from the current
-               * group selected. This means the selectedGroup is null.
-               * If we are in the same group select the new widget, other wise
-               * the new group.
-               *
-               * Since 2.1.3 we have sub group and we want the top group, but here
-               * we stull want to allow sub selection
-               */
-              var widgetGroup = this.getParentGroup(this._selectWidget.id);
-              if (widgetGroup && widgetGroup.id == group.id) {
-                /**
-                 * Widget change in current group
-                 */
-                this.onWidgetSelected(id, true);
-                this._dragNDropIgnoreGroup = true;
-              } else {
-                /**
-                 * Change to other group
-                 */
-                this.onGroupSelected(group.id);
-              }
-            } else {
-              /**
-               * 1 Click => Select the Group
-               */
-              this.onGroupSelected(group.id);
-            }
-          } else {
-            if (this._selectGroup.id == group.id) {
-              /**
-               * 2 Click => Select the widget and make sure the group is not included in the dnd.
-               * Also, set force parameter to true to avoid inline editing
-               */
-              this.onWidgetSelected(id, true);
-              this._dragNDropIgnoreGroup = true;
-            } else {
-              /**
-               * Selection of other group
-               */
-              this.onGroupSelected(group.id);
-            }
-          }
-        } else {
-          /**
-           * 5) Else select widget
-           */
-          this.onWidgetSelected(id);
-        }
-      }
-
-      this.cleanUpWidgetDnD();
-      this.setState(0);
+      
+        this.onMutliSelected(this.getMultiSelection());
     },
 
-    _addDnDChildren (id) {
-      // console.debug('_addDnDChildren', id, this._dragNDropIgnoreGroup, this._dragNDropGroupChildren)
-      if (this._dragNDropIgnoreGroup) {
-        return;
-      }
 
-      /**
-       * Since 2.1.3 we have sub groups. If the seletion is from the laylerList,
-       * we just take the _dragNDropGroupChildren which must be passed the the
-       * Select.seltGroup() method,
-       */
-      if (this._dragNDropGroupChildren) {
-        if (this._dragNDropGroupChildren.indexOf(id) > -1) {
-          this._dragNDropChildren = this._dragNDropGroupChildren;
-        }
-        return
-      }
+ 
 
-      /**
-       * 1) check if there is a group we have to drag
-       */
-      if (!this._selectGroup) {
-        /**
-         * Since 2.1.3 we have subgroups!
-         */
-        let group = this.getTopParentGroup(id);
-        if (group) {
-          this._dragNDropChildren = group.children;
-          this._addDNDChildrenCopies();
-        }
-      } else {
-        /**
-         * Since 2.1.3 we need also subgroups
-         */
-        let group = this.getTopParentGroup(id);
-        if (group) {
-          /**
-           * Prevent that if there is a group selection,
-           * but the moved widget is not form the group, we
-           * do not add the groups children.
-           */
-          if (this._selectGroup.id == group.id) {
-            this._dragNDropChildren = this._selectGroup.children;
-          } else {
-            this._dragNDropChildren = group.children;
-          }
-          //this._addDNDChildrenCopies();
-        }
-      }
-
-      /**
-       * 2) check if there is a multi selection
-       */
-      if (this._selectMulti) {
-        /**
-         * only move multi selection in case the clicked
-         * widget is patr of it
-         */
-        if (this._selectMulti.indexOf(id) > -1) {
-          this._dragNDropChildren = this._selectMulti;
-        }
-        //this._addDNDChildrenCopies();
-      }
-    },
-
-    _addDNDChildrenCopies () {
-      if (this._dragNDropChildren) {
-        var children = [];
-        for (var i = 0; i < this._dragNDropChildren.length; i++) {
-          var id = this._dragNDropChildren[i];
-          var widget = this.model.widgets[id];
-          if (widget) {
-            if (widget.copies) {
-              children = children.concat(widget.copies);
-            }
-            if (widget.inheritedCopies) {
-              children = children.concat(widget.inheritedCopies);
-            }
-          }
-        }
-        if (children.length > 0 && children.length < 20) {
-          // do not overload thread
-          this._dragNDropChildren = this._dragNDropChildren.concat(children);
-        }
-      }
-    },
+  
 
     cleanUpWidgetDnD () {
+      this.cleanUpKeyBoardListener()
+      this.cleanUpDNDCopyPlaceHolder()
       if (this._resizeCursor) {
         css.remove(this.container, this._resizeCursor);
       }
@@ -819,12 +1275,25 @@ export default {
         css.remove(this._dndMoveDiv, "MatcBoxMoving");
         delete this._dndMoveDiv;
       }
-
+      delete this._dragNDropOffset;
       delete this._dragNDropBoxPositions;
       delete this._dragNDropChildren;
-      delete this._dragNDropLineFromBox;
-      delete this._dragNDropBoundingBox;
       delete this._dragNDropBoxWidgetStart;
+      delete this._dragNDropLineGroups
+      delete this._dragNDropLayoutContainerDelta
+    },
+
+    cleanUpDNDCopyPlaceHolder () {
+      if (this._alignmentTool && this._alignmentTool.setCopyReference) {
+          this._alignmentTool.setCopyReference(null)
+      }
+      if (this._dragNDropCopyPlaceHolder) {
+        const parent = this._dragNDropCopyPlaceHolder.parentNode
+        if (parent) {
+          parent.removeChild(this._dragNDropCopyPlaceHolder)
+        }
+      }
+      delete this._dragNDropCopyPlaceHolder
     },
 
     /**********************************************************************
@@ -838,10 +1307,8 @@ export default {
        * we want to use the right model,
        * not the getStyle() from _DragNDrop.js
        */
-      var line = this.model.lines[point.id];
-      var p = line.points[point.i - 1];
-      console.debug('start', p)
-
+      const line = this.model.lines[point.id];
+      const p = line.points[point.i - 1];
       return p;
     },
 
@@ -850,23 +1317,17 @@ export default {
        * we do all the line rendering in here again! Keep in sync with the
        * layout method!
        */
-      var line = this.model.lines[point.id];
-
-      var from = this.getFromBox(line);
-      var to = this.getToBox(line);
-
-      var supportedLine = this.layoutAddSupportPoints(from, to, line);
-
-      /**
-       * now set the new point position!
-       */
+      const line = this.model.lines[point.id];
+      const from = this.getFromBox(line);
+      const to = this.getToBox(line);
+      const supportedLine = this.layoutAddSupportPoints(from, to, line);
       supportedLine[point.i].x = pos.x;
       supportedLine[point.i].y = pos.y;
 
       this.layoutCorrectAnchorPoints(supportedLine);
-      let layoutedLine = this.layoutCorrectArrow(supportedLine);
+      const layoutedLine = this.layoutCorrectArrow(supportedLine);
 
-      var job = {
+      const job = {
         line: layoutedLine
       };
 

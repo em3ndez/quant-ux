@@ -6,34 +6,40 @@
           <div class="level-left"></div>
           <div class="level-right">
             <a
-              class="button is-success level-item"
+              class="MatcButton level-item"
               :href="`#/${urlPrefix}/${app.id}/analyze/workspace.html`"
             >Open Analytic Canvas</a>
           </div>
         </div>
 
         <HeatList :app="app" :pub="isPublic" :events="events" v-if="events && events.length > 0" />
-        <div class="MatcLoading@" v-else>
-          You have not performed any test and we could not collect any data yet. Once you start testing,
-          you can will see here the heat maps.
+
+        <div v-if="loading" class="MatcHint">
+            Loading...
         </div>
+       
       </div>
     </section>
-    <section class="section">
+
+
+
+    <section class="section" v-if="!loading && events.length === 0">
       <div class="container">
-        <div class="box is-shadowless">
-          <h2 class="title">Comments</h2>
-          <Comment
-            v-if="app"
-            :appID="app.id"
-            type="overview_heat"
-            reference
-            contentID
-            insertPosition="top"
-          />
+        <div class="box is-shadowless MatcCardWarning MatcCard">
+          <h3 class="title">No data</h3>
+          <p>
+            You have not performed any test yet, therefore Quant-UX could not collect any data. Once you start testing,
+            you will see here the heat maps.
+          </p>
         </div>
       </div>
     </section>
+        
+
+    
+    
+    <AnalyticPagePlugin  v-if="events && events.length === 0" :events="events" :model="app" />
+
   </div>
 </template>
 <script>
@@ -41,13 +47,13 @@ import Logger from "common/Logger";
 import DojoWidget from "dojo/DojoWidget";
 import Plan from "page/Plan";
 import Util from "core/Util";
-import Comment from "page/Comment";
 import HeatList from "dash/HeatList";
+import AnalyticPagePlugin from "../../../plugins/AnalyticPagePlugin"
 
 export default {
   name: "Test",
   mixins: [DojoWidget, Plan, Util],
-  props: ["app", "test", "annotation", "events", "pub"],
+  props: ["app", "test", "annotation", "events", "pub", "loading"],
   data: function() {
     return {
       MIN_REQUIERED_USERS: 40,
@@ -55,8 +61,8 @@ export default {
     };
   },
   components: {
-    Comment: Comment,
-    HeatList: HeatList
+    HeatList: HeatList,
+    AnalyticPagePlugin: AnalyticPagePlugin
   },
   computed: {
     isPublic() {

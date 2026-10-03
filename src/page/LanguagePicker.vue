@@ -1,35 +1,43 @@
 
 <template>
-  <div class="MatcLanguagePicker">
-    <div type="button" data-dojo-attach-point="button" @click.stop="open"  >
-      <span data-dojo-attach-point="label" class="mdi mdi-earth"></span>
+ <div :class="['MatcLanguagePicker', {'MatcToolbarPopUpVisible': isVisible}]">
+    <a type="button" @click.stop="open" class="MatcToolbarIconButton" >
+      <span v-if="hasLabel">
+        {{selectedLanguage}}
+      </span>
+      <QIcon icon="World"></QIcon>
       <span class="caret" v-if="hasCarret"></span>
-    </div>
+    </a>
     <div class="MatcDropDownPopUp" role="menu" data-dojo-attach-point="popup" v-if="isVisible">
       <ul class role="menu" data-dojo-attach-point="ul">
         <li v-for="ln in languages" :key="ln.value" @click.stop="onChangeLanguage(ln.value)" ><a>{{ln.label}}</a>
         </li>
       </ul>
     </div>
+    <div class="MatcDropDownPopUpBackdrop" v-if="isVisible"></div>
   </div>
 </template>
 <style lang="scss">
-  @import "../style/language.scss";
+  @import "../style/components/language.scss";
 </style>
 <script>
-import Services from "services/Services";
+//import Services from "services/Services";
 import on from "dojo/on";
 import win from "dojo/_base/win";
 import Logger from "common/Logger";
+import QIcon from "../page/QIcon";
+
+import _Tooltip from "common/_Tooltip";
 
 export default {
   name: "LangaugePicker",
-  mixins: [],
+  props:['hasLabel', 'value'],
+  mixins: [_Tooltip],
   data: function() {
     return {
       isVisible: false,
       hasCarret: false,
-      langauge: 'en',
+      language: 'en',
       languages: [
         {
           label: "English",
@@ -42,11 +50,25 @@ export default {
         {
           label: "Deutsch",
           value: "de"
+        },
+        {
+          label: "Portuguese",
+          value: "pt"
         }
       ]
     };
   },
   components: {
+    'QIcon': QIcon
+  },
+  computed: {
+    selectedLanguage () {
+      const ln = this.languages.find(l => l.value === this.language)
+      if (ln) {
+        return ln.label
+      }
+      return ''
+    }
   },
   methods: {
     open () {
@@ -59,20 +81,19 @@ export default {
       this.isVisible = false
     },
     onChangeLanguage (language) {
+      this.language = language
       this.logger.log(-1, "onChangeLanguage", "entry", language);
-      Services.getUserService().setLanguage(language)
-      this.$root.$i18n.locale = language
-      this.$root.$emit('Success',  this.$i18n.t('common.language-changed'))
+      this.$emit('change', language)
       this.close()
     }
   },
   async mounted() {
     this.logger = new Logger("LangaugePicker");
-    let user = Services.getUserService().load()
-    Services.getUserService().loadById(user.id).then(full => {
-      this.user = full
-      this.logger.info("mounted", "exit >> " + this.user.email);
-    })
+    if (this.value) {
+      this.language = this.value
+    }
+
+    this.addTooltip(this.$el, "Change the language", "vommondToolTipRightBottom")
   }
 };
 </script>

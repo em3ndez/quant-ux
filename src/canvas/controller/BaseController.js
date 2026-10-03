@@ -4,7 +4,8 @@ import lang from '../../dojo/_base/lang'
 import Core from '../../core/Core'
 import CoreUtil from '../../core/CoreUtil'
 import Logger from '../../common/Logger'
-import ModelDB from './ModelDB'
+import PerformanceMonitor from '../../core/PerformanceMonitor'
+import TreeIndex from '../../core/responsive/TreeIndex'
 import * as CollabUtil from './CollabUtil'
 import CollabService from './CollabService'
 import ModelFixer from './ModelFixer'
@@ -18,19 +19,18 @@ export default class BaseController extends Core {
 		if(params && params.mode){
 			this.mode = params.mode;
 		}
-
+		this.stackMaxLength = 300
+		this.stackElementToRemove = 150
 		this.debug = false
 		this.active = true
 		this.transactions = {}
-		this.modelDB = new ModelDB()
+		this._modelRenderJobs = {}
+		this._modelChanges = []
 		this.collabService = new CollabService()
-
-
 		this.logger.log(1,"constructor", "entry > " + this.mode);
 		this.commandStack =  {stack : [], pos : 0, id:0};
 		this._lastChangedWidgets = {};
 	}
-
 
 	/**********************************************************************
 	 * Dependencies
@@ -68,7 +68,7 @@ export default class BaseController extends Core {
 	 * Method is called on first load. Inits the
 	 */
 	setModel (m, screenID){
-		this.logger.log(-1,"setModel", "entry > " + screenID);
+		this.logger.log(1,"setModel", "entry > " + screenID);
 
 		this.model = m;
 		this.oldModel = lang.clone(m);
@@ -76,13 +76,17 @@ export default class BaseController extends Core {
 
 		/**
 		 * Apply model fixes here that might happen
-		 *due to this crappy software
+		 * due to this crappy software
 		 */
+		//ModelFixer.fixCorruptedModel(this.model)
 		ModelFixer.fixNegativeCoords(m);
 		ModelFixer.fixZValues(m);
 		ModelFixer.fixModelCount(m);
+		ModelFixer.fixRecursiveGroups(this.model)
+		ModelFixer.fixMissingSubgroups(this.model)
+		ModelFixer.fixDoubleGroup(this.model)
 
-		this.render(screenID);
+		this.initCanvas(screenID);
 
 		if(this.toolbar){
 			this.toolbar.setModel(m);
@@ -95,14 +99,41 @@ export default class BaseController extends Core {
 			this._canvas.setModel(this.model)
 		}
 
+		
+		this.initChangeStack(m.id)
+
+		this.updateModelIndexes(this.model)
+		
 		/**
 		 * Load model from local db and check if we have
 		 * a newer version
 		 */
-		this.modelDB.get(m.id).then(localModel => {
-			this.checkModel(localModel)
-		})
+		//this.modelDB.get(m.id).then(localModel => {
+			//this.checkModel(localModel)
+		//})
 	}
+
+	updateModelIndexes(model) {
+		// FIXME: Should we call on WebSocket stuff?
+		if (!this.treeIndex) {
+			this.treeIndex = new TreeIndex(model)
+		} else {
+			this.treeIndex.update(model)
+		}
+		if (this.toolbar) {
+			this.toolbar.setTreeIndex(this.treeIndex)
+		}
+		if (this.canvas) {
+			this.canvas.setTreeIndex(this.treeIndex)
+		}
+	}
+
+	getTreeParent(id){
+		if (this.treeIndex) {
+			return this.treeIndex.getParentWidget(id)
+		}
+	}
+
 
 	checkModel (localModel) {
 		this.logger.log(2,"checkModel", "enter");
@@ -159,6 +190,14 @@ export default class BaseController extends Core {
 	}
 
 	/**********************************************************************
+	 * Model name
+	 **********************************************************************/
+	setModelName (name) {
+		this.model.name = name
+		this.setDirty()
+	}
+
+	/**********************************************************************
 	 * Selection methods
 	 **********************************************************************/
 
@@ -177,9 +216,13 @@ export default class BaseController extends Core {
 
 	onWidgetSelected (id){
 		this.logger.log(3,"onWidgetSelected", "enter > "+ id);
-		var widget = this.model.widgets[id];
+		const widget = this.model.widgets[id];
+		if (!widget) {
+			this.logger.error("onWidgetSelected", "exit > No widget with id: "+ id);
+			return
+		}
 		if(this.toolbar){
-				this.toolbar.onWidgetSelected(widget);
+			this.toolbar.onWidgetSelected(widget);
 		}
 	}
 
@@ -236,113 +279,197 @@ export default class BaseController extends Core {
 	}
 
 	/**********************************************************************
+	 * LiveCycle Hooks
+	 **********************************************************************/
+
+	onElementCreated (element) {
+		this.logger.log(1,"onElementCreated", "enter", element.id);
+	}
+
+	/**********************************************************************
 	 * Model change methods
 	 **********************************************************************/
 
 
 	onModelChanged (changes){
-		this.logger.log(-1,"onModelChanged", "enter");
+		this.logger.log(1,"onModelChanged", "enter");
 		if (!changes) {
 			console.warn('onModelChanged()', 'No Changes')
 		}
 		if (this.active) {
-
-			/**
-			 * Update the view model too! This is super important
-			 * for all child widgets that might other wise not be
-			 * correctly updated. This should normally
-			 * not require a new rendering!
-			 */
-			if (this._canvas){
-				let inheritedModel = CoreUtil.createInheritedModel(this.model)
-				this._canvas.renderPartial(inheritedModel, changes);
-			}
-
-			if (this.toolbar){
-				this.toolbar.updatePropertiesView();
-			}
-
-			this.model.lastUpdate = new Date().getTime();
-
-			var s = JSON.stringify(this.model);
-			this.model.size = s.length;
-
-			this.setDirty();
-
-			this.emit('change', this.model)
+			this._modelHasChanged = true
+			this._modelChanges = this._modelChanges.concat(changes)
 		} else {
 			this.logger.log(1,"onModelChanged", "Exit because not active");
 		}
 	}
 
-	setDirty (){
+	startModelChange () {
+		PerformanceMonitor.start("BaseController.startModelChange()")
+		this._modelChanges = []
+		this._modelRenderJobs = {}
+		this._modelHasChanged = false
+	}
+
+	commitModelChange (updateChangeStack=true) {
+		this.logger.log(2,"commitModelChange", "enter  >  changes: " + this._modelHasChanged + " > " + updateChangeStack);
+
+		//this.updateAutoGroups();
+		// ungroup should not be possible for autoGroups
+
+		const inheritedModel = this.getInheritedModel(this.model)
+
+		// if we do not update the command stack, it was and undo redo,
+		// so we have to compute tall the changes and send to server
+		if (this._modelHasChanged || !updateChangeStack) {
+			if (this.toolbar){
+				this.toolbar.updatePropertiesView();
+			}
+			this.model.lastUpdate = new Date().getTime();
+			this.model.screenCount = Object.keys(this.model.screens).length
+			this.model.widgetCount = Object.keys(this.model.widgets).length
+
+
+			if (this.oldModel && updateChangeStack) {
+				// we need to fire the commandStack changes here,
+				// because setDirty has some delay... 
+				// - Maybe we can remove the delay in the future
+				// - Maybe we can allreayd stores here, so we do not have to compute twice?
+				const modelChanges = CollabUtil.getModelDelta(this.oldModel, this.model);					
+				this.addChangeStack(modelChanges)
+				
+			} else {	
+				this.logger.log(1,"commitModelChange", "Do not update changeStack");
+			}
+
+			this.setDirty();
+			this.emit('change', this.model)
+
+			if (this._canvas){
+				this._canvas.updateSourceModel(inheritedModel);
+			}
+		}
+
+		if (this._modelRenderJobs['complete'] === true) {
+			requestAnimationFrame(() => {
+				const isResize = this._modelRenderJobs['complete']
+				this._canvas.render(inheritedModel, isResize);			
+			})
+		} else if (this._modelRenderJobs['position'] === true) {
+			requestAnimationFrame(() => {
+				this._canvas.onWidgetPositionChange(inheritedModel);	
+			})			
+		} else {
+			requestAnimationFrame(() => {
+				const isResize = this._modelRenderJobs['all']
+				this._canvas.render(inheritedModel, isResize);			
+			})
+		}
+				
+		this._modelChanges = []
+		this._modelRenderJobs = {}
+		this._modelHasChanged = false
+
+		PerformanceMonitor.end("BaseController.startModelChange()")
+	}
+
+	getInheritedModel (model) {
+		//console.trace()
+		PerformanceMonitor.start("BaseController.getInheritedModel()")
+		const result =  CoreUtil.createInheritedModel(model)
+		PerformanceMonitor.end("BaseController.getInheritedModel()", 2)
+		return result
+	}
+
+
+
+	/***************************************************************************************
+	 *  Model saving
+	 ***************************************************************************************/
+
+	setDirty (saveCommandStack=true){
+		this.logger.log(3,"setDirty", "enter > ", this._dirty);
 		this._dirty = true;
 		if (this.debug){
-			this.saveModelChanges();
+			this.saveModelChanges(saveCommandStack);
 		} else {
-			setTimeout(lang.hitch(this, "saveModelChanges"), 300);
+			setTimeout(() => {
+				this.saveModelChanges(saveCommandStack);
+			}, 300);
 		}
 	}
 
 	async saveModelChanges () {
 
-		if (this.mode == "public"){
+		if (!this._dirty){
+			return
+		} 
+	
+		if (this.mode == "public" && !this.debug){
 			this.showSuccess("Please register to save changes...");
 			ModelFixer.validateAndFixModel(this.model);
+			ModelFixer.fixRecursiveGroups(this.model)
+			ModelFixer.fixMissingSubgroups(this.model)
+			ModelFixer.fixDoubleGroup(this.model)
 			this.emit("notSavedWarningShow", this.model);
-		} else {
-			if (this._dirty){
-				if (this.oldModel) {
+			return
+		} 
 
-					/**
-					 * Validate and fix model
-					 */
-					 ModelFixer.validateAndFixModel(this.model);
+			
+		if (this.oldModel) {
 
-					/**
-					 * compute changes and send them to server
-					 */
-					var changes = CollabUtil.getModelDelta(this.oldModel, this.model);
-					this.logger.log(4,"saveModelChanges", "Save changes " + changes.length);
-					if (changes.length > 0) {
-						/**
-						 * We start a transaction, and we will close it.
-						 */
-						let transactionId = this.startTransaction(transactionId)
-						this.modelService.updateApp(this.model, changes).then(res => {
-							this.endTransaction(transactionId)
-							this.onModelUpdated(res);
-						}).catch(err => {
-							this.logger.error("saveModelChanges", "Something wenrt wrong with the rest", err);
-							this.showError("Could not reach server! Changes not saved!");
-						})
+			/**
+			 * Validate and fix model
+			 */
+			ModelFixer.validateAndFixModel(this.model);
+			ModelFixer.fixRecursiveGroups(this.model)
+			ModelFixer.fixMissingSubgroups(this.model)
+			ModelFixer.fixDoubleGroup(this.model)
+			
+			// this might be different changes from the 
+			// command stack changes
+			const changes = CollabUtil.getModelDelta(this.oldModel, this.model);
 
-						/**
-						 * Since 4.2 we broadcast changes
-						 */
-						this.collabBroadcastChanges(changes)
-
-					} else {
-						this.logger.error("saveModelChanges", "Triggered without getting change! We send entire model");
-						let res = await this.modelService.saveApp(this.model)
-						this.onModelSaved(res);
-					}
-					this._dirty = false;
-				} else {
-					console.warn("saveModelChanges() > No oldModel!", this);
-				}
+			this.logger.log(4,"saveModelChanges", "Save changes " + changes.length);
+			if (changes.length > 0) {
+				/**
+				 * We start a transaction, and we will close it.
+				 */
+				const transactionId = this.startTransaction(changes)
+				/**
+				 * This could have retries :D
+				 */
+				this.modelService.updateApp(this.model, changes).then(res => {
+					this.endTransaction(transactionId)
+					this.onModelUpdated(res);
+				}).catch(err => {
+					this.logger.error("saveModelChanges", "Something wenrt wrong with the rest", err);
+					this.showError("Could not reach server! Changes not saved!");
+				})
 
 				/**
-				 * Store the model in case of network failure.
+				 * Since 4.2 we broadcast changes
 				 */
-				this.storeModel(this.model)
+				this.collabBroadcastChanges(changes)
 
-				/**
-				 * Clone currrent model as old model, so we can later again compute deltas
-				 */
-				this.setOldModel(this.model);
+			} else {
+				this.logger.error("saveModelChanges", "Triggered without getting change! We send entire model");
+				let res = await this.modelService.saveApp(this.model)
+				this.onModelSaved(res);
 			}
-		}
+			this._dirty = false;
+
+
+			// Is this really needed?
+			this.updateModelIndexes(this.model)
+
+			/**
+			 * Clone currrent model as old model, so we can later again compute deltas
+			 */
+			this.setOldModel(this.model);
+		} else {
+			console.warn("saveModelChanges() > No oldModel!", this);
+		}		
 	}
 
 	async onModelUpdated (response){
@@ -369,6 +496,74 @@ export default class BaseController extends Core {
 		this.oldModel = lang.clone(model);
 	}
 
+	/***************************************************************************************
+	 *  Rendering
+	 ***************************************************************************************/
+
+	initCanvas (screenID){
+		this.logger.log(2,"initCanvas", "enter > screenID : " + screenID);
+		if(this._canvas){
+			const inheritedModel = this.getInheritedModel(this.model)
+			requestAnimationFrame(() => {
+				this._canvas.render(inheritedModel);
+				if(screenID){
+					this._canvas.moveToScreen(screenID);
+				}
+			});
+		}		
+	}
+
+	render (screenID, isResize = false){
+		this.logger.log(2,"render", "enter > screenID : " + screenID);	
+		this._modelRenderJobs['all'] = isResize		
+	}
+
+	completeRender () {
+		this.logger.log(10, "completeRender", "enter");	
+		this._modelRenderJobs['complete'] = true		
+	}
+
+	/**
+	 * Notify the canvas that there has been some changes in widget positions!
+	 */
+	onWidgetPositionChange () {
+		this.logger.log(2,"onWidgetPositionChange", "enter");		
+		this._modelRenderJobs['position'] = true
+	}
+
+	onLayerListChange () {
+		this.logger.log(2,"onLayerListChange", "enter");
+		this._modelRenderJobs['position'] = true
+	}
+
+
+	renderWidget (widget, type){
+		this.logger.log(1,"renderWidget", "enter > type : ", type);
+		if (widget && this._canvas) {
+			/**
+				* In case we have a templated or design token widget, we
+				* kick of a complete rendering. This is to make sure that we
+				* merge in all the style. This does not hurt too much, because
+				* we have the partical rendering now.
+				* TODO: We could use the ModelUtil and inline the template and
+				*  the design tokens
+				*/
+			if (widget.template || widget.designtokens){
+				this._modelRenderJobs['all'] = false
+			} else {
+				this._canvas.setWidgetStyle(widget.id, widget.style, widget);
+				if (type === 'props') {
+					this._canvas.updateWidgetDataView(widget);
+				}
+			}
+		}
+	}
+
+	renderScreen (screen){
+		if(this._canvas){
+			this._canvas.setScreenStyle(screen.id, screen.style);
+		}
+	}
 
 	/***************************************************************************************
 	 *  Collab stuff
@@ -389,24 +584,27 @@ export default class BaseController extends Core {
 	}
 
 	collabRecieveChanges (user, event) {
-		this.logger.log(1, "collabRecieveChanges", "enter " , event);
+		this.logger.log(-1, "collabRecieveChanges", "enter " , event);
 
 		/**
-		 * Apply changes
+		 * Called from CollabSession with other users event.
+		 * 1) Apply changes and set the model as the old model to 
+		 * avoid recursve calls or double saves
+		 * 2) Render
+		 * 
+		 * we do not commit model changes, as we expect
+		 * they other to have done this
 		 */
 		this.model = this.collabService.applyEvent(this.model, event)
 		this.setOldModel(this.model)
-
-		/**
-		 * Rerender
-		 */
-		this.render();
-
-
-		/**
-		 * What about updating import and such?
-		 */
-		 this.logger.log(-1, "collabRecieveChanges", "exit " , this.model.lastUUID);
+		
+		const inheritedModel = this.getInheritedModel(this.model)
+		requestAnimationFrame(() => {
+			this._canvas.render(inheritedModel, false);
+			//this._canvas.renderAllCollabMousePositions()
+		})
+	
+		this.logger.log(-1, "collabRecieveChanges", "exit " , this.model.lastUUID);
 	}
 
 
@@ -415,9 +613,9 @@ export default class BaseController extends Core {
 	 ***************************************************************************************/
 
 
-	storeModel (model) {
+	storeModel () {
 		this.logger.log(3, "storeModel", "enter " );
-		this.modelDB.save(model)
+		//this.modelDB.save(model)
 	}
 
 	startTransaction (changes) {
@@ -434,8 +632,10 @@ export default class BaseController extends Core {
 		 *  - Check on reload if there are open changes and fire and apply them again?
 		 *  - We should in this case also save the entire model.... check the last update???
 		 */
-		this.logger.log(3, "startTransaction", "enter " + id);
-		setTimeout(() => this.checkTransaction(id, 0), 3000)
+		if (!this.debug) {
+			this.logger.log(3, "startTransaction", "enter " + id);
+			setTimeout(() => this.checkTransaction(id, 0), 3000)
+		}
 		return id
 	}
 
@@ -447,7 +647,7 @@ export default class BaseController extends Core {
 		 */
 		if (this.transactions[id]) {
 			this.logger.log(1, "checkTransaction", "enter #" + number, this.transactions[id].ts);
-			if (number < 4) {
+			if (number < 10) {
 				/**
 				 * For now we just log that that a transaction failed.
 				 * We should consoder resending!
@@ -457,7 +657,7 @@ export default class BaseController extends Core {
 				/**
 				 * here something is really wrong!
 				 */
-				this.logger.sendError("checkTransaction", new Error("Some transaction not done!"));
+				this.logger.error("checkTransaction", "Too many secs");
 			}
 		}
 	}
@@ -491,94 +691,6 @@ export default class BaseController extends Core {
 	onGroupNameChange (group) {
 		if (this._canvas) {
 			this._canvas.setGroupName(group)
-		}
-	}
-
-	/**
-	 * Since 3.0.29 we have a sepcial isResize to maake the fast render faster
-	 */
-	render (screenID, isResize = false){
-		this.logger.log(2,"render", "enter > screenID : " + screenID);
-		if(this._canvas){
-			/**
-			 * resize the model.
-			 */
-			let inheritedModel = CoreUtil.createInheritedModel(this.model)
-			requestAnimationFrame(() => {
-				this._canvas.render(inheritedModel, isResize);
-				if(screenID){
-					this._canvas.moveToScreen(screenID);
-				}
-			});
-		}
-	}
-
-	/**
-	 * Notify the canvas that there has been some changes in widget positions!
-	 */
-	onWidgetPositionChange () {
-		this.logger.log(2,"onWidgetPositionChange", "enter");
-		if(this._canvas){
-			/**
-			 * resize the model
-			 *
-			 */
-			let inheritedModel = CoreUtil.createInheritedModel(this.model)
-			requestAnimationFrame(() => {
-				this._canvas.onWidgetPositionChange(inheritedModel);
-			});
-		}
-	}
-
-
-
-
-	renderWidget (widget, type){
-		this.logger.log(0,"renderWidget", "enter > type : ", type);
-		if (widget) {
-
-			/**
-				* In case we have a templated or design token widget, we
-				* kick of a complete rendering. This is to make sure that we
-				* merge in all teh style. This does not hurt too much, because
-				* we have the partical rendering now.
-				* TODO: We could use the ModelUtil and inline the template and
-				*  the design tokens
-			 */
-			if(widget.template || widget.designtokens){
-
-				this.render();
-			} else {
-				/**
-				 * W have to set a zoomed model! Otherwise so UI widgets that use the
-				 * box size to compute some layout stuff ( e.g. icon size) have issues.
-				 *
-				 * FIXME: Also, there seems to be an issues when (data) props are updated!
-				 * e.g. table or spinner do not update!
-				 *
-				 * FIXME: Also add children in case it is an container widget!
-				 */
-				// let designTokenWidget = ModelUtil.inlineBoxDesignToken
-
-
-				this._canvas.setWidgetStyle(widget.id, widget.style, widget);
-
-				if (type === 'props') {
-					this._canvas.updateWidgetDataView(widget);
-				}
-			}
-		} else {
-			this.logger.error("renderWidget", "No widget passed for type" + type);
-			this.logger.sendError(new Error("Controller.renderWidget() No widget"));
-		}
-	}
-
-	renderScreen (screen){
-		/**
-		 * Suppose the model was already updated
-		 */
-		if(this._canvas){
-			this._canvas.setScreenStyle(screen.id, screen.style);
 		}
 	}
 
@@ -627,8 +739,7 @@ export default class BaseController extends Core {
 		/**
 		 * Create a new version
 		 */
-		let app = await this.modelService.copyApp(oldModel, newName)
-		// var app = this._doPost("rest/apps/copy/" +oldModel.id, {"name" : newName});
+		const app = await this.modelService.copyApp(oldModel, newName)
 		this.logger.log(0, "onSaveAs", "New app" + app.id);
 		return app;
 	}
@@ -656,7 +767,7 @@ export default class BaseController extends Core {
 		 * We have to do a hard save here, because the delta somehow produces
 		 * on the server null elements
 		 */
-		let res = await this.modelService.saveApp(this.model)
+		const res = await this.modelService.saveApp(this.model)
 		if (res) {
 			if (this._canvas){
 				this._canvas.setFonts(fonts);
@@ -678,7 +789,7 @@ export default class BaseController extends Core {
 		 * We have to do a hard save here, because the delta somehow produces
 		 * on the server null elements
 		 */
-		let res = await this.modelService.saveApp(this.model)
+		const res = await this.modelService.saveApp(this.model)
 		if (res) {
 			if (this.toolbar){
 				this.toolbar.updateImports()
@@ -691,29 +802,25 @@ export default class BaseController extends Core {
 	 **********************************************************************/
 
 	removeGrid (){
-
-		var command = {
+		this.startModelChange()
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "SetGrid",
 			n : null,
 			o : this.model.grid
 		};
 		this.addCommand(command);
-
-		/**
-		 * update model
-		 */
 		this.modelSetGrid(null);
-
 		this.render();
+		this.commitModelChange()
 	}
 
 	setGrid (width, height, color, style,visible, enabled){
-
+		this.startModelChange()
 		/**
 		 * create the command
 		 */
-		var grid = {
+		 const grid = {
 			w : width,
 			h : height,
 			color : color,
@@ -721,46 +828,35 @@ export default class BaseController extends Core {
 			visible:visible,
 			enabled:enabled
 		};
-
-
-		var command = {
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "SetGrid",
 			n : grid,
 			o : this.model.grid
 		};
 		this.addCommand(command);
-
-		/**
-		 * update model
-		 */
 		this.modelSetGrid(grid);
-
 		this.render();
+		this.commitModelChange()
 	}
 
 	setGrid2 (grid, color, style){
-
+		this.startModelChange()
 		/**
 		 * mixing color
 		 */
 		grid.color = color;
 		grid.style = style;
-
-		var command = {
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "SetGrid",
 			n : grid,
 			o : this.model.grid
 		};
 		this.addCommand(command);
-
-		/**
-		 * update model
-		 */
 		this.modelSetGrid(grid);
-
 		this.render();
+		this.commitModelChange()
 	}
 
 	modelSetGrid (grid){
@@ -783,10 +879,9 @@ export default class BaseController extends Core {
 	 * Add Action
 	 **********************************************************************/
 
-
-
 	addAction (widgetID, action, isGroup){
-		var command = {
+		this.startModelChange()
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "AddAction",
 			model : action,
@@ -794,20 +889,20 @@ export default class BaseController extends Core {
 			isGroup: isGroup
 		};
 		this.addCommand(command);
-
 		this.modelAddAction(widgetID, action, isGroup);
+		this.commitModelChange()
 	}
 
 	modelAddAction (widgetID, action, isGroup){
 		if(isGroup){
-			var group = this.model.groups[widgetID];
+			const group = this.model.groups[widgetID];
 			if(group){
 				group.action = action;
 			} else {
 				console.warn("modelRemoveAction() > No group with ID", widgetID)
 			}
 		} else {
-			var widget = this.model.widgets[widgetID];
+			const widget = this.model.widgets[widgetID];
 			if(widget){
 				widget.action = action;
 			} else {
@@ -818,15 +913,15 @@ export default class BaseController extends Core {
 	}
 
 	undoAddAction (command){
-		var action = command.model;
-		var id = command.modelID;
+		const action = command.model;
+		const id = command.modelID;
 		this.modelRemoveAction(id, action, command.isGroup);
 		this.render();
 	}
 
 	redoAddAction (command){
-		var action = command.model;
-		var id = command.modelID;
+		const action = command.model;
+		const id = command.modelID;
 		this.modelAddAction(id, action, command.isGroup);
 		this.render();
 	}
@@ -837,7 +932,8 @@ export default class BaseController extends Core {
 
 
 	removeAction (widgetID, action, isGroup){
-		var command = {
+		this.startModelChange()
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "RemoveAction",
 			model : action,
@@ -845,42 +941,40 @@ export default class BaseController extends Core {
 			isGroup: isGroup
 		};
 		this.addCommand(command);
-
 		this.modelRemoveAction(widgetID, action, isGroup);
+		this.commitModelChange()
 	}
 
 	modelRemoveAction (widgetID, action, isGroup){
-
-		if(isGroup){
-			var group = this.model.groups[widgetID];
+		if (isGroup) {
+			const group = this.model.groups[widgetID];
 			if(group){
 				delete group.action;
 			} else {
 				console.warn("modelRemoveAction() > No group with ID", widgetID)
 			}
 		} else {
-			var widget = this.model.widgets[widgetID];
+			const widget = this.model.widgets[widgetID];
 			if(widget){
 				delete widget.action;
 			} else {
 				console.warn("modelRemoveAction() > No widgte with ID", widgetID)
 			}
 		}
-
 		this.onModelChanged([{type: 'grid', action:"remove"}]);
 	}
 
 
 	undoRemoveAction (command){
-		var action = command.model;
-		var id = command.modelID;
+		const action = command.model;
+		const id = command.modelID;
 		this.modelAddAction(id, action, command.isGroup);
 		this.render();
 	}
 
 	redoRemoveAction (command){
-		var action = command.model;
-		var id = command.modelID;
+		const action = command.model;
+		const id = command.modelID;
 		this.modelRemoveAction(id, action, command.isGroup);
 		this.render();
 	}
@@ -889,7 +983,8 @@ export default class BaseController extends Core {
 	 * update Action
 	 **********************************************************************/
 	updateAction (widgetID, action, isGroup) {
-		var command = {
+		this.startModelChange()
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "ActionAction",
 			modelID: widgetID,
@@ -898,30 +993,30 @@ export default class BaseController extends Core {
 			isGroup: isGroup
 		};
 		this.addCommand(command);
-
 		this.modelUpdateAction(widgetID, action, isGroup);
+		this.commitModelChange()
 	}
 
 	getActionById (id, isGroup) {
 		if (isGroup){
-			var group = this.model.groups[id];
+			const group = this.model.groups[id];
 			return group.action;
 		} else {
-			var widget = this.model.widgets[id];
+			const widget = this.model.widgets[id];
 			return widget.action;
 		}
 	}
 
 	modelUpdateAction (widgetID, action, isGroup) {
 		if(isGroup){
-			var group = this.model.groups[widgetID];
+			const group = this.model.groups[widgetID];
 			if(group){
 				group.action = action;
 			} else {
 				console.warn("modelUpdateAction() > No group with ID", widgetID)
 			}
 		} else {
-			var widget = this.model.widgets[widgetID];
+			const widget = this.model.widgets[widgetID];
 			if(widget){
 				widget.action = action;
 			} else {
@@ -933,15 +1028,15 @@ export default class BaseController extends Core {
 	}
 
 	undoActionAction (command){
-		var action = command.o;
-		var id = command.modelID;
+		const action = command.o;
+		const id = command.modelID;
 		this.modelUpdateAction(id, action, command.isGroup);
 		this.render();
 	}
 
 	redoActionAction (command){
-		var action = command.n;
-		var id = command.modelID;
+		const action = command.n;
+		const id = command.modelID;
 		this.modelUpdateAction(id, action, command.isGroup);
 		this.render();
 	}
@@ -952,14 +1047,14 @@ export default class BaseController extends Core {
 	 **********************************************************************/
 
 	addLine (line){
-
+		this.startModelChange()
 		/**
 		 * here comes already the correct model.
 		 * we do not have to do anything more,
 		 * just add an uuid
 		 */
 		line.id = "l"+this.getUUID();
-		var zoom = this._canvas.getZoomFactor();
+		const zoom = this._canvas.getZoomFactor();
 		for(var i=0; i< line.points.length; i++){
 			this.getUnZoomedBox(line.points[i], zoom);
 		}
@@ -967,7 +1062,7 @@ export default class BaseController extends Core {
 		/**
 		 * create the command
 		 */
-		var command = {
+		 const command = {
 			timestamp : new Date().getTime(),
 			type : "AddLine",
 			model : line
@@ -978,16 +1073,12 @@ export default class BaseController extends Core {
 		 * update model
 		 */
 		this.modelAddLine(line);
-
 		this.render();
-
-		if(this.toolbar){
-			//this.toolbar.showLineAction(line)
-		}
+		this.commitModelChange()
 	}
 
 	modelAddLine (line){
-		if(!this.model.lines[line.id]){
+		if (!this.model.lines[line.id]) {
 			this.model.lines[line.id] = line;
 			this.onModelChanged([{type: 'line', action:"add", id:line.id}]);
 		} else {
@@ -997,8 +1088,7 @@ export default class BaseController extends Core {
 
 
 	modelRemoveLine (line){
-
-		if(this.model.lines[line.id]){
+		if (this.model.lines[line.id]) {
 			delete this.model.lines[line.id];
 			this.onModelChanged([{type: 'line', action:"remove", id:line.id}]);
 		} else {
@@ -1007,13 +1097,13 @@ export default class BaseController extends Core {
 	}
 
 	undoAddLine (command){
-		var line = command.model;
+		const line = command.model;
 		this.modelRemoveLine(line);
 		this.render();
 	}
 
 	redoAddLine (command){
-		var line = command.model;
+		const line = command.model;
 		this.modelAddLine(line);
 		this.render();
 	}
@@ -1024,33 +1114,26 @@ export default class BaseController extends Core {
 	 **********************************************************************/
 
 	removeLine (line){
-
-		/**
-		 * create the command
-		 */
-		var command = {
+		this.startModelChange()
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "RemoveLine",
 			model : line
 		};
 		this.addCommand(command);
-
-		/**
-		 * update model
-		 */
 		this.modelRemoveLine(line);
-
 		this.render();
+		this.commitModelChange()
 	}
 
 	undoRemoveLine (command){
-		var line = command.model;
+		const line = command.model;
 		this.modelAddLine(line);
 		this.render();
 	}
 
 	redoRemoveLine (command){
-		var line = command.model;
+		const line = command.model;
 		this.modelRemoveLine(line);
 		this.render();
 	}
@@ -1068,28 +1151,25 @@ export default class BaseController extends Core {
 		/**
 		 * create the command
 		 */
-		var line = this.model.lines[id];
-		if(line.points[i]){
-			var point = line.points[i];
-			var command = {
-					timestamp : new Date().getTime(),
-					type : "LinePointPosition",
-					delta :{
-						o : point,
-						n : pos
-					},
-					i : i,
-					modelId : id
+		const line = this.model.lines[id];
+		if (line.points[i]) {
+			this.startModelChange()
+			const point = line.points[i];
+			const command = {
+				timestamp : new Date().getTime(),
+				type : "LinePointPosition",
+				delta :{
+					o : point,
+					n : pos
+				},
+				i : i,
+				modelId : id
 			};
 			this.addCommand(command);
+			this.modelLinePointPosition(id, i, pos);
+			this.commitModelChange()
 		}
-
-
-
-		/**
-		 * update model!
-		 */
-		this.modelLinePointPosition(id, i, pos);
+	
 	}
 
 	modelLinePointPosition (id, i, pos){
@@ -1119,11 +1199,9 @@ export default class BaseController extends Core {
 	updateLineProperties (id, key, value){
 		this.logger.log(0,"updateLineProperties", "enter >key : " + key +  " > value : " + value);
 
-		var line = this.model.lines[id];
-
-
-		if(line){
-
+		const line = this.model.lines[id];
+		if (line) {
+			this.startModelChange()
 			var command = {
 				timestamp : new Date().getTime(),
 				type : "LineProperties",
@@ -1135,14 +1213,12 @@ export default class BaseController extends Core {
 				modelId : id
 			};
 			this.addCommand(command);
-
 			this.modelLineProperties(id, key, value);
-
 			this.render();
+			this.commitModelChange()
 		} else {
 			console.warn("updateLineProperties() > No line with id " + id);
 		}
-
 	}
 
 
@@ -1175,13 +1251,10 @@ export default class BaseController extends Core {
 
 	updateLineAllProperties (id, newLine){
 		this.logger.log(0,"updateLineAllProperties", "enter >key : " + id );
-
-		var line = this.model.lines[id];
-
-
+		const line = this.model.lines[id];
 		if(line){
-
-			var command = {
+			this.startModelChange()
+			const command = {
 				timestamp : new Date().getTime(),
 				type : "LineAllProperties",
 				delta :{
@@ -1191,11 +1264,9 @@ export default class BaseController extends Core {
 				modelId : id
 			};
 			this.addCommand(command);
-
-
 			this.modelLineAllProperties(id, newLine);
-
 			this.render();
+			this.commitModelChange()
 		} else {
 			console.warn("updateLineAllProperties() > No line with id " + id);
 		}
@@ -1203,16 +1274,13 @@ export default class BaseController extends Core {
 
 
 	modelLineAllProperties (id, newLine){
-
-		var line = this.model.lines[id];
-
-		if(line){
+		const line = this.model.lines[id];
+		if (line){
 			this.model.lines[id] = newLine;
 			this.onModelChanged([{type: 'line', action:"change", id:id}]);
 		} else {
 			console.warn("modelLineProperties() > No line with id " + id);
 		}
-
 	}
 
 	undoLineAllProperties (command){
@@ -1247,7 +1315,6 @@ export default class BaseController extends Core {
 			box.w = pos.w;
 		}
 
-
 		if(box.x < 0){
 			box.x = Math.abs(box.x);
 			console.warn("updateBox() > Something strange happened, box.x < 0 ...");
@@ -1259,280 +1326,6 @@ export default class BaseController extends Core {
 		}
 	}
 
-
-	/**********************************************************************
-	 * MulitCommand
-	 **********************************************************************/
-
-	undoMultiCommand (command){
-		this.logger.log(0,"undoMultiCommand", "enter > " + command.id);
-
-		for(var i=0; i< command.children.length; i++){
-			var child = command.children[i];
-			if(this["undo" + child.type]){
-				this["undo"+ child.type](child);
-			} else {
-				console.warn("No Undo function defined for ", command);
-			}
-		}
-	}
-
-	redoMultiCommand (command){
-		this.logger.log(0,"redoMultiCommand", "enter > " + command.id);
-
-		for(var i=0; i< command.children.length; i++){
-			var child = command.children[i];
-			if(this["redo" + child.type]){
-				this["redo"+ child.type](child);
-			} else {
-				console.warn("No Undo function defined for ", command);
-			}
-		}
-	}
-
-	/**********************************************************************
-	 * CommandStack
-	 **********************************************************************/
-
-
-	async addCommand (command){
-
-		if(!this.commandStack.lastUUID){
-			this.commandStack.lastUUID = 0;
-		}
-		command.id = "c" + this.commandStack.lastUUID++;
-
-		/**
-		 * It might have happened that we have moved back in the stack via undo.
-		 * if a new command comes, we throw away all newer commands.
-		 */
-		if(this.commandStack.pos < this.commandStack.stack.length){
-			if(this.mode=="public"){
-				this.onCommandDeleted(command);
-			} else {
-				var count = (this.commandStack.stack.length - this.commandStack.pos);
-				this.modelService.deleteCommand(this.model, count).then(res => {
-					this.logger.log(0,"addCommand", "cut off future! > " + count + " >> "  + res.pos);
-					this.onCommandDeleted(command)
-				}).catch(err => {
-					this.logger.error("addCommand", "ERROR deleteing", err);
-					this.showError('Could not reach server! Changes not saved')
-				})
-			}
-		} else {
-			this.postCommand(command);
-		}
-		this.emit("commandAdded", this.commandStack.stack.length);
-	}
-
-	onCommandDeleted (command){
-
-		/**
-		 * just remove the command. also update the pos, altough it should be updated
-		 * in the next step
-		 */
-		// var count = (this.commandStack.stack.length - this.commandStack.pos);
-		this.commandStack.stack = this.commandStack.stack.slice(0,this.commandStack.pos );
-		this.logger.log(2,"onCommandDeleted", "enter > pos : " + this.commandStack.pos + " > stack : " +	this.commandStack.stack.length);
-
-		if(this.toolbar){
-			this.toolbar.disableRedo();
-		}
-		this.postCommand(command);
-	}
-
-
-	async postCommand (command){
-		this.logPageEvent("addCommand", command.type)
-		var result = {
-			pos : this.commandStack.pos + 1,
-			command : command,
-			lastUUID : this.commandStack.lastUUID + 1
-		}
-		this.logger.log(1,"postCommand", "enter > " + this.mode);
-		if (this.mode == "public"){
-			/**
-			 * In public mode, we do not call network, and just add
-			 */
-			this.onCommandAdded(result);
-		} else {
-
-			try {
-				this.modelService.addCommand(this.model, command).then(pos => {
-					this.onCommandAdded(pos);
-				}).catch(err => {
-					this.logger.error("postCommand", "ERROR saving", err);
-					this.showError('Could not reach server! Changes not saved')
-				})
-
-				/**
-				 * Since 2.1.3 we put stuff and the stack, without waiting
-				 * for the backend.
-				 */
-				this.commandStack.stack.push(result.command);
-				this.commandStack.pos = result.pos;
-				this.commandStack.lastUUID = result.lastUUID;
-
-				this.logger.log(1,"postCommand", "exit > lastUUID: " + this.commandStack.lastUUID  + ' > pos: ' + this.commandStack.pos);
-			} catch (err) {
-				this.logger.sendError("postCommand", err);
-			}
-		}
-	}
-
-
-	onCommandAdded (result){
-		if(result.errors){
-			this.logger.sendError("onCommandAdded", new Error("Server returned error"));
-		}
-
-		/**
-		 * Since 2.1.3 we put stuff and the stack. here we just update the
-		 * lastUUID ans pos with the server one, in case we would have
-		 * concurrant editing
-		 *
-		 * FIXME: for some reason the last UUID on the server lacks
-		 * the one we have in browser. Question: Do we need the last UUID on the stack?
-		 * Can`t we use the normal lastUUID? Or just created with Date()
-		 */
-
-		// this.commandStack.stack.push(result.command);
-		this.commandStack.pos = result.pos;
-		this.commandStack.lastUUID = result.lastUUID;
-
-		if(this.toolbar){
-			this.toolbar.enbaleUndo();
-		}
-		this.logger.log(1,"onCommandAdded", "exit > id: "+ result.command.id + " > lastUUID: " + this.commandStack.lastUUID + " > pos: " + this.commandStack.pos);
-	}
-
-
-	canUndo (){
-		return 	this.commandStack.pos > 0;
-	}
-
-	async undo (){
-		this.logger.log(2,"undo", "enter > " + (this.commandStack.pos > 0));
-		this.logPageEvent("undo", "")
-		if(this.commandStack.pos > 0){
-			/**
-			 * Do do things faster for large requests,
-			 * we do not wait for the rest response.
-			 */
-			if(this.mode !== "public"){
-					this.modelService.undoCommand(this.model, {}).then(res => {
-						if (res.pos != this.commandStack.pos) {
-							this.logger.error('undo', "server is behind")
-						}
-						this.logger.log(2,"undo", "saved", res.pos + '==' + this.commandStack.pos);
-					})
-			}
-			var result = {
-				pos : this.commandStack.pos - 1
-			}
-			this.onUndoCompleted(result);
-		}
-		if(this.commandStack.pos <= 0){
-			if(this.toolbar){
-				this.toolbar.disableUndo();
-			}
-		}
-	}
-
-
-	onUndoCompleted (result){
-		this.logger.log(2,"onUndoCompleted", "enter > " + result.pos);
-		this.commandStack.pos = result.pos;
-		var command = this.commandStack.stack[this.commandStack.pos];
-		if(command){
-			this.logger.log(0,"onUndoCompleted", "enter > "+ command.id);
-			if(this["undo" + command.type]){
-				try{
-					this["undo"+ command.type](command);
-				} catch(e){
-					console.debug(e.stack);
-				}
-			} else {
-				console.warn("No Undo function defined for ", command);
-			}
-			if(this.toolbar){
-				this.toolbar.enbaleRedo();
-			}
-		} else {
-			console.warn("No Undo command defined!");
-		}
-	}
-
-	async redo (){
-		this.logger.log(2,"redo", "enter > "+ (this.commandStack.pos >= this.commandStack.stack.length));
-		this.logPageEvent("redo", "")
-		if(this.commandStack.pos >= 0 && this.commandStack.pos < this.commandStack.stack.length){
-			/**
-			 * Do do things faster for large requests,
-			 * we do not wait for the rest response.
-			 */
-			if(this.mode !=="public"){
-				this.modelService.redoCommand(this.model, {}).then(res => {
-					if (res.pos !== this.commandStack.pos) {
-						this.logger.log(1, 'redo', "server is behind")
-					}
-					this.logger.log(2,"redo", "saved",  res.pos + '==' + this.commandStack.pos);
-				})
-			}
-
-			var result = {
-				pos : this.commandStack.pos+1
-			}
-			this.unRedoCompleted(result);
-		} else {
-			this.logger.log(0,"redo", "No redo > ");
-		}
-
-		if(this.commandStack.pos >= this.commandStack.stack.length){
-			if(this.toolbar){
-				this.toolbar.disableRedo();
-			}
-		}
-	}
-
-	unRedoCompleted (result){
-		var command = this.commandStack.stack[this.commandStack.pos];
-		this.commandStack.pos = result.pos;
-		this.logger.log(2,"unRedoCompleted", "enter > "+ command.id);
-		if(this["redo" + command.type]){
-			try{
-				this["redo"+ command.type](command);
-			}catch(e){
-				console.debug(e.stack);
-			}
-		} else {
-			console.warn("No Redo function defined for ", command.type);
-		}
-		if(this.toolbar){
-			this.toolbar.enbaleUndo();
-		}
-	}
-
-	setCommandStack (s){
-
-		this.logger.log(2,"setCommandStack", "enter");
-
-		this.commandStack = s;
-
-		if(this.toolbar){
-			if(this.commandStack.pos > 0){
-				this.toolbar.enbaleUndo();
-			} else {
-				this.toolbar.disableUndo();
-			}
-
-			if(this.commandStack.pos < this.commandStack.stack.length){
-				this.toolbar.enbaleRedo();
-			} else{
-				this.toolbar.disableRedo();
-			}
-		}
-	}
 
 	/**********************************************************************
 	 * Helper
@@ -1593,25 +1386,25 @@ export default class BaseController extends Core {
 	 * Returns a unique group name within the screen!!
 	 */
 	getGroupName (screenID, name){
-		var names = {};
-		for (var id in this.model.groups){
-			var group =  this.model.groups[id];
+		const names = {};
+		for (let id in this.model.groups){
+			const group =  this.model.groups[id];
 			if (group) {
 				if (group.children.length > 0){
-					var widgetID = group.children[0];
-					var widget = this.model.widgets[widgetID];
+					const widgetID = group.children[0];
+					const widget = this.model.widgets[widgetID];
 					if (widget) {
-						var parentScreen = this.getParentScreen(widget);
+						const parentScreen = this.getParentScreen(widget);
 						if (parentScreen && parentScreen.id === screenID) {
 							names[group.name] = group.id;
 						}
 					}
 				}
+				// we are missung the sub groups here, or parent groups...
 			} else {
 				console.debug("getGroupName() > No group", id);
 			}
 		}
-
 		return this.getUniqueName(name, names);
 	}
 
@@ -1658,7 +1451,7 @@ export default class BaseController extends Core {
 		 * be better, hwoever the Core.getOrderedWidgets() relies for old prototypes
 		 * on the id to establish order.
 		 */
-		var uuid = this.model.lastUUID++ + "_" + Math.round(Math.random() * 100000);
+		const uuid = this.model.lastUUID++ + "_" + Math.round(Math.random() * 100000);
 		return uuid
 	}
 
@@ -1679,14 +1472,14 @@ export default class BaseController extends Core {
 	}
 
 	getDeltaBox (model, pos){
-		var delta = {n:{}, o:{}};
+		const delta = {n:{}, o:{}};
 		if(model){
-			for(var p in pos){
+			for(let p in pos){
 				if(pos[p] != null && pos[p]!= undefined){
 					if(pos[p] != model[p]){
 						delta.n[p] = pos[p];
 						delta.o[p] = model[p];
-						ModelFixer.fix1PXBug(p, model, pos)
+						//ModelFixer.fix1PXBug(p, model, pos)
 					}
 				}
 			}
@@ -1716,7 +1509,6 @@ export default class BaseController extends Core {
 
 
 	getDelta (model, pos){
-
 		var delta = {n:{}, o:{}};
 		for(var p in pos){
 			if(pos[p] != model[p]){

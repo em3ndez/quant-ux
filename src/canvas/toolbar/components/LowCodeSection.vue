@@ -4,7 +4,7 @@
 
         <div class="MatcToobarRow" v-if="isContainer">
             <ToolbarDropDownButton
-                class="MatcToolbarGridFull"
+                class=""
                 qPopupCSS="MatcActionAnimProperties"
                 qMaxLabelLength="40"
                 :qOptions="layoutOptions"
@@ -44,13 +44,13 @@
 
 
         <div class="MatcToobarRow" v-if="isCustom || !isContainer">
-            <div class="MatcToolbarItem MatcToolbarGridFull MatcToobarInputIconCntr" ref="tooltipCustom">
+            <div class="MatcToobarInputL  MatcToobarInputIconCntr" ref="tooltipCustom">
 
                 <input class="MatcIgnoreOnKeyPress MatcToobarInlineEdit MatcToobarInput"
                     placeholder="Custom Component"
                     :value="customComponent"
                     @change="onCustomChange"/>
-                <span class="mdi mdi-puzzle MatcToobarInputIcon" />
+                <QIcon icon="Component"></QIcon>
 
             </div>
         </div>
@@ -63,6 +63,7 @@ import DojoWidget from 'dojo/DojoWidget'
 import _Tooltip from 'common/_Tooltip'
 import ToolbarDropDownButton from './ToolbarDropDownButton'
 import InputDropDownButton from './InputDropDownButton'
+import QIcon from 'page/QIcon'
 
 export default {
     name: 'LowCodeSection',
@@ -98,7 +99,8 @@ export default {
     },
     components: {
         'ToolbarDropDownButton': ToolbarDropDownButton,
-        'InputDropDownButton': InputDropDownButton
+        'InputDropDownButton': InputDropDownButton,
+        'QIcon': QIcon
     },
     computed: {
         isCustom () {

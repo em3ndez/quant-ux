@@ -1,9 +1,27 @@
 var path = require('path');
 module.exports = {
+  // ESLint in the dev build dominated rebuild time (~28s of a 30s compile on this
+  // codebase). Lint runs via `npm run lint` / your editor instead.
+  lintOnSave: false,
+  configureWebpack: {
+    // Webpack 5 filesystem cache: cold start 20s -> ~1.6s on a warm cache.
+    cache: {
+      type: 'filesystem',
+      buildDependencies: {
+        config: [__filename]
+      }
+    }
+  },
   devServer: {
     proxy: {
       '^/rest': {
-        target: 'https://v1.quant-ux.com', // 'http://localhost:8081',
+        //target:  'http://localhost:8082',
+        target: 'https://v1.quant-ux.com',
+        ws: true,
+        changeOrigin: true
+      },
+      '^/ai': {
+        target:  'https://v1.quant-ux.com',
         ws: true,
         changeOrigin: true
       }

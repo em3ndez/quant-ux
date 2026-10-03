@@ -1,9 +1,12 @@
 
 <template>
-  <div class="MatcAppList">
+  <div class="MatcScreenList">
     <div class="MatcAppListContainer" data-dojo-attach-point="container"></div>
   </div>
 </template>
+<style lang="scss">
+  @import "../style/components/list.scss";
+</style>
 <script>
 import DojoWidget from "dojo/DojoWidget";
 import css from "dojo/css";

@@ -29,6 +29,11 @@
     </div>
   </div>
 </template>
+
+<style lang="scss">
+  @import '../style/components/menu.scss';
+</style>
+
 <script>
 import Service from 'services/Services'
 export default {

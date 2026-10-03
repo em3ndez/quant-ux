@@ -4,17 +4,44 @@
 		<div class="MatcCanvasContainer MatcCanvasZoomable " data-dojo-attach-point="container">
 			<div class="MatcCanvasContainer " data-dojo-attach-point="zoomContainer">
 				<div data-dojo-attach-point="screenContainer" class="MatcCanvasLayer"></div>
-				<div data-dojo-attach-point="widgetContainer" class="MatcCanvasLayer"></div>
+				<div data-dojo-attach-point="widgetContainer" class="MatcCanvasLayer MatcCanvasGridLayer"></div>
 			</div>
 			<div data-dojo-attach-point="dndContainer" class="MatcDnDLayer"></div>
+			<div data-dojo-attach-point="svgLayer" class="MatcSVGLayer" v-if="showSVG">
+				<SVGEditor 
+					:width="containerSize.w" 
+					:height="containerSize.h" 
+					:zoom="svgCanvasZoom"
+					:pos="svgCanvasPos"
+					:grid="svgGrid"
+		
+					:isMultiPath="isSVGMultiPath"
+					@mouselcick="onSVGClick"
+					@stop="endSVG(true)"
+					@move="onSVGEditorMove"
+					@select="onSVGEditorPathSelected"
+					@unselect="onSVGEditorPathUnSelected"
+					@change="onSVGChange"
+					@tempChange="onSVGTempChange"
+					@changeCommandStack="onSVGCommandStackChange"
+					ref="svgEditor" 
+					/>
+			</div>
+
+			<!-- <AIPopup ref="aiEditor"
+				@settings="showAiSettings" /> -->
+				
+			
+		
 		</div>
 	</div>
+	<ContextMenu ref="contextMenu" @select="onContextSelect"/>
 	<div class="MatcCanvasScrollBar MatcCanvasScrollBarRight" data-dojo-attach-point="scrollRight">
 		<div class="MatcCanvasScrollBarCntr MatcCanvasScrollBarCntrRight" data-dojo-attach-point="scrollRightCntr">
 			<div class="MatchCanvasScrollHandle" data-dojo-attach-point="scrollRightHandler"></div>
 		</div>
 	</div>
-	<div class="MatcCanvasScrollBar MatcCanvasScrollBarBottom" data-dojo-attach-point="scrollBottom">
+	<div class="MatcCanvasScrollBar MatcCanvasScrollBarBottom" data-dojo-attach-point="scrollBottom" :style="'padding-left:' + this.layerListWidth + 'px'">
 		<div class="MatcCanvasScrollBarCntr MatcCanvasScrollBarCntrBottom" data-dojo-attach-point="scrollBottomCntr">
 			<div class="MatchCanvasScrollHandle" data-dojo-attach-point="scrollBottomHandler"></div>
 		</div>
@@ -56,33 +83,47 @@ import DataView from 'canvas/DataView'
 import ScreenRuler from 'canvas/ScreenRuler'
 import CustomHandler from 'canvas/CustomHandler'
 import Collab from 'canvas/Collab'
+import SVG from 'canvas/SVG'
+//import AI from 'canvas/AI'
+import ContextMenu from './ContextMenu'
 
 import KeyBoard from 'canvas/KeyBoard'
 import Resize from 'canvas/Resize'
 import Replicate from 'canvas/Replicate'
 import Prototyping from 'canvas/Prototyping'
+import GridResize from 'canvas/GridResize'
 
 import FastDomUtil from 'core/FastDomUtil'
+import SVGEditor from '../svg/SVGEditor'
+//import AIPopup from '../ai/AIPopup'
 
 export default {
   name: 'Canvas',
+	props:['viewport'],
 	mixins:[DojoWidget, _DragNDrop, Util, Render, Lines, DnD, Add, Select, Distribute, Tools,
 			Zoom, InlineEdit, Scroll, Upload, Comment, Layer, CustomHandler, ScreenRuler, DataView,
-			KeyBoard, Resize, Replicate, Prototyping, Collab],
+			KeyBoard, Resize, Replicate, Prototyping, Collab, SVG, GridResize /*, AI */],
     data: function () {
         return {
-					mode: "edit",
-					isMoveOnlySelected: true,
-          debug: false,
-          grid: null,
-          isPublic: false,
-					active: true,
-					name: 'XCanvas'
+			mode: "edit",
+			isMoveOnlySelected: false,
+			debug: false,
+			grid: null,
+			isPublic: false,
+			active: true,
+			showSVG: false,
+			name: 'XCanvas'
         }
     },
-    components: {},
+    components: {
+		'SVGEditor': SVGEditor,
+		'ContextMenu': ContextMenu,
+		//'AIPopup': AIPopup
+	},
     methods: {
 		postCreate (){
+
+			this._canvasStartTime = new Date().getTime()
 
 			this.logger = new Logger("Canvas")
 			this.logger.log(2,"postCreate", "entry");
@@ -98,12 +139,14 @@ export default {
 				w: this.canvasFlowWidth,
 				h: this.canvasFlowHeight
 			};
+			this.initViewport()
 			this.initContainerSize();
 			this.setContainerPos();
 
 			/**
 			 * Init remaining sub components
 			 */
+			this.initSelection()
 			this.initSettings();
 			this.initRender();
 			this.initMouseTracker();
@@ -129,7 +172,7 @@ export default {
 			 * Set correct mode
 			 */
 			css.add(this.domNode, "MatcCanvasMode"+ this.mode);
-			this.logger.log(-1,"postCreate", "exit > " + this.mode);
+			this.logger.log(3,"postCreate", "exit > " + this.mode);
 		},
 
 		setUser (u){
@@ -153,11 +196,23 @@ export default {
 			c.setCanvas(this);
 		},
 
+	
+
 		getController (){
 			if(this._controllerCallback){
 				this[this._controllerCallback]();
 			}
 			return this.controller;
+		},
+
+		setCurrentTool (t) {
+			this.logger.log(2, "setCurrentTool", "enter");
+			this.currentTool = t
+			if (this.toolbar) {
+				this.toolbar.setCurrentTool(this.currentTool)
+			} else {
+				this.logger.error("setCurrentTool", "Exit no toolbar");
+			}
 		},
 
 		setControllerCallback (c){
@@ -216,7 +271,7 @@ export default {
 		},
 
 		setCanvasViewConfig (key, value) {
-			this.logger.log(-1, "setCanvasViewConfig", "enter > " + key, value);
+			this.logger.log(-3, "setCanvasViewConfig", "enter > " + key, value);
 			if (key === 'zoom') {
 				this.setZoomFactor(value)
 			}
@@ -304,13 +359,27 @@ export default {
 		setModel (model){
 			this.model = model;
 			this.onChangeCanvasViewConfig()
+			this.setCommentView(this.showComments)	
 		},
 
+		setCanvasModeListener (listener) {
+			this._canvasModeListener = listener
+		},
+
+		clearCanvasModeListener () {
+			delete this._canvasModeListener
+		},
 
 		setMode (mode, forceRender){
 			this.logger.log(3,"setMode", "enter > " + mode +" != " + this.mode + " > forceRender : " + forceRender);
-			if(mode != this.mode ){
-
+			if (this._canvasModeListener && this[this._canvasModeListener]) {
+				try {
+					this[this._canvasModeListener](mode)
+				} catch (err) {
+					console.debug(err)
+				}
+			}
+			if (mode !== this.mode ){
 				/**
 				 * Toggle mode specify css class
 				 */
@@ -321,10 +390,6 @@ export default {
 				if(this.toolbar){
 					this.toolbar.setMode(mode);
 				}
-				/**
-				 * FIXME: Make sure this is correct!
-				 */
-				//this.rerender();
 				if(forceRender){
 					this.rerender();
 				} else {
@@ -334,6 +399,12 @@ export default {
 
 			} else if(forceRender){
 				this.rerender();
+			}
+		},
+
+		setSubMode (subMode) {
+			if(this.toolbar){
+				this.toolbar.setSubMode(subMode);
 			}
 		},
 
@@ -363,34 +434,40 @@ export default {
 			 * Since 3.0.43 we snapp by default to top left corner
 			 */
 			this.settings = {
-				canvasTheme : "MatcLight",
-				lineColor : "#3787f2",
+				canvasTheme : "MatcAuto",
+				lineColor : "#365fff",
 				lineWidth : 1,
 				storePropView : true,
 				moveMode : "ps",
 				startToolsOnKeyDown : true,
+				hasSelectOnScreen: false,
 				mouseWheelMode : "scroll",
 				renderLines : false,
 				snapGridOnlyToTopLeft: true,
+				useSnappingEngine: true,
 				keepColorWidgetOpen: true,
-				layerListVisible: false,
+				layerListVisible: true,
 				showRuler: true,
 				fastRender: false,
 				hasProtoMoto: false,
 				zoomSnapp: true,
-				selectMove: true,
-				hasDesignToken: true
+				selectMove: false,
+				hasDesignToken: true,
+				hasQRCode: true
 			};
 
-			var s = this._getStatus("matcSettings");
+			const s = this._getStatus("matcSettings");
 			if (s){
 				this.mergeSettings(s)
 			} else {
 				this.logger.log(2,"initSettings", "exit>  no saved settings" );
 			}
 			this.applySettings(this.settings);
+			this.initDarkModeListener()
+		
 
 		},
+
 
 		getSettings (){
 			return this.settings;
@@ -414,6 +491,12 @@ export default {
 			}
 			if(s.startToolsOnKeyDown!=null){
 				this.settings.startToolsOnKeyDown = s.startToolsOnKeyDown;
+			}
+			if (s.hasSelectOnScreen !== null && s.hasSelectOnScreen !== undefined) {
+				this.settings.hasSelectOnScreen = s.hasSelectOnScreen
+			}
+			if (s.hasQRCode !== null && s.hasQRCode !== undefined) {
+				this.settings.hasQRCode = s.hasQRCode
 			}
 			if(s.mouseWheelMode!=null){
 				this.settings.mouseWheelMode = s.mouseWheelMode;
@@ -461,12 +544,9 @@ export default {
 				this.moveMode = s.moveMode;
 			}
 
-			/**
-			 * Since 4.0.0 we ignore the setting. Only the EditModeButton determines line visiboility
-			 */
-			//if(s.renderLines!=null){
-				//this.renderLines = s.renderLines;
-			//}
+			if (s.hasSelectOnScreen !== null) {
+				this.hasSelectOnScreen = s.hasSelectOnScreen
+			}
 
 			if(s.showDistance!=null){
 				this.showDistance = s.showDistance;
@@ -501,20 +581,7 @@ export default {
 			}
 
 			if (s.canvasTheme){
-				if(this._lastCanvasTheme){
-					css.remove(win.body(), this._lastCanvasTheme);
-				}
-				css.add(win.body(), s.canvasTheme)
-				this._lastCanvasTheme = s.canvasTheme;
-
-				/**
-				 * FIXME: Kind of hack
-				 */
-				if(s.canvasTheme=="MatcLight"){
-					this.defaultLineColor = "#49C0F0";
-				} else {
-					this.defaultLineColor = "#49C0F0";
-				}
+				this.setCanvasTheme(s.canvasTheme)
 			}
 
 			this.settings = s;
@@ -526,7 +593,52 @@ export default {
 			//console.debug("applySetztings() > exit > renderlines: ", this.renderLines, " > showSettings: ", this.showComments);
 		},
 
+		setCanvasTheme (canvasTheme) { 
 
+			if (canvasTheme === "MatcAuto") {
+				this.logger.log(-1, "setCanvasTheme","enter > auto: " + canvasTheme  + ' > OS: '+ this.isDarkModeOS())
+				if (this.isDarkModeOS()) {
+					canvasTheme = 'MatcDark'
+				} else {
+					canvasTheme = 'MatcLight'
+				}
+			}
+
+			if(this._lastCanvasTheme){
+				css.remove(win.body(), this._lastCanvasTheme);
+			}
+
+			css.add(win.body(), canvasTheme)
+			this._lastCanvasTheme = canvasTheme;
+		
+			if(canvasTheme === "MatcLight"){
+				this.defaultLineColor = "#365fff";
+			} else {
+				this.defaultLineColor = "#365fff";
+			}
+		},
+
+		initDarkModeListener () {
+			const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+			this.own(on(mediaQuery, 'change', () => {
+				this.logger.log(-1,"initDarkModeListener", "change");
+				if (this.settings.canvasTheme === 'MatcAuto') {
+					this.setCanvasTheme(this.settings.canvasTheme)
+				}
+			}))
+		},
+
+
+		isDarkModeOS () {
+			if (window.matchMedia) {
+				if(window.matchMedia('(prefers-color-scheme: dark)').matches){
+					return true
+				} else {
+					return false
+				}
+			}
+			return true
+		},
 
 		/***************************************************************************
 		 * Grid
@@ -544,7 +656,7 @@ export default {
 
 			var dialog = this.createDialog();
 			var bar = db.div("container").div("row").div("col-md-12").div("MatcButtonBar MatcMarginTop").build(popup);
-			var write = db.div("MatcButton", "Save").build(bar);
+			var write = db.div("MatcButton MatcButtonPrimary", "Save").build(bar);
 			var cancel = db.a("MatcLinkButton ", "Cancel").build(bar);
 
 			dialog.own(on(cancel, touch.press, lang.hitch(this, "closeDialog")));
@@ -570,9 +682,11 @@ export default {
 			let grid = lang.clone(this.model.grid)
 			grid.visible = value
 			if (grid.type === "columns"){
-				this.controller.setGrid2(grid, "rgba(0,0,0,0.25)", "line");
+				const color = grid.color ? grid.color : "rgba(0,0,0,0.25)"
+				this.controller.setGrid2(grid, color, "line");
 			} else {
-				this.controller.setGrid2(grid, "#cecece", "line");
+				const color = grid.color ? grid.color : "#cecece"
+				this.controller.setGrid2(grid, color, "line");
 			}
 		},
 
@@ -583,9 +697,11 @@ export default {
 				var grid = selector.getValue();
 				this.gridBackground = {}
 				if (grid.type === "columns"){
-					this.controller.setGrid2(grid, "rgba(0,0,0,0.25)", "line");
+					const color = grid.color ? grid.color : "rgba(0,0,0,0.25)"
+					this.controller.setGrid2(grid, color, "line");
 				} else {
-					this.controller.setGrid2(grid, "#cecece", "line");
+					const color = grid.color ? grid.color : "#cecece"
+					this.controller.setGrid2(grid, color, "line");
 				}
 				this.closeDialog();
 			} else {
@@ -659,10 +775,11 @@ export default {
 			this.cleanUpTempListener();
 		}
 	},
-  mounted () {
-  },
+	mounted () {
+	},
 	beforeDestroy () {
 		this.logger.log(3,"beforeDestroy", "enter > ");
+		this.destroy()
 	}
 }
 </script>

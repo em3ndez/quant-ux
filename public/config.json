@@ -2,9 +2,14 @@
     "info": "This file is just used for development. Do not edit",
     "auth": "qux",
     "websocket":"wss://ws.quant-ux.com",
+    "sharedLibs": "",
+    "user": {
+        "allowSignUp": true,
+        "allowedDomains": ""
+    },
     "keycloak": {
-        "realm": "realm", 
-        "clientId": "client",
-        "url": "http://localhost:8180/auth"
+        "realm": "qux", 
+        "clientId": "qux",
+        "url": "http://localhost:8180"
     }
 }

@@ -1,5 +1,5 @@
 <template>
-  <div id="app" class="MatcMainCntr">
+  <div id="app" :class="['MatcMainCntr', {'MatcWindows': isWindows}]">
     <router-view/>
     <div class="vommondMessage" ref="message">
     </div>
@@ -7,6 +7,7 @@
 </template>
 
 <style>
+	@import url("./style/css/legacy.css");
 </style>
 <script>
 import css from 'dojo/css'
@@ -14,6 +15,11 @@ import win from 'dojo/win'
 import Services from 'services/Services'
 
 export default {
+data: function() {
+    return {  
+		isWindows:false 
+    }
+  },
   methods: {
     showSuccess (msg){
 		if (this.$refs.message){
@@ -53,17 +59,31 @@ export default {
 	},
 
 	handler4xx (url, res) {
+		if (this.logoutMessageShow) {
+			return
+		}
 		if (res.status === 401) {
 			alert('Something is wrong. Please login again!')
 			Services.getUserService().logout()
 			this.$router.push('/')
 			this.$root.$emit('MatcLogout', Services.getUserService().GUEST)
+			this.logoutMessageShow = true
 		}
 		if (res.tokenTimedOut) {
 			alert('Your session has expired. Please login again')
 			Services.getUserService().logout()
 			this.$router.push('/')
 			this.$root.$emit('MatcLogout', Services.getUserService().GUEST)
+			this.logoutMessageShow = true
+		}
+	},
+	initNLS () {
+		const language = Services.getUserService().getLanguage()
+		this.$root.$i18n.locale = language
+	},
+	initScroll () {
+		if (navigator.platform.indexOf('Win') > -1 || location.href.indexOf("os=win") > -1) {
+			this.isWindows = true
 		}
 	}
   },
@@ -84,9 +104,8 @@ export default {
 		Services.getUserService().setUser(user)
 	})
 	css.remove(win.body(), 'MatcPublic')
-
-	let language = Services.getUserService().getLanguage()
-	this.$root.$i18n.locale = language
+	this.initNLS()
+	this.initScroll()
   }
 }
 </script>

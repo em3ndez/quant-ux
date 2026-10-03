@@ -2,6 +2,12 @@
 <template>
   <div class="MatcSimulator MatcPreview"></div>
 </template>
+<style lang="scss">
+  @import "../style/simulator.scss";
+  @import "../style/widgets/all.scss";
+  @import "../style/canvas/all.scss";
+  @import "../style/components/preview.scss";
+</style>
 <script>
 import DojoWidget from "dojo/DojoWidget";
 import css from "dojo/css";
@@ -354,6 +360,9 @@ export default {
         node.parentNode.removeChild(node);
       }
       this.domNode.appendChild(node);
+      if (!this._fixedPopups) {
+        this._fixedPopups = []
+      }
       this._fixedPopups.push(node);
     },
 
@@ -446,7 +455,7 @@ export default {
          * FIXME: if the widget is fixed (style.fixed) we should also we should
          * add them later to not use z-level in the css.
          */
-        if (widget.style.fixed) {
+        if (widget?.style.fixed) {
           this._fixedWidgets.push(w);
         } else {
           div.appendChild(w);

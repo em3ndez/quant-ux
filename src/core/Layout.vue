@@ -3,6 +3,7 @@ import DojoWidget from "dojo/DojoWidget";
 import lang from "dojo/_base/lang";
 import css from "dojo/css";
 import CoreUtil from 'core/CoreUtil'
+import ModelUtil from 'core/ModelUtil'
 
 const _mactImportedFonts = {}
 
@@ -49,19 +50,18 @@ export default {
     },
 
 
-    getParentScreen: function(widget) {
-      for (var id in this.model.screens) {
-        var screen = this.model.screens[id];
-        var i = screen.children.indexOf(widget.id);
+    getParentScreen (widget) {
+      for (let id in this.model.screens) {
+        const screen = this.model.screens[id];
+        const i = screen.children.indexOf(widget.id);
         if (i > -1) {
           return screen;
         }
       }
-
       return null;
     },
 
-    getWidgetPostionInScreen: function(widget) {
+    getWidgetPostionInScreen (widget) {
       var screen = this.getParentScreen(widget);
       if (screen) {
         return {
@@ -119,15 +119,15 @@ export default {
     },
 
     getAllAppVariables (){
-
-      var variables = [];
+    
+      const variables = [];
       if (this.model) {
         for(let id in this.model.widgets){
-          let widget = this.model.widgets[id];
+          const widget = this.model.widgets[id];
           if(widget.props && widget.props.databinding){
-            let databinding = widget.props.databinding;
+            const databinding = widget.props.databinding;
             for(let key in databinding){
-              let variable = databinding[key];
+              const variable = databinding[key];
               if(variables.indexOf(variable)<0){
                 variables.push(variable);
               }
@@ -139,6 +139,18 @@ export default {
             if(variables.indexOf(variable)<0){
                 variables.push(variable);
             }
+          }
+          // workflows can also be bound to varaibles
+          if(widget.props && widget.action && widget.action.type === 'workflow'){
+             const steps = widget.action.steps
+             if (steps) {
+               steps.forEach(step => {
+                   const databinding = step.databinding;
+                    if(variables.indexOf(databinding)<0){
+                      variables.push(databinding);
+                   }
+               })
+             }
           }
         }
       }
@@ -327,7 +339,7 @@ export default {
       return b;
     },
 
-    getStartScreen: function(model) {
+    getStartScreen(model) {
       if (!model) {
         model = this.model;
       }
@@ -346,33 +358,14 @@ export default {
 
     /**
      * returns the style for an widget. If it is templated,
-     * the template style is returned!
+     * the template style is merged in.
      *
      * This method is called in _Render.js and RenderFactory
      */
-    getStyle: function(model) {
-      if (model.template) {
-        if (this.model.templates) {
-          var t = this.model.templates[model.template];
-          if (t) {
-            /**
-             * Merge in overwriten styles
-             */
-            var merged = lang.clone(t.style);
-            if (model.style) {
-              for (var key in model.style) {
-                // console.debug("Layout.getStyle() > replace ",key, ":",  merged[key], " ->  ", model.style[key])
-                merged[key] = model.style[key];
-              }
-            }
-            return merged;
-          } else {
-            console.warn("Layout.getStyle() > No template found for widget",model.id, " with template ",  model.template);
-          }
-        }
-      }
-      return model.style;
+    getStyle (element) {
+      return ModelUtil.getStyle(element, this.model)
     },
+
 
 
     /**
@@ -420,22 +413,59 @@ export default {
      * The lines are ordered by id, which might be wrong...
      */
     getFromLines (box) {
-      var result = [];
-      for (var id in this.model.lines) {
-        var line = this.model.lines[id];
+      const result = [];
+      for (let id in this.model.lines) {
+        const line = this.model.lines[id]
         if (line.from == box.id) {
-          result.push(line);
+          result.push(line)
         }
       }
-      result.sort(function(a, b) {
-        return a.id.localeCompare(b.id);
-      });
+      result.sort((a, b) => {
+        return a.id.localeCompare(b.id)
+      })
       return result;
+    },
+
+    getCommonParentGroup(selection) {
+      const parentGroups = new Set()
+      let result = null
+      for (let i = 0; i < selection.length; i++) {
+        const widgetID = selection[i];
+        const group = this.getParentGroup(widgetID);
+        if (group) {
+          result = group
+          parentGroups.add(group.id)
+        } else {
+          // no group, we need to create a new parent group
+          return
+        }
+      }
+      // if we have one parentGroup we need to create a 
+      // new sub group
+      if (parentGroups.size === 1) {
+        return result
+      }
+    },
+
+    getGroupHierarchy (id) {
+        const result = []
+        let group = this.getParentGroup(id)
+        if (group) {
+          result.push(group.id)
+          while (group) {
+            group = this.getParentGroup(group.id)
+            if (group) {
+              result.unshift(group.id)
+            }
+          }
+        }
+        return result
     },
 
     getTopParentGroup (id) {
       let group = this.getParentGroup(id)
       if (group) {
+        let i = 0
         while (group) {
           let parent = this.getParentGroup(group.id)
           if (parent) {
@@ -447,8 +477,13 @@ export default {
              */
             let result = lang.clone(group)
             result.children = this.getAllGroupChildren(group)
-            result._isTopParentGroup = true
+            result._isVirtual = true
             return result
+          }
+          i++
+          if (i > 32) {
+            console.error('Layout.getTopParentGroup() > To deep recursion for widget : ' + id, group)
+            return
           }
         }
       }
@@ -456,44 +491,23 @@ export default {
     },
 
     getAllGroupChildren (group) {
-      if (!group.children) {
-        return []
-      }
-      let result = group.children.slice(0)
-      /**
-       * Check all sub groups
-       */
-      if (group.groups) {
-        group.groups.forEach(subId => {
-          let sub = this.model.groups[subId]
-          if (sub) {
-            let children = this.getAllGroupChildren(sub)
-            result = result.concat(children)
-          } else {
-            console.warn('getAllGroupChildren() No sub group', subId)
-          }
-        })
-      }
-      /**
-       * check if we have a parent group
-       */
-      return result
+      return ModelUtil.getAllGroupChildren(group, this.model) 
     },
 
     getParentGroup (widgetID) {
       if (this.model.groups) {
-        for (var id in this.model.groups) {
-          var group = this.model.groups[id];
-          let i = group.children.indexOf(widgetID);
-          if (i > -1) {
+        for (let id in this.model.groups) {
+          const group = this.model.groups[id];
+          const indexChildren = group.children.indexOf(widgetID);
+          if (indexChildren > -1) {
             return group;
           }
           /**
            * Since 2.13 we have subgroups and check this too
            */
           if (group.groups) {
-            let i = group.groups.indexOf(widgetID);
-            if (i > -1) {
+            const indexSubGroup = group.groups.indexOf(widgetID);
+            if (indexSubGroup > -1) {
               return group;
             }
           }
@@ -502,7 +516,7 @@ export default {
       return null;
     },
 
-    renderWidget: function(screen, widget) {
+    renderWidget (screen, widget) {
       var div = this.createBox(widget, screen);
       css.add(div, "MatcWidget");
       this.renderFactory.createWidgetHTML(div, widget);
@@ -516,8 +530,8 @@ export default {
       return div;
     },
 
-    createBox: function(box, parentBox) {
-      var div = document.createElement("div");
+    createBox (box, parentBox) {
+      const div = document.createElement("div");
       div.style.width = box.w + "px";
       div.style.height = box.h + "px";
       if (parentBox) {
@@ -527,11 +541,26 @@ export default {
       return div;
     },
 
-    createPreviewWrapper: function(model, node) {
-      var wrapper = document.createElement("div");
+    createPreviewWrapper (model, node) {
+      const wrapper = document.createElement("div");
       css.add(wrapper, "MatcPreviewWrapper");
       node.appendChild(wrapper);
       return wrapper;
+    },
+
+
+    getPreviewWrapperSize (cntrPos, model) {
+      if(cntrPos.h < model.screenSize.h){
+				const heightScaled = this.getScaledSize(cntrPos, "height", model);
+				const widthFactor = heightScaled.w / model.screenSize.w
+        const result = {
+          w: Math.ceil(model.screenSize.w * widthFactor),
+          h: Math.ceil(model.screenSize.h * widthFactor)
+        }
+        console.debug('getPreviewWrapperSize',)
+        return result
+			}
+      return cntrPos
     },
 
     /**
@@ -541,7 +570,7 @@ export default {
      * type : how to scale
      * pos : The box to fit the child in
      */
-    getScale: function(pos, type, box) {
+    getScale (pos, type, box) {
       var scale = {};
 
       if (type == "width") {
@@ -567,17 +596,17 @@ export default {
     /**
      * check if app or box
      */
-    getBoxToScale: function(model) {
+    getBoxToScale (model) {
       if (model.screenSize) {
         return model.screenSize;
       }
       return model;
     },
 
-    getScaledSize: function(node, type, model) {
-      var box = this.getBoxToScale(model);
-      var scale = this.getScale(node, type, box);
-      var s = {
+    getScaledSize (node, type, model) {
+      const box = this.getBoxToScale(model);
+      const scale = this.getScale(node, type, box);
+      const s = {
         w: Math.ceil(box.w * scale.x),
         h: Math.ceil(box.h * scale.y)
       };
@@ -598,6 +627,21 @@ export default {
     hasRest: function(box) {
       if (box) {
         return box.type == "Rest";
+      }
+      return false;
+    },
+
+    hasAudio: function(box) {
+      if (box) {
+        return box.type == "AudioLogic";
+      }
+      return false;
+    },
+
+
+    hasScript: function(box) {
+      if (box) {
+        return box.type == "Script";
       }
       return false;
     },
@@ -705,6 +749,11 @@ export default {
     isQDate: function(d) {
       return d && d.d != null && d.m != null && d.y != null;
     },
+
+    isQDateRange: function(d) {
+      return d && this.isQDate(d.from) && this.isQDate(d.to)
+    },
+
 
     createNow: function() {
       return this.convertDateToQdate(new Date());

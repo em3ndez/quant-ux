@@ -23,14 +23,19 @@ export default {
             widgetOutputTypes: {
 				"ToggleButton" : "active",
 				"SegmentButton" : "options",
+				"SegmentPicker" : "options",
 				"DropDown" : "options",
+				"MobileDropDown" : "options",
 				"TextBox" : "string",
 				"TextArea" : "string",
 				"Password" : "string",
 				"CheckBox" : "checked",
 				"RadioBox" : "checked",
 				"RadioBox2" : "checked",
+				"IconToggleButton": "checked",
+				"VisualPicker": "checked",
 				"HSlider" : "int",
+				"CountingStepper": "int",
 				"Spinner" : "options",
 				"Switch" : "active",
 				"DragNDrop" : "pos",
@@ -140,6 +145,7 @@ export default {
 				input.setValue(rule.databinding)
 				input.setHints(options);
 				this.tempOwn(on(input, "change", lang.hitch(this, "setDataBinding")));
+				setTimeout(() => input.focus(), 100)
 			}
 		},
 
@@ -198,7 +204,7 @@ export default {
 			    	{"value" : ">", label:"Bigger (>)"},
 					{"value" : "<", label:"Smaller (<)"},
 				  	{"value" : ">=", label:"Bigger Equals (>=)"},
-					{"value" : "<=", label:"Smaller Eqauls(<=)"}
+					{"value" : "<=", label:"Smaller Equals(<=)"}
 				]);
 				drpBox.setValue(rule.operator)
 				drpBox.placeAt(row);
@@ -206,7 +212,6 @@ export default {
 				return;
 			}
 		},
-
 
 		renderValue (rule){
 			if (rule.widget && rule.operator && rule.operator != "isValid") {
@@ -223,8 +228,7 @@ export default {
 				} else {
 					console.debug("renderValue() > No widget with id", rule.widget);
 				}
-			}
-			else if (rule.databinding && rule.operator) {
+			} else if (rule.databinding && rule.operator) {
 				let row = this.db.div("form-group").build(this.domNode);
 				let text = this.db.formGroup("MatcIgnoreOnKeyPress", "Value", rule.value, "").build(row);
 				this.tempOwn(on(text, "keyup", lang.hitch(this, "setRuleValueText", text)));
@@ -232,13 +236,10 @@ export default {
 				let rowCheckBox = this.db.div("form-group").build(this.domNode);
 				this.renderValue_isBinding(rowCheckBox, rule)
 			}
-
-
 		},
 
 		renderValue_options (row, widget, rule){
 			this.db.label(null,"Value").build(row);
-
 			var drpBox = this.$new(DropDownButton,{maxLabelLength:25});
 			drpBox.setOptions(this.getOptions(widget));
 			drpBox.setValue(rule.value)
@@ -315,7 +316,7 @@ export default {
 							result.push({"value" : ">", label:"Bigger (>)"});
 							result.push({"value" : "<", label:"Smaller (<)"});
 							result.push({"value" : ">=", label:"Bigger Equals (>=)"});
-							result.push({"value" : "<=", label:"Smaller Eqauls(<=)"});
+							result.push({"value" : "<=", label:"Smaller Equals(<=)"});
 			        break;
 			    case "options":
 							result.push({"value" : "==", label:"Equals"});
@@ -336,13 +337,13 @@ export default {
 								result.push({"value" : ">", label:"Bigger (>)"});
 								result.push({"value" : "<", label:"Smaller (<)"});
 								result.push({"value" : ">=", label:"Bigger Equals (>=)"});
-								result.push({"value" : "<=", label:"Smaller Eqauls(<=)"});
+								result.push({"value" : "<=", label:"Smaller Equals(<=)"});
 								break;
 						case "double":
 								result.push({"value" : ">", label:"Bigger (>)"});
 								result.push({"value" : "<", label:"Smaller (<)"});
 								result.push({"value" : ">=", label:"Bigger Equals (>=)"});
-								result.push({"value" : "<=", label:"Smaller Eqauls(<=)"});
+								result.push({"value" : "<=", label:"Smaller Equals(<=)"});
 								break;
 					  case "string":
 					      result.push({"value" : "contains", label:"Contains"})
@@ -397,8 +398,6 @@ export default {
 							if(this.widgetOutputTypes[widget.type] && !_ids[widget.id]){
 								result.push({"value" : widget.id, label:widget.name});
 								_ids[widget.id] = true;
-							} else {
-								console.warn("getUIWidgets() > No widget with id : " , id);
 							}
 						}
 					} else {
@@ -437,6 +436,7 @@ export default {
 			this.value.operator = null;
 			this.value.value = null;
 			this.value.databinding = null;
+			this.value.widget = null;
 			this.render(this.value);
 			this._onChange();
 		},

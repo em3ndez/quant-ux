@@ -1,33 +1,100 @@
 import Logger from "../../common/Logger"
 import lang from "../../dojo/_base/lang"
 import ModelGeom from "../../core/ModelGeom"
-import CoreUtil from "../../core/CoreUtil"
+//import CoreUtil from "../../core/CoreUtil"
 
 class ModelFixer {
 	constructor() {
 		this.logger = new Logger("ModelFixer")
 	}
 
-	fixZValues(m) {
-		this.logger.log(2, "fixZValues", "enter")
+	fixCorruptedModel (model) {
 
-		let zValues = Object.values(m.widgets).map(w => w.z)
-		if (this.hasDoublicate(zValues)) {
-			this.logger.warn("fixZValues", "Missing z values", zValues)
-			const ordered = CoreUtil.getOrderedWidgets(m.widgets, true)
-			for (let i = 0; i< ordered.length; i++) {
-				let widget = ordered[i]
-				widget.z = i
+		if (model.screens) {
+			for (let screenID in model.screens) {
+				let screen = model.screens[screenID]
+				if (!screen.children) {
+					delete model.screens[screenID]
+				}
 			}
 		}
+
+		for (let widgetID in model.widgets) {
+			let widget = model.widgets[widgetID]
+			if (!widget.style) {
+				console.error('fixCorruptedModel', widget)
+				delete model.widgets[widgetID]
+			}
+			if (widgetID.indexOf("+") >=0) {				
+				delete model.widgets[widgetID]
+				const newID = widgetID.replace('+', '').replace('.', '')
+				console.error('bad iD', widgetID, newID)
+				widget.id = newID
+				model.widgets[newID] = widget
+			}
+		}
+	}
+
+	fixDoubleGroup(model) {
+		this.logger.log(2, "fixDoubleGroup", "enter")
+		let result = false
+
+		if (model.groups) {
+			for (let groupID in model.groups) {
+				const group = model.groups[groupID]
+				if (group.groups) {
+					const childGroupIDs = new Set(group.groups)
+					if (group.groups.length > childGroupIDs.size) {
+						this.logger.error("fixDoubleGroup", "fix" + group.name)
+						group.groups = Array.from(childGroupIDs)
+						result = true
+					}
+				}
+			}
+		}
+		return result
+	}
+
+	fixCommandStack(stack) {
+		this.logger.log(2, "fixCommandStack", "enter")
+		let result = false
+		if (stack.pos < 0) {
+			this.logger.warn("fixCommandStack", "Pos < 0 >> pos:" + stack.pos + ' > length:' + stack.stack.length )
+			this.logger.sendError(new Error("Controller.fixCommandStack() > pos is < 0 : " + stack.pos  + " > length: " + stack.stack.length))
+			stack.pos = stack.stack.length
+			result = true
+		}
+
+		if (stack.pos > stack.stack.length) {
+			this.logger.warn("fixCommandStack", "Pos too bug >> pos:" + stack.pos + ' > length:' + stack.stack.length )
+			this.logger.sendError(new Error("Controller.fixCommandStack() > pos is wrong > pos :" + stack.pos  + " > length: " + stack.stack.length))
+			stack.pos = stack.stack.length
+			result = true
+		}
+		return result
+	}
+
+	fixZValues(m) {
+		this.logger.log(2, "fixZValues", "enter", m)
+
+		// this should work in the screen level!!
+		//const zValues = Object.values(m.widgets).map(w => w.z)
+		//if (this.hasDoublicate(zValues)) {
+			//this.logger.warn("fixZValues", "Double z values", zValues)
+			// const ordered = CoreUtil.getOrderedWidgets(m.widgets, true)
+			// for (let i = 0; i< ordered.length; i++) {
+			// 	let widget = ordered[i]
+			// 	widget.z = i
+			// }
+		//}
 
 		return false
 	}
 
 	hasDoublicate (arr) {
-		let values = {}
+		const values = {}
 		for (let i = 0; i< arr.length; i++) {
-			let v = arr[i]
+			const v = arr[i]
 			if (values[v]) {
 				return true
 			}
@@ -111,12 +178,19 @@ class ModelFixer {
 					max = Math.max(max, i)
 				}
 			}
-			this.logger.log(4, "fixModelCount", "exit > " + max + " ?= " + m.lastUUID + " == " + (max > m.lastUUID))
-			if (max > m.lastUUID) {
-				errors.push({ msg: "lastUUID to small!" })
-				this.logger.error("fixModelCount", "fix > " + max + " ?= " + m.lastUUID)
-				this.logger.sendError(new Error("Controller.fixModelCount() > Some fuckup"))
-				m.lastUUID = max + 1
+			if (m.lastUUID > 10000000) {
+				m.lastUUID = 1000000
+				errors.push({ msg: "lastUUID to to big!" })
+				this.logger.error("fixModelCount", "fix > too big lastUUID: " + m.lastUUID)
+				this.logger.sendError(new Error("Controller.fixModelCount() > Last UUID messed up" +  m.lastUUID))
+			} else {
+				this.logger.log(4, "fixModelCount", "exit > " + max + " ?= " + m.lastUUID + " == " + (max > m.lastUUID))
+				if (max > m.lastUUID) {
+					errors.push({ msg: "lastUUID to small!" })
+					this.logger.error("fixModelCount", "fix > " + max + " ?= " + m.lastUUID)
+					this.logger.sendError(new Error("Controller.fixModelCount() > Some fuckup :" + max + " ?= " + m.lastUUID))
+					m.lastUUID = max + 1
+				}
 			}
 		} catch (e) {
 			console.error("BaseController.fixModelCount() > Error", e)
@@ -134,7 +208,7 @@ class ModelFixer {
 	}
 
 	validateAndFixModel(model) {
-		this.logger.log(-3, "validateAndFixModel", "enter > model : " + model.id)
+		this.logger.log(3, "validateAndFixModel", "enter > model : " + model.id)
 		var errors = []
 
 		if (model.lastCategory === null) {
@@ -147,16 +221,14 @@ class ModelFixer {
 		for (let screenID in model.screens) {
 			let screen = model.screens[screenID]
 			if (screen) {
-				if (screen.x < 0) {
-					screen.x = 0
-					errors.push({ id: screenID, msg: "x less 0" })
-					this.logger.log(0, "validateAndFixModel", "screen.x less 0 : " + screenID)
-				}
-				if (screen.y < 0) {
-					screen.y = 0
-					errors.push({ id: screenID, msg: "y less  0" })
-					this.logger.log(0, "validateAndFixModel", "screen.y less 0 : " + screenID)
-				}
+				// Negative x/y used to be treated as corruption and clamped to 0,
+				// but AIController.getCenteredPastePosition() deliberately places
+				// AI-generated content at negative model coordinates when the
+				// viewport itself is panned into negative territory. Clamping only
+				// the screen here (not its widgets, which carry their own
+				// independent x/y and are often not negative) silently tore the
+				// screen frame away from its content on the next autosave -
+				// negative coordinates are a valid position, not an error.
 
 				if (screen.w < 0) {
 					errors.push({ id: screenID, msg: "w less  0" })
@@ -199,16 +271,8 @@ class ModelFixer {
 		for (let widgetID in model.widgets) {
 			let widget = model.widgets[widgetID]
 			if (widget) {
-				if (widget.x < 0) {
-					widget.x = 0
-					errors.push({ id: widgetID, msg: "x less 0" })
-					this.logger.log(0, "validateAndFixModel", "widget.x less 0 : " + widgetID)
-				}
-				if (widget.y < 0) {
-					widget.y = 0
-					errors.push({ id: widgetID, msg: "y less  0" })
-					this.logger.log(0, "validateAndFixModel", "widget.y less 0 : " + widgetID)
-				}
+				// See the matching note above the screen loop: negative x/y is a
+				// valid position now, not corruption to clamp away.
 
 				if (widget.h < 0) {
 					errors.push({ id: widget, msg: "h less  0" })
@@ -243,14 +307,14 @@ class ModelFixer {
 			let line = model.lines[lineID]
 			if (line) {
 				let lineValid = true
-				if (!model.widgets[line.to] && !model.screens[line.to]) {
+				if (!model.widgets[line.to] && !model.screens[line.to] && model.groups && !model.groups[line.to]) {
 					lineValid = false
-					this.logger.log(0, "validateAndFixModel", "No line to:" + lineID)
+					this.logger.warn("validateAndFixModel", "No line to:", line)
 				}
 
 				if (!model.widgets[line.from] && !model.screens[line.from] && model.groups && !model.groups[line.from]) {
 					lineValid = false
-					this.logger.log(0, "validateAndFixModel", "No line from :" + lineID)
+					this.logger.warn("validateAndFixModel", "No line from :" + lineID)
 				}
 
 				if (!lineValid) {
@@ -299,6 +363,59 @@ class ModelFixer {
 		return errors
 	}
 
+	fixMissingSubgroups (model) {
+		
+		if (model.groups) {
+			for (let groupID in model.groups) {
+				const group = model.groups[groupID]
+		
+				if (group.groups) {		
+					const missing = {}
+					group.groups.forEach(id => {
+						if (!model.groups[id]) {
+							missing[id] = true
+						}
+					})
+					
+					if (Object.values(missing).length > 0) {
+						const groupIds = JSON.stringify(group.groups)
+						group.groups = group.groups.filter(id => !missing[id])
+						this.logger.error("fixMissingSubgroups", "fix() > " + group.name + ' > ' + groupIds)
+					}
+				}
+			}
+		}
+	}
+
+	fixRecursiveGroups (model) {
+
+		const errors = []
+
+		if (model.groups) {
+			for (let groupID in model.groups) {
+				const group = model.groups[groupID]
+				if (group.groups) {
+					const index = group.groups.indexOf(groupID)
+					if (index >= 0) {
+						errors.push({id: groupID, msg: "Recursive Group"})
+						group.groups.splice(index, 1)
+					}
+				}
+			}
+		}
+
+
+		if (errors.length > 0) {
+			this.logger.error("fixRecursiveGroups", "exit() > Found  " + errors.length + " errors", errors)
+		}
+
+		return errors
+	}
+
+	isValidLine () {
+
+	}
+
 	/**
 	 * There is a nasty bug that miss aligns widgets sometimes by one px.
 	 * This method will do some additional logging to find out what is happening
@@ -307,10 +424,15 @@ class ModelFixer {
 		if (p === "x" || p === "y") {
 			let dif = Math.abs(pos[p] - model[p])
 			if (dif === 1) {
-				if (window.location.href.indexOf("localhost") > 0) {
-					console.warn(new Error().stack)
-				}
+				this.showDebugAlert('1 PX Bug')
 			}
+		}
+	}
+
+	showDebugAlert (msg) {
+		if (window.location.href.indexOf("localhost") > 0) {
+			console.warn(new Error().stack)
+			alert(msg)
 		}
 	}
 

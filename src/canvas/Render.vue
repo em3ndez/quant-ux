@@ -1,18 +1,20 @@
 <script>
 import css from 'dojo/css'
-import on from 'dojo/on'
 import lang from 'dojo/_base/lang'
 import domGeom from 'dojo/domGeom'
 import win from 'dojo/win'
 import topic from 'dojo/topic'
 import _Color from 'common/_Color'
-// import CheckBox from 'common/CheckBox'
 import Ruler from 'canvas/Ruler'
-import GridAndRuler from 'canvas/GridAndRuler'
+import GridAndRulerSnapp from 'canvas/GridAndRulerSnapp'
+import SnappingEngine from 'canvas/SnappingEngine'
 import SimpleGrid from 'canvas/SimpleGrid'
 import RenderFlow from 'canvas/RenderFlow'
 import Wiring from 'canvas/Wiring'
 import ModelUtil from 'core/ModelUtil'
+import TreeIndex from '../core/responsive/TreeIndex'
+import LayoutContainerIndex from '../core/responsive/LayoutContainerIndex'
+import AIConfig from '../ai/AIConfig'
 
 export default {
     name: 'Render',
@@ -46,33 +48,37 @@ export default {
 			 * 11 = StandAlone
 		 	 */
       return {
-					state: 0,
-					isSinglePage: false,
-					defaultFontSize: 12,
-					canvasFlowWidth: 20000,
-					canvasFlowHeight: 10000,
-					canvasStartX: -1000,
-					canvasStartY: -1000,
-					canvasMargin: 0.6,
-					moveMode: "ps",
-					renderDND: true,
-					renderLines: false,
-					showDistance: true,
-					wireInheritedWidgets: false,
-					showAnimation: false,
-					showRuler: true,
-					hasSelectOnScreen: false,
-					gridBackground: {}
+			canvasPos: {},
+			containerSize: {},
+			roundCoordinates: false,
+			state: 0,
+			isSinglePage: false,
+			defaultFontSize: 12,
+			canvasFlowWidth: 40000,
+			canvasFlowHeight: 20000,
+			canvasStartX: -1000,
+			canvasStartY: -1000,
+			canvasMargin: 0.6,
+			moveMode: "ps",
+			renderDND: true,
+			renderLines: false,
+			showDistance: true,
+			wireInheritedWidgets: false,
+			showAnimation: false,
+			showRuler: true,
+			hasSelectOnScreen: false,
+			gridBackground: {},
+			isSnappyRuler: false
         }
     },
     components: {},
     methods: {
 		initSize () {
-			let height = win.getBox().h
-			this.domNode.style.height = `${height}px`
+			//let height = win.getBox().h
+			this.domNode.style.height = 'calc(100vh - 48px)'//`${height}px`
 		},
 
-    initRender (){
+    	initRender (){
 			this.logger.log(2,"initRender", "enter");
 			this.domPos = domGeom.position(this.domNode);
 
@@ -86,19 +92,25 @@ export default {
 			this.linePoints = {}
 			this.gridBackground = {};
 			this.renderedModels = {};
+			this.resetCanvasSelection()
 
 			this.own(topic.subscribe("matc/canvas/fadeout", lang.hitch(this, "onFadeOut")));
 			this.own(topic.subscribe("matc/canvas/fadein", lang.hitch(this, "onFadeIn")));
-			this.own(on(this.domNode, "contextmenu", lang.hitch(this, "onContextMenu")));
 			this.logger.log(2,"initRender", "exit");
 		},
 
 		onFadeOut (){
 			css.add(this.container, "MatcCanvasFadeOut");
+			if (this.toolbar) {
+				this.toolbar.onFadeOut()
+			}
 		},
 
 		onFadeIn (){
 			css.remove(this.container, "MatcCanvasFadeOut");
+			if (this.toolbar) {
+				this.toolbar.onFadeIn()
+			}
 		},
 
 		/**********************************************************************
@@ -106,10 +118,14 @@ export default {
 		 **********************************************************************/
 
 		showSuccess (msg){
+			if (this._lastMessageType === 'error') {
+				return
+			}
 			if(this.message){
 				css.add(this.message, "MatcMessageSuccess");
 				css.remove(this.message, "MatcMessageError MatcMessageHint");
 				this.message.textContent = msg;
+				this._lastMessageType = 'success'
 				setTimeout(lang.hitch(this,"hideMessage"),3000);
 			}
 		},
@@ -119,15 +135,20 @@ export default {
 				css.add(this.message, "MatcMessageError");
 				css.remove(this.message, "MatcMessageSuccess MatcMessageHint");
 				this.message.textContent = msg;
+				this._lastMessageType = 'error'
 				setTimeout(lang.hitch(this,"hideMessage"), 3000);
 			}
 		},
 
 		showHint (msg){
+			if (this._lastMessageType === 'error') {
+				return
+			}
 			if(this.message){
 				css.add(this.message, "MatcMessageHint");
 				css.remove(this.message, "MatcMessageSuccess MatcMessageSuccess");
 				this.message.textContent = msg;
+				this._lastMessageType = 'hint'
 				setTimeout(lang.hitch(this,"hideMessage"), 3000);
 			}
 		},
@@ -136,6 +157,7 @@ export default {
 			if(this.message){
 				css.remove(this.message, "MatcMessageSuccess MatcMessageError MatcMessageHint");
 			}
+			this._lastMessageType = ''
 		},
 
 
@@ -177,6 +199,36 @@ export default {
 			}
 		},
 
+		initViewport () {
+			// console.debug("initViewport", this.viewport)
+			// if (this.viewport) {
+		
+			// 	this.canvasPos.x = this.viewport.x
+			// 	this.canvasPos.y = this.viewport.y
+			// 	this.zoom = this.viewport.zoom
+			// 	//this.$emit("viewport", viewport)
+			// }
+		},
+
+		onViewportChange () {
+			const viewport = {
+				zoom: this.zoom,
+				x: this.canvasPos.x,
+				y: this.canvasPos.y
+			}
+			this.$emit("viewport", viewport)
+		},
+
+		getViewPort() {
+			const viewport = {
+				zoom: this.zoom,
+				x: Math.round(-this.canvasPos.x / this.zoom),
+				y: Math.round(-this.canvasPos.y / this.zoom),
+				w: Math.round(this.domPos.w / this.zoom),
+				h: Math.round(this.domPos.h / this.zoom)
+			}
+			return viewport
+		},
 
 		/**********************************************************************
 		 * Container Size
@@ -223,6 +275,70 @@ export default {
 			}
 		},
 
+		moveToBox (box, animate = false) {
+			if(this.model){
+				var winBox = win.getBox();
+				var xOffSetScreen = (box.x);
+				var xOffSetWindow = (winBox.w/2)+ Math.abs(this.canvasPos.x);
+				this.canvasPos.x = this.canvasPos.x + (xOffSetWindow - xOffSetScreen) -100;
+				var yOffSetScreen = (box.y);
+				var yOffSetWindow = Math.min(winBox.h/2,200)+ Math.abs(this.canvasPos.y);
+				this.canvasPos.y = this.canvasPos.y + (yOffSetWindow - yOffSetScreen) -100;
+				if (animate) {
+					css.add(this.container, "MatcCanvasContainerAnimatePos")
+					setTimeout(() => {
+						css.remove(this.container, "MatcCanvasContainerAnimatePos")
+					}, 1000)
+				}
+				this.setContainerPos();
+
+			}
+		},
+
+		/**
+		 * Zooms and pans so the box (in model coordinates) is in view: centered
+		 * horizontally, with a small margin at the top. Never zooms in past
+		 * 100%, so a small mobile screen is not blown up. A screen too tall
+		 * to fit readably (a long mobile screen) is fitted by its width and
+		 * shown from the top instead of being shrunk to a thumbnail.
+		 */
+		zoomToBox (box, animate = false) {
+			if (!this.model || !box || !(box.w > 0) || !(box.h > 0)) {
+				return
+			}
+			const view = this.domPos || win.getBox()
+			const focus = AIConfig.focus
+			const fitWidth = (view.w * focus.fitRatio) / box.w
+			const fitBoth = Math.min(fitWidth, (view.h * focus.fitRatio) / box.h)
+			// below this the whole screen would be too small to read
+			const minReadable = Math.min(focus.minReadableZoom, fitWidth)
+			const zoom = Math.max(focus.minZoom, Math.min(focus.maxZoom, Math.max(fitBoth, minReadable)))
+			const rounded = Math.round(zoom * 100) / 100
+
+			if (rounded !== this.zoom) {
+				this.zoom = rounded
+				if (this.zoomSessionHandler) {
+					this.zoomSessionHandler.setZoom(rounded)
+				}
+				this.onZoomChange()
+			}
+
+			const topMargin = focus.topMargin
+			const fitsVertically = box.h * this.zoom <= view.h - topMargin * 2
+			this.canvasPos.x = Math.round(view.w / 2 - (box.x + box.w / 2) * this.zoom)
+			this.canvasPos.y = fitsVertically
+				? Math.round(view.h / 2 - (box.y + box.h / 2) * this.zoom)
+				: Math.round(topMargin - box.y * this.zoom)
+
+			if (animate) {
+				css.add(this.container, "MatcCanvasContainerAnimatePos")
+				setTimeout(() => {
+					css.remove(this.container, "MatcCanvasContainerAnimatePos")
+				}, 1000)
+			}
+			this.setContainerPos()
+		},
+
 		/**********************************************************************
 		 * Fonts
 		 **********************************************************************/
@@ -254,8 +370,6 @@ export default {
 
 			this.container.style.height = this.containerSize.h + "px";
 			this.container.style.width = this.containerSize.w + "px";
-
-
 		},
 
 
@@ -283,6 +397,8 @@ export default {
 			if (!ignoreScollUpdate){
 				this.updateScrollHandlers();
 			}
+
+			this.onViewportChange()
 		},
 
 		isInContainer (obj){
@@ -302,27 +418,99 @@ export default {
 		 **********************************************************************/
 
 		rerender (){
-			this.render(this.sourceModel);
+			if (this.sourceModel) {
+				this.render(this.sourceModel);
+			} else {
+				const timeSinceStart = new Date().getTime() - this._canvasStartTime
+				this.logger.error('rerender', 'Source model is null! > timeSinceStart: ' + timeSinceStart)
+			}
+
 		},
 
-		renderPartial (sourceModel, changes) {
-			this.logger.log(-1,"renderPartial", "enter", changes);
+
+		updateScalledModel () {
+			//console.time('updateScalledModel')
+			if (!this.sourceModel) {
+				// this can happen on slow connection when booting up. 
+				// the comments are returned beforethe model?
+				const timeSinceStart = new Date().getTime() - this._canvasStartTime
+				this.logger.error('updateScalledModel', 'Source model is null! > timeSinceStart: ' + timeSinceStart)
+				return
+			}
+			this.model = ModelUtil.createScalledModelFast(this.sourceModel, this.zoom, this.roundCoordinates)
+			//console.timeEnd('updateScalledModel')
+		},
+
+		updateIndexes() {
+			if (this._treeModelTimer) {
+				clearTimeout(this._treeModelTimer)
+			}
+			if (this._treeModelTimerRejects) {
+				this._treeModelTimerRejects.forEach(rejectPending => rejectPending(new Error('updateIndexes() superseded by a newer call')))
+				this._treeModelTimerRejects = []
+			}
+			return new Promise((resolve, reject) => {
+				this._treeModelTimerRejects = this._treeModelTimerRejects || []
+				this._treeModelTimerRejects.push(reject)
+				this._treeModelTimer = setTimeout(() => {
+					this._treeModelTimer = null
+					this._treeModelTimerRejects = []
+
+					if (this.model && this.sourceModel) {
+						const start = new Date().getTime()
+						if (!this.treeIndex) {
+							this.treeIndex = new TreeIndex(this.model)
+						} else {
+							this.treeIndex.update(this.model)
+						}
+
+						this.flexContainerIndex = new LayoutContainerIndex(this.model, this.sourceModel, new Set(['FlexContainer']))
+						const end = new Date().getTime()
+						if (end - start > 100) {
+							this.logger.log(-1, 'updateIndexes', 'exit >  took :', (end - start))
+						}
+
+					} else {
+						this.logger.warn('updateIndexes', 'no model')
+					}
+					resolve()
+				}, 1)
+			})
+		},
+
+		updateSourceModel (sourceModel, changes) {
+			this.logger.log(1,"updateSourceModel", "enter", changes);
 			this.sourceModel = sourceModel;
-			this.model = ModelUtil.createScalledModel(this.sourceModel, this.zoom)
+			this.updateScalledModel()
 		},
 
 		renderZoom () {
+
 			this.setContainerPos()
 			if (this.model) {
 				this.cleanUpScreenButtons()
-				this.model = ModelUtil.createScalledModel(this.sourceModel, this.zoom)
+				
+				/**
+				 * This method gets called to often when zooming. We should find a way to debounce this
+				 * without flickering labels or rulers
+				 */
+				this.updateScalledModel()
 				this.updateDnD(this.model)
 				/**
 				 * 4.0.40: We do not call renderSelection(),as this would also update the 
 				 * property panel. We just need to update the seelction handlers
 				 */
 				this.updateSelection();
+				this.updateGridRezise();
 				this.renderDistance();
+
+				/**
+				 * Since 5 we have absolute canvas positions and we need
+				 * to rescale
+				 */
+				this.updateCommentPositions();
+
+				// we do not. call 		this.updateIndexes()
 			}
 		},
 
@@ -332,11 +520,22 @@ export default {
 		 * for instance when widgets are moved.
 		 */
 		onWidgetPositionChange (sourceModel) {
-			this.logger.log(-1,"onWidgetPositionChange", "enter", sourceModel);
+			if (!sourceModel) {
+				this.logger.sendError("onWidgetPositionChange", "No source model");
+				this.logger.sendError(new Error("onWidgetPositionChange() > No source model passed"));
+				return
+			}
+			this.logger.log(1,"onWidgetPositionChange", "enter", sourceModel);
 			this.sourceModel = sourceModel;
-			this.model = ModelUtil.createScalledModel(sourceModel, this.zoom)
+			this.updateScalledModel()
+	
 			this.renderFactory.setZoomedModel(sourceModel);
 			this.renderFactory.updatePositions(sourceModel)
+
+			this.updateIndexes().then(() => {
+				this.renderLayerList(sourceModel);
+			}).catch(() => {})
+
 		},
 
 
@@ -346,14 +545,16 @@ export default {
 
 			try {
 				/**
-				 * We keep here the sourceModel for rendering and zooming.
-				 * The rest stays as is with the zoomedModel as this.model
-				 * 
-				 * The sourceModel is used to draw tge elements on the zoomable
+				 * The sourceModel is used to draw the elements on the zoomable
 				 * background, whereas the model is used to handle DND
 				 */
-				this.sourceModel = ModelUtil.inlineTemplateModifies(sourceModel);
-				this.model = ModelUtil.createScalledModel(sourceModel, this.zoom)
+				this.sourceModel = ModelUtil.updateTemplateModifies(sourceModel);
+
+				/**
+				 * Use to render drag and drop nodes
+				 */
+				this.updateScalledModel()
+				
 
 				this.renderFlowViewFast(this.sourceModel, this.model, isResize);
 
@@ -361,27 +562,35 @@ export default {
 
 				this.renderComments();
 
-				/**
-				 * Also update layer list. The renderFlow might call
-				 * select which extends the group with additonal children!
-				 */
-				this.renderLayerList(sourceModel);
 
 				/**
 				 * Make sure we continue the add mode
 				 */
 				this.renderAddCommand();
+
+				/**
+				 * Update the tree model last
+				 */
+				this.updateIndexes().then(() => {
+					this.renderLayerList(sourceModel);
+				}).catch(() => {})
+
+				/**
+				 * Also update layer list. The renderFlow might call
+				 * select which extends the group with additonal children!
+				 */
+				//this.renderLayerList(sourceModel);
 			} catch(e){
 				this.logger.error("render", "ups", e);
 				this.logger.sendError(e);
 			}
-			this.logger.log(0,"render", "exit > " + (new Date().getTime() - renderStart) + 'ms');
+			this.logger.log(3,"render", "exit > " + (new Date().getTime() - renderStart) + 'ms');
 		},
 
 
 		renderDistance (){
 			if(this.mode == "distance"){
-				if(this._selectWidget){
+				if(this.getSelectedWidget()){
 					this.renderScreenDistance();
 				}
 			}
@@ -424,8 +633,6 @@ export default {
 			}
 		},
 
-
-
 		renderScreenButtons () {
 			/**
 			 * Methdod to be implemented by mixins
@@ -450,6 +657,7 @@ export default {
 			this.inlineEditStop();
 			this.cleanUpComments();
 			this.cleanUpScreenButtons();
+			this.cleanupDNDActive()
 
 			/**
 			 * Cleanup any stuff from the zoom
@@ -470,6 +678,7 @@ export default {
 			css.remove(this.container, "MatcCanvasFadeOut");
 			css.remove(this.container, "MatcCanvasModeAlign");
 			css.remove(this.container, "MatcCanvasModeReplicate");
+			css.remove(this.container, "MatcCanvasModeGridResize");
 
 			//this.screenContainer.innerHTML = "";
 			//this.widgetContainer.innerHTML = "";
@@ -504,14 +713,14 @@ export default {
 				delete this._hotspotToolPressListener;
 			}
 			this.cleanUpResizeHandles();
+			this.cleanUpGridResize()
 			this.cleanUpAddNDrop();
 		},
 
 		cleanUpScreenButtons () {
-			// console.warn('cleanUpScreenButtons() > Not Implemented')
-			/**
-				* Methdod to be implemented by mixins
-				*/
+		   /**
+			* Methdod to be implemented by mixins
+			*/
 		},
 
 			/**************************************************
@@ -553,27 +762,27 @@ export default {
 
 
 		renderGrid (backgroundDiv){
-
 			if(this.model.grid && this.model.grid.visible){
 
 				let z = '1'
 				if (this.model.grid.type === "columns"){
 
-					let h = this.model.grid.h * 1
-					let w = this.model.grid.w * 1
+					const h = this.model.grid.h * 1
+					const w = this.model.grid.w * 1
 				
+
 					if (!this.gridBackground[z]){
-						let columnCount = this.model.grid.columnCount * 1;
-						let columnOffset = this.model.grid.columnOffset * 1;
-						let columnGutter = this.model.grid.columnGutter * 1;
-						let columnWidth = this.model.grid.columnWidth * 1;
+						const columnCount = this.model.grid.columnCount * 1;
+						const columnOffset = this.model.grid.columnOffset * 1;
+						const columnGutter = this.model.grid.columnGutter * 1;
+						const columnWidth = this.model.grid.columnWidth * 1;
 					
-						let c = document.createElement("canvas");
+						const c = document.createElement("canvas");
 						c.width = this.sourceModel.screenSize.w;
 						c.height = 1;
-						let context = c.getContext("2d");
+						const context = c.getContext("2d");
 
-						var lastX = columnOffset;
+						let lastX = columnOffset;
 						for (let i=0; i< columnCount; i++){
 							let x = lastX + columnWidth;
 						
@@ -608,14 +817,14 @@ export default {
 					 * We render with double resolution and let the broser sort it out. Wr could call
 					 * this on zoom and adopt z to the zoom
 					 */
-					let z = 2
-					let h = this.model.grid.h * z;
-					let w = this.model.grid.w * z;
+					const z = 2
+					const h = this.model.grid.h * z;
+					const w = this.model.grid.w * z;
 
 					if (w > 0 && h > 0 && w < this.sourceModel.screenSize.w && h < this.sourceModel.screenSize.h ){
 
 						if (!this.gridBackground[z]){
-							let c= document.createElement("canvas");
+							let c = document.createElement("canvas");
 							c.width=w;
 							c.height=h;
 							let context = c.getContext("2d");
@@ -641,18 +850,20 @@ export default {
 			} else {
 				backgroundDiv.style.backgroundImage = 'none'
 			}
-    },
+    	},
 
 		createScreenDnD (screen){
 			this.logger.log(4,"createScreenDnD", "enter");
-			var div = this.createBox(screen);
+
+			const div = this.createBox(screen);
 			div._screenID = screen.id
+			div._screenDND = true		
 			css.add(div, "MatcScreenDnD");
 			return div;
 		},
 
 		createScreenLabel(screen) {
-			let lbl =document.createElement("div");
+			const lbl = document.createElement("div");
 			css.add(lbl, "MatcScreenLabel");
 			lbl._screenLabel = true
 			lbl._screenID = screen.id
@@ -662,7 +873,7 @@ export default {
 
 		createScreen (screen){
 			this.logger.log(4,"createScreen", "enter");
-			var div = this.createBox(screen);
+			const div = this.createBox(screen);
 			css.add(div, "MatcScreen");
 			return div;
 		},
@@ -670,7 +881,7 @@ export default {
 
 		createWidgetDnD (widget){
 			this.logger.log(4,"createWidgetDnD", "enter");
-			var div = this.createBox(widget);
+			const div = this.createBox(widget);
 			div._widgetID = widget.id
 			css.add(div, "MatcWidgetDND");
 			if (this.hasLogic(widget)){
@@ -689,38 +900,31 @@ export default {
 
 		createZoomedWidget (widget) {
 			this.logger.log(-1,"createZoomedWidget", "enter");
-
-			var div = this.createBox(widget);
+			const div = this.createBox(widget);
 			css.add(div, "MatcWidget");
-
 			this.renderFactory.setScaleFactor(this.zoom, this.zoom)
 			this.renderFactory.createWidgetHTML(div, widget);
 			this.renderFactory.setScaleFactor(1, 1)
-
 			if(this.hasLine(widget)){
 				css.add(div, "MatcWidgetWithTransition");
 			}
-
 			return div;
 		},
 
 		createWidget (widget){
 			this.logger.log(4,"createWidget", "enter");
-			var div = this.createBox(widget);
+			const div = this.createBox(widget);
 			css.add(div, "MatcWidget");
-
 			this.renderFactory.createWidgetHTML(div, widget);
-
 			if(this.hasLine(widget)){
 				css.add(div, "MatcWidgetWithTransition");
 			}
-
 			return div;
 		},
 
 		createBox (box){
 			this.logger.log(6,"createBox", "enter");
-			var div = document.createElement("div");
+			const div = document.createElement("div");
 			this.domUtil.setBox(div, box)
 			css.add(div, "MatcBox");
 			return div;
@@ -733,28 +937,25 @@ export default {
 
 
 		setWidgetPosition (id, sourcePos, zoomedPos){
-			let widget = this.model.widgets[id];
+			const widget = this.model.widgets[id];
 			if (widget) {
 				widget.x = zoomedPos.x;
 				widget.y = zoomedPos.y;
 				widget.w = zoomedPos.w;
 				widget.h = zoomedPos.h;
-
-				let dndDiv = this.widgetDivs[id];
+				const dndDiv = this.widgetDivs[id];
 				if (dndDiv){
 					this.updateBox(widget, dndDiv);
 				}
 			}
 
-			let sourceWidget = this.sourceModel.widgets[id]
+			const sourceWidget = this.sourceModel.widgets[id]
 			if (sourceWidget) {
-
 				sourceWidget.x = sourcePos.x;
 				sourceWidget.y = sourcePos.y;
 				sourceWidget.w = sourcePos.w;
 				sourceWidget.h = sourcePos.h;
-
-				let sourceDiv = this.widgetBackgroundDivs[id];
+				const sourceDiv = this.widgetBackgroundDivs[id];
 				if(sourceDiv){
 					this.updateBox(sourcePos, sourceDiv);
 				}
@@ -766,10 +967,8 @@ export default {
 		},
 
 		setTempWidgetStyle (id, style){
-			//this.logger.log(4,"setTempWidgetStyle", "enter");
-
-			let sourceWidget = this.getUpdatedSourceWidget(id, style)
-			var div = this.widgetBackgroundDivs[id];
+			const sourceWidget = this.getUpdatedSourceWidget(id, style)
+			const div = this.widgetBackgroundDivs[id];
 			if(div && sourceWidget){
 				this.renderFactory.setStyle(div, sourceWidget, true);
 				this.setCopyStyle(sourceWidget, true);
@@ -778,10 +977,32 @@ export default {
 			}
 		},
 
-		getUpdatedSourceWidget (id, style) {
-			let sourceWidget = this.sourceModel.widgets[id];
+		setTempWidgetProps(id, props){
+			const sourceWidget = this.getUpdatedSourceWidgetProps(id, props)
+			const div = this.widgetBackgroundDivs[id];
+			if(div && sourceWidget){
+				this.renderFactory.setStyle(div, sourceWidget, true);
+			} else {
+				console.warn("setTempWidgetProps() > Cannot set widget props", id, props);
+			}
+		},
+		
+
+		getUpdatedSourceWidgetProps (id, props) {
+			const sourceWidget = this.sourceModel.widgets[id];
 			if (sourceWidget) {
-				for (var k in style) {
+				for (let k in props) {
+					sourceWidget.props[k] = props[k];
+				}
+			}
+			return sourceWidget
+		},
+
+
+		getUpdatedSourceWidget (id, style) {
+			const sourceWidget = this.sourceModel.widgets[id];
+			if (sourceWidget) {
+				for (let k in style) {
 					sourceWidget.style[k] = style[k];
 				}
 			}
@@ -789,18 +1010,18 @@ export default {
 		},
 
 		setWidgetStyle (id, style, widget){
-			this.logger.log(-1,"setWidgetStyle", "enter > ", id);
+			this.logger.log(1,"setWidgetStyle", "enter > ", id);
 			/**
 			 * get the source model and copy the style. Asume
 			 * partieal updates...
 			 */
-			let sourceWidget = this.getUpdatedSourceWidget(id, style)
-			var div = this.widgetBackgroundDivs[id];
+			const sourceWidget = this.getUpdatedSourceWidget(id, style)
+			const div = this.widgetBackgroundDivs[id];
 			if (div && sourceWidget){
 				/**
 				 * Flush inlineEdit if needed
 				 */
-				var newLabel = this.inlineEditStop();
+				const newLabel = this.inlineEditStop();
 				if (newLabel && widget.props) {
 					/**
 						* For some reason this will overwrite the style change in the undo()
@@ -829,9 +1050,9 @@ export default {
 
 			if (sourceWidget.copies){
 				for(let i=0; i< sourceWidget.copies.length; i++){
-					let copyID = sourceWidget.copies[i];
-					let copyWidget = this.sourceModel.widgets[copyID];
-					let copyDiv = this.widgetBackgroundDivs[copyID];
+					const copyID = sourceWidget.copies[i];
+					const copyWidget = this.sourceModel.widgets[copyID];
+					const copyDiv = this.widgetBackgroundDivs[copyID];
 					if(copyWidget && copyDiv){
 						copyWidget.style = sourceWidget.style;
 						copyWidget.props = sourceWidget.props;
@@ -857,8 +1078,8 @@ export default {
 					/**
 						* Here we get also the latest updated model method
 						*/
-					let copyID = sourceWidget.inheritedCopies[i];
-					let copyWidget = this.model.widgets[copyID];
+					const copyID = sourceWidget.inheritedCopies[i];
+					const copyWidget = this.model.widgets[copyID];
 					if (isTempUpdate) {
 						/**
 							* Attention: If this code is called
@@ -883,7 +1104,7 @@ export default {
 						copyWidget.props = this.mixin(sourceWidget.props, copyWidget.props, false)
 					}
 
-					let copyDiv = this.widgetBackgroundDivs[copyID];
+					const copyDiv = this.widgetBackgroundDivs[copyID];
 					if(copyWidget && copyDiv){
 						this.renderFactory.setStyle(copyDiv, copyWidget);
 					}
@@ -894,8 +1115,8 @@ export default {
 		},
 
 		setScreenStyle (id){
-			var screen = this.model.screens[id];
-			var div = this.screenBackgroundDivs[id];
+			const screen = this.model.screens[id];
+			const div = this.screenBackgroundDivs[id];
 			if(screen && div){
 				this.renderFactory.setStyle(div, screen);
 				/**
@@ -911,10 +1132,10 @@ export default {
 		},
 
 		setTempScreenStyle (id, style){
-			var screen = this.model.screens[id];
-			var div = this.screenBackgroundDivs[id];
+			const screen = this.model.screens[id];
+			const div = this.screenBackgroundDivs[id];
 			if(screen && div){
-				for (var k in style) {
+				for (let k in style) {
 					screen.style[k] = style[k];
 				}
 				this.renderFactory.setStyle(div, screen);
@@ -930,14 +1151,14 @@ export default {
 			***************************************************************************/
 
 		getCanvasMousePosition (e){
-			var pos = this._getMousePosition(e);
+			const pos = this._getMousePosition(e);
 			pos.x -= (this.domPos.x + this.canvasPos.x);
 			pos.y-= (this.domPos.y + this.canvasPos.y);
 			return pos;
 		},
 
 		getRelCanvasMousePosition (e){
-			var pos = this.getCanvasMousePosition(e);
+			const pos = this.getCanvasMousePosition(e);
 			pos.x = pos.x / this.getZoomed(this.canvasPos.w, this.zoom);
 			pos.y = pos.y / this.getZoomed(this.canvasPos.h, this.zoom);
 			return pos;
@@ -945,7 +1166,7 @@ export default {
 
 
 		getAbsCanvasMousePosition (e){
-			var pos = this._getMousePosition(e);
+			const pos = this._getMousePosition(e);
 			return pos;
 		},
 
@@ -962,15 +1183,18 @@ export default {
 		},
 
 		alignmentStart (selectedType, selectedModel, activePoint, ignoreIds, showDimensions){
-			this.logger.log(-1,"alignmentStart","enter > " + selectedType, this.settings.snapGridOnlyToTopLeft);
+			this.logger.log(2,"alignmentStart","enter > selectedType: " + selectedType + " > " + this.settings.snapGridOnlyToTopLeft + " > useSnap: " + this.settings.useSnappingEngine);
 
 			/**
 			 * Use the grid only when widget is selected and grid is specified
 			 */
 			if (this.model.grid) {
 				if ("widget" == selectedType || "boundingbox" == selectedType || "group" == selectedType ||  "multi" == selectedType) {
-					this._alignmentTool = new GridAndRuler();
+					const useSnappingEngine = this.settings && this.settings.useSnappingEngine
+					
+					this._alignmentTool = useSnappingEngine ? new SnappingEngine() : new GridAndRulerSnapp();
 					this._alignmentTool.ignoreGroup = this._dragNDropIgnoreGroup;
+					this._alignmentTool.treeIndex = this.treeIndex
 					this._alignmentTool.showDndDistance = this.showDistance;
 					this._alignmentTool.snapGridOnlyToTopLeft = this.settings.snapGridOnlyToTopLeft
 					this._alignmentTool.showDimensions = showDimensions;
@@ -980,18 +1204,16 @@ export default {
 					}
 					this._alignmentTool.start(this, selectedType, selectedModel, activePoint, this.model.grid, this.zoom);
 				} else if("grid" == selectedType ) {
-
 					this._alignmentTool = new SimpleGrid();
 					this._alignmentTool.start(this, this.model.grid, this.zoom, "RightDown");
 					this._alignmentTool.showDimensions = showDimensions;
 				} else {
 					this._alignmentTool = new Ruler();
-					this._alignmentTool.start(this,selectedType, selectedModel,activePoint);
+					this._alignmentTool.start(this, selectedType, selectedModel, activePoint, this.model.grid, this.zoom, ignoreIds);
 				}
 			} else  {
-
 				this._alignmentTool = new Ruler();
-				this._alignmentTool.start(this,selectedType, selectedModel,activePoint);
+				this._alignmentTool.start(this, selectedType, selectedModel, activePoint, this.model.grid, this.zoom, ignoreIds);
 			}
 			this._alignmentToolInited = true;
 		},
@@ -1007,66 +1229,89 @@ export default {
 
 		cleanUpAlignment (){
 			this.logger.log(4,"cleanUpAlignment","enter");
-
 			if(this._alignmentTool){
 				this._alignmentTool.cleanUp();
 				delete this._alignmentTool;
 			}
-
 			this._alignmentToolInited = false;
+	
+		},
 
+		addDNDActive(){
+			if (!this._dndCSSActive) {
+				this._dndCSSActive = "MatcCanvasDNDActive"
+				css.add(this.container, this._dndCSSActive);
+			}
+		},
+
+		cleanupDNDActive() {
+			css.remove(this.container, this._dndCSSActive);
+			delete this._dndCSSActive
 		},
 
 		getModelPosition (){
 
 		},
 
+		/***************************************************************************
+		 * Cnavas Click stuff
+		 ***************************************************************************/
+	
+		setCanvasBackgroundClickCallback (l){
+			this.logger.log(4,"setCanvasClickCallback", "enter");
+			this._canvasClickCallback = l;
+		},
+
+		clearCanvasBackgroundClickCallback (){
+			this.logger.log(1,"clearCanvasBackgroundClickCallback", "enter");
+			this._canvasClickCallback = null;
+		},
+
+		onCanvasBackgroundClickCallback(e) {
+			if (this._canvasClickCallback && this[this._canvasClickCallback]){
+				this[this._canvasClickCallback](e)
+			}
+		},
 
 		/***************************************************************************
 		 * Cancel stuff
 		 ***************************************************************************/
 		/**
-			* Register a call back that will be called in case
-			* an cancel action is executed. The name of the
-			* method has to be passed. The methods can return true,
-			* to request an rerendering.
-			*/
+		 * Register a call back that will be called in case
+		 * an cancel action is executed. The name of the
+		 * method has to be passed. The methods can return true,
+		 * to request an rerendering.
+		 */
 		setCanvasCancelCallback (l){
+			this.logger.log(4,"setCanvasCancelCallback", "enter");
 			this._cancelCallback = l;
 		},
 
 		cleanUpCancelCallbacks (){
+			this.logger.log(1,"cleanUpCancelCallbacks", "enter");
 			this._cancelCallback = null;
 		},
 
 		onCancelAction (){
-
-			this.logger.log(0,"onCancelAction", "enter > " + this._cancelCallback);
-
-			if(this._cancelCallback && this[this._cancelCallback]){
-
-				var rerender = this[this._cancelCallback]();
+			this.logger.log(-1,"onCancelAction", "enter > " + this._cancelCallback);
+			if (this._cancelCallback && this[this._cancelCallback]){
+				const rerender = this[this._cancelCallback]();
 				if(rerender){
 					this.rerender();
 				}
 			} else {
 				this.rerender();
 			}
-
 			this._cancelCallback = null;
 		},
 
-
-
 		/***************************************************************************
-			* Helper
-			***************************************************************************/
-		getColor: function(value){
-
+		* Helper
+		***************************************************************************/
+		getColor (value){
 			if(value == 0){
 				return this.defaultLineColor;
 			}
-
 			return this.mixColor(value);
 		},
 

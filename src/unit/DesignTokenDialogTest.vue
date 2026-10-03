@@ -10,8 +10,11 @@
   </div>
 </template>
 
+<style lang="scss">
+  @import "../style/matc.scss";
+</style>
 <style>
-  @import url("../style/matc.css");
+
   .MatcDataSettings {
       background: white;
       box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
@@ -22,7 +25,7 @@
 <script>
 
 import DesignTokenDialog from 'canvas/toolbar/dialogs/DesignTokenDialog'
-import designToken1 from './data/designToken1.json'
+import designGPT from './data/designGPT.json'
 
 export default {
   name: "DataSettingsTest",
@@ -44,8 +47,8 @@ export default {
       }
   },
   mounted() {
-    this.$refs.dialog.setModel(designToken1)
-    this.$refs.dialog.setValue()
+    this.$refs.dialog.setModel(designGPT)
+
 
   }
 };

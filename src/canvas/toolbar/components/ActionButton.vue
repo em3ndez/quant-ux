@@ -1,6 +1,6 @@
 
 <template>
-     <div class="MatcAction">
+	<div class="MatcAction">
 	</div>
 </template>
 <script>
@@ -9,7 +9,7 @@ import css from 'dojo/css'
 import lang from 'dojo/_base/lang'
 import on from 'dojo/on'
 import touch from 'dojo/touch'
-import topic from 'dojo/topic'
+//import topic from 'dojo/topic'
 import _Tooltip from 'common/_Tooltip'
 import DomBuilder from 'common/DomBuilder'
 import CheckBox from 'common/CheckBox'
@@ -20,171 +20,189 @@ import ActionSettings from './ActionSettings'
 import WorkflowSettings from './WorkflowSettings'
 import Util from 'core/Util'
 import DomUtil from 'core/FastDomUtil'
+import { iconDOM } from 'page/QIconUtil'
 
 export default {
-    name: 'ActionButton',
-    mixins:[_Tooltip, Util, Rule, DojoWidget],
-    data: function () {
-        return {
-            reposition: true,
-            mode: "TopDown"
-        }
-    },
-    components: {},
-    methods: {
-        postCreate(){
+	name: 'ActionButton',
+	mixins: [_Tooltip, Util, Rule, DojoWidget],
+	data: function () {
+		return {
+			reposition: true,
+			mode: "TopDown"
+		}
+	},
+	components: {},
+	methods: {
+		postCreate() {
 		},
 
-		setModel (m){
+		setModel(m) {
 			this.model = m;
 		},
 
-		setCanvasSettings (settings) {
+		setCanvasSettings(settings) {
 			if (settings) {
 				this.hasProtoMoto = settings.hasProtoMoto
 			}
 		},
 
-		setScreen (screen){
+		setScreen(screen) {
 
 			this.domUtil.removeAllChildNodes(this.domNode)
 			this.cleanUpTempListener();
 
-			var db = new DomBuilder();
-			var parent = db.div().build();
+			const db = new DomBuilder();
+			const parent = db.div().build();
 
-			var lines = this.getFromLines(screen);
-			for(var i=0; i< lines.length; i++){
-				var line = lines[i];
+			const lines = this.getFromLines(screen);
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
 				this.renderNewSchool(db, parent, line, false);
 				db.div("MatcToolbarSeparator").build(parent);
 			}
 
-			var btn = db
-				.div("MatcToolbarItem MatcToolbarGridFull")
+			const btn = db
+				.div("MatcToolbarItem")
 				.div(" MatcToolbarButton MatcButton")
 				.tooltip("Add Link to other screen")
 				.build(parent);
 
-			db.span("mdi mdi-link-variant MatcButtonIcon").build(btn);
+			btn.appendChild(iconDOM("Link"))
 			db.span("MatcButtonIconLabel", "Add Link").build(btn);
 			this.tempOwn(on(btn, touch.press, lang.hitch(this, "onNewLine")));
 
 			this.domNode.appendChild(parent);
 		},
 
-		setValue (widget, isLogicWidget){
+		setValue(widget, isLogicWidget) {
 
 			this.widget = widget;
 
 			this.domUtil.removeAllChildNodes(this.domNode)
 			this.cleanUpTempListener();
 
-			var db = new DomBuilder();
-			var parent = db.div().build();
+			const db = new DomBuilder();
+			const parent = db.div("MatcActionCntr").build();
 
-			if (isLogicWidget){
+			if (isLogicWidget) {
+				const lines = this.getFromLines(widget);
+				for (let i = 0; i < lines.length; i++) {
+					const line = lines[i];
+					const to = this.getToBox(line);
 
-
-				/**
-				 * TODO: Get all lines... start rendering
-				 */
-				let lines = this.getFromLines(widget);
-				for (let i=0; i< lines.length; i++){
-					let line = lines[i];
-					let to = this.getToBox(line);
-
-					if (to){
-						let icon = "mdi mdi-link-variant"; //this.getAppTypeIcon(this.model);
-						if(this.hasLogic(to)){
+					if (to) {
+						let icon = "Link"; //this.getAppTypeIcon(this.model);
+						if (this.hasLogic(to)) {
 							icon = "MatcToolbarIconAddLogic mdi mdi-checkbox-blank"
 						}
-						if(this.hasRest(to)){
-							icon = "MatcToolbarIconAddLogic mdi mdi-cloud"
+						if (this.hasRest(to)) {
+							icon = "Cloud"
 						}
-						let item = db.div("MatcToolbarItem MatcToolbarGridFull MatcToobarActionCntr").build(parent);
-						db.span(icon + " MatcToolbarSmallIcon").build(item);
+						if (this.hasScript(to)) {
+							icon = "Code"
+						}
+
+						const item = db.div("MatcToolbarItem MatcToobarActionCntr MatcToolbarIconButton").build(parent);
+
+						item.appendChild(iconDOM(icon))
+
+				
 						db.span("MatcToolbarItemLabel", to.name).build(item);
-						let btn = db.span("MatcToobarRemoveBtn ").span("mdi mdi-close-circle").build(item);
+						const btn = db.span("MatcToobarRemoveBtn ").build(item);
+						btn.appendChild(iconDOM("DeleteX"))
 						this.tempOwn(on(btn, touch.press, lang.hitch(this, "onRemoveLineByID", line.id)));
 
-						if (widget.props && !widget.props.isRandom){ // new since 6
-							if(line.rule){
-								let lbl = this.getRuleLabel(line.rule);
-								let row = db.div("MatcToobarRow").build(parent);
-								let item= db.div("MatcToolbarItem MatcToolbarGridFull MatcToolbarDropDownButton").build(row);
-								db.span("MatcActionRuleLabel", lbl).build(item);
-								this.tempOwn(on(item, touch.press, lang.hitch(this, "onEditRule", line)));
-							} else {
-								let row = db.div("MatcToobarRow").build(parent);
-								let item= db.div("MatcToolbarItem MatcToolbarGridFull MatcToolbarDropDownButton").build(row);
-								let span = db.label("MatcToolbarItemIcon").build(item);
-								db.span("mdi mdi-plus-circle MatcToolbarSmallIcon").build(span);
-								db.span("MatcToolbarDropDownButtonLabel", "Add Rule").build(span);
-								this.tempOwn(on(item, touch.press, lang.hitch(this, "onEditRule", line)));
+
+						if (!this.hasScript(widget)) {
+							if (widget.props && !widget.props.isRandom) { // new since 6
+								if (line.rule) {
+									const lbl = this.getRuleLabel(line.rule);
+									const row = db.div("MatcToobarRow").build(parent);
+									const item = db.div("MatcToolbarItem  MatcToolbarDropDownButton MatcToolbarIconButton").build(row);
+									item.appendChild(iconDOM("EditPencil"))
+									db.span("", lbl).build(item);
+									this.tempOwn(on(item, touch.press, lang.hitch(this, "onEditRule", line)));
+								} else {
+									const row = db.div("MatcToobarRow").build(parent);
+									const item = db.div("MatcToolbarItem  MatcToolbarDropDownButton MatcToolbarIconButton").build(row);
+							
+									item.appendChild(iconDOM("Plus"))
+									const span = db.label("MatcToolbarItemIcon").build(item);
+									db.span("MatcToolbarDropDownButtonLabel", "Add Rule").build(span);
+									this.tempOwn(on(item, touch.press, lang.hitch(this, "onEditRule", line)));
+								}
 							}
 						}
-						db.div("MatcToolbarSeparator").build(parent);
+
+
+						if (i < lines.length - 1) {
+							db.div("MatcToolbarSeparator").build(parent);
+						}
+
 					}
 
 				}
 
-				let btn = db.div("MatcToolbarItem MatcToolbarGridFull").div(" MatcToolbarButton MatcButton").tooltip("Add Link to other screen").build(parent);
-				db.span("mdi mdi-link-variant MatcButtonIcon").build(btn);
-				db.span("MatcButtonIconLabel", "Add Link").build(btn);
-				this.tempOwn(on(btn, touch.press, lang.hitch(this, "onNewLine")));
+				// script does only allow one line!
+				if (!this.hasScript(widget) || lines.length === 0) {
+					const btn = db
+						.div("MatcToolbarItem")
+						.div(" MatcToolbarButton MatcButton MatcToolbarButtonPrimary")
+						.tooltip("Add Link to other screen")
+						.build(parent);
+
+					btn.appendChild(iconDOM("Link"))
+					db.span("MatcButtonIconLabel", "Add Link").build(btn);
+					this.tempOwn(on(btn, touch.press, lang.hitch(this, "onNewLine")));
+				}
 
 			} else {
 				let line = this.getLineFrom(widget);
 				let action = widget.action;
-				if(!line && !action){
+				if (!line && !action) {
 					/**
 					 * Thing set, show drop down
 					 */
-					let row = db.div("MatcToolbarItem MatcToolbarGridFull").build(parent);
-					let btn = this.$new(ToolbarDropDownButton,{maxLabelLength:20});
-					btn.setLabel('<span class="mdi mdi-plus-circle-outline"></span><span class="MatcButtonIconLabel">Add Action</span>');
+					let row = db.div("MatcToolbarItem").build(parent);
+					let btn = this.$new(ToolbarDropDownButton, { maxLabelLength: 20, icon: "Link" });
+					btn.setLabel('Add Link');
 					btn.updateLabel = false;
 					btn.setOptions(this.getLineTypes());
 					btn.setPopupCss("MatcMultiActionDropDownPopup");
 					btn.reposition = true;
 					css.add(btn.domNode, "MatcMultiActionDropDown MatcToolbarButton MatcButton");
 					btn.placeAt(row);
-					btn.setShowListener(function(){
-						topic.publish("matc/canvas/fadeout", {});
-					});
-					btn.setHideListener(function(){
-						topic.publish("matc/canvas/fadein", {});
-					});
-
+		
 				} else if (action) {
 
 					let actionCntr = db.div("MatcToobarActionSelector").build(parent);
 
-					let btn = this.$new(ToolbarDropDownButton,{maxLabelLength:20});
+					let btn = this.$new(ToolbarDropDownButton, { maxLabelLength: 20 });
 					btn.setOptions([
-						{value:'back', label:"Navigate Back", icon:"mdi mdi-ray-end-arrow MatcToolbarSmallIcon"},
-						{value:'workflow', label:"Simple Formula", icon:"mdi mdi-flask-empty-plus-outline"},
+						{ value: 'back', label: "Navigate Back", icon: "NavigateBack" },
+						{ value: 'workflow', label: "Simple Formula", icon: "mdi mdi-flask-empty-plus-outline" }
+						//{value:'hide', label:"Hide & Show ", icon:"mdi mdi-eye-outline"},
 					]);
 					btn.setValue(action.type);
 					btn.setPopupCss("MatcActionAnimProperties");
 					btn.updateLabel = true;
 					btn.reposition = true;
-					css.add(btn.domNode, "  MatcToolbarIconNoSmooth");
+					css.add(btn.domNode, "");
 					btn.placeAt(actionCntr);
 					this.tempOwn(on(btn, "change", lang.hitch(this, "setActionType", action)));
-					this.addTooltip(btn.domNode, "Select action type");
+					//this.addTooltip(btn.domNode, "Select action type");
 
 					let removeBtn = db.span("MatcToobarRemoveBtn ")
 						.tooltip("Remove Action", "vommondToolTipRightBottom")
-						.span("mdi mdi-close-circle")
 						.build(actionCntr);
+					
+					removeBtn.appendChild(iconDOM("DeleteX"))
 
 					this.tempOwn(on(removeBtn, touch.press, lang.hitch(this, "onRemoveAction", action)));
 
 					if (action.type === 'workflow') {
 						this.renderWorkFlowAction(parent, db, action)
-					} 
+					}
 
 
 				} else {
@@ -194,149 +212,150 @@ export default {
 			this.domNode.appendChild(parent);
 		},
 
-	
+
 
 		/**
 		 * This seems to be really slow. Maybe because of the call of $new()?
 		 */
-		renderNewSchool (db, parent, line, isWidget) {
-
-
+		renderNewSchool(db, parent, line, isWidget) {
 			var to = this.getToBox(line);
-
-			if(!to){
+			if (!to) {
 				return;
 			}
 
-			var icon = "mdi mdi-link-variant"; //this.getAppTypeIcon(this.model);
-			if(this.hasLogic(to)){
-				icon = "MatcToolbarIconAddLogic mdi mdi-checkbox-blank"
+			let icon = "Link"; //this.getAppTypeIcon(this.model);
+			if (this.hasLogic(to)) {
+				icon = "OR"
 			}
 
-			if(this.hasRest(to)){
-				icon = " mdi mdi-cloud"
+			if (this.hasRest(to)) {
+				icon = "Cloud"
 			}
 
-			var item = db.div("MatcToolbarItem MatcToolbarGridFull MatcToobarActionCntr").build(parent);
-			db.span(icon + " MatcToolbarSmallIcon").build(item);
+			let item = db.div("MatcToolbarItem MatcToobarActionCntr MatcToolbarIconButton").build(parent);
+			item.appendChild(iconDOM(icon))
 			db.span("MatcToolbarItemLabel", to.name).build(item);
-			var btn = db.span("MatcToobarRemoveBtn ").tooltip("Remove Link", "vommondToolTipRightBottom").span("mdi mdi-close-circle").build(item);
+
+			let btn = db.span("MatcToobarRemoveBtn ").tooltip("Remove Link", "vommondToolTipRightBottom").build(item);
+			btn.appendChild(iconDOM("DeleteX"))
 			this.tempOwn(on(btn, touch.press, lang.hitch(this, "onRemoveLineByID", line.id)));
 
-			btn = this.$new(ToolbarDropDownButton,{maxLabelLength:20});
+			btn = this.$new(ToolbarDropDownButton, { maxLabelLength: 20 });
 			btn.setOptions(this.getEventTypes(line, isWidget, btn));
 			btn.setValue(line.event);
 			btn.setPopupCss("MatcActionAnimProperties");
 			btn.updateLabel = true;
 			btn.reposition = true;
-			css.add(btn.domNode, "MatcToolbarGridFull  MatcToolbarIconNoSmooth");
 			btn.placeAt(parent);
 			this.tempOwn(on(btn, "change", lang.hitch(this, "onLineEventByID", line.id)));
-			this.addTooltip(btn.domNode, "Select event type");
+			//this.addTooltip(btn.domNode, "Select event type");
 
 
-			var iconAndLabel = this.getAnimationIconAndLabel(line);
-			item = db.div("MatcToolbarItem MatcToolbarGridFull MatcToobarActionCntr MatcToolbarDropDownButton").build(parent);
-			db.span(iconAndLabel.icon + " MatcToolbarSmallIcon").build(item);
+			const iconAndLabel = this.getAnimationIconAndLabel(line)
+			item = db.div("MatcToolbarItem MatcToobarActionCntr MatcToolbarIconButton ").build(parent);
+			item.appendChild(iconDOM(iconAndLabel.icon))
 			db.span("MatcToolbarItemLabel", iconAndLabel.label).build(item);
 			this.tempOwn(on(item, touch.press, lang.hitch(this, "showActionSettings", line, item)));
 
+			/**
+			 *  Since 
+			 */
 
-			if(isWidget){
-				btn = this.$new(ToolbarDropDownButton,{maxLabelLength:20});
+			if (isWidget && !line.isTemplateTransition) {
+				btn = this.$new(ToolbarDropDownButton, { maxLabelLength: 20 });
 				btn.setOptions([
-						{value:false, label:"No validation", icon:"mdi mdi-close"},
-						{value:true, label:"All fields valid", icon:"mdi mdi-check"},
+					{ value: false, label: "No validation", icon: "Close" },
+					{ value: true, label: "All fields valid", icon: "mdi mdi-check" },
 				]);
-				btn.setValue((line.validation !=null && line.validation != undefined && line.validation.all));
+				btn.setValue((line.validation != null && line.validation != undefined && line.validation.all));
 				btn.setPopupCss("MatcActionAnimProperties");
 				btn.updateLabel = true;
 				btn.reposition = true;
-				css.add(btn.domNode, "MatcToolbarGridFull  MatcToolbarIconNoSmooth");
 				btn.placeAt(parent);
 				this.tempOwn(on(btn, "change", lang.hitch(this, "onLineValidation")));
-				this.addTooltip(btn.domNode, "Select an animation for the screen transition");
+				//this.addTooltip(btn.domNode, "Select an animation for the screen transition");
 			}
 
 			/**
 			 * Move this and the timer options int
 			 */
-			var scrollChkBox = this.$new(CheckBox);
-			scrollChkBox.setLabel("Keep scroll position");
-			css.add(scrollChkBox.domNode, "MatcToolbarItem");
-			this.addTooltip(scrollChkBox.domNode, "BETA: Scroll to same position after the new screen is loaded.");
-			scrollChkBox.placeAt(parent);
-			scrollChkBox.setValue(line.scroll);
-			this.tempOwn(on(scrollChkBox, "change", lang.hitch(this, "onLineScrollByID", line.id)));
-
-
-			var chkBox = this.$new(CheckBox);
-			chkBox.setLabel("Hide Link");
-			css.add(chkBox.domNode, "MatcToolbarItem");
-			this.addTooltip(chkBox.domNode, "Do not show the link on the canvas");
-			chkBox.placeAt(parent);
-			chkBox.setValue(line.hidden);
-			this.tempOwn(on(chkBox, "change", lang.hitch(this, "onLineHideByID", line.id)));
-
-
-			/**
-			 * Add here databinding dialog
-			 *
-			 * 1) if the line is executed, we as the uiWidgte for getValue()
-			 *
-			 * 2) the value is written to line.dataBinding
-			 *
-			 * 3) buttons need data binding! Should only work with ${} to replace text!
-			 */
+			if (!line.isTemplateTransition && !line.scroll === true) {
+				var scrollChkBox = this.$new(CheckBox);
+				scrollChkBox.setLabel("Keep scroll position");
+				css.add(scrollChkBox.domNode, "MatcToolbarItem");
+				//this.addTooltip(scrollChkBox.domNode, "BETA: Scroll to same position after the new screen is loaded.");
+				scrollChkBox.placeAt(parent);
+				scrollChkBox.setValue(line.scroll);
+				this.tempOwn(on(scrollChkBox, "change", lang.hitch(this, "onLineScrollByID", line.id)));
+			}
 
 		},
 
-		getLineTypes () {
+		getLineTypes() {
 			let result = [
-				{value:false, label:"Link to other screen (L)", icon:"mdi mdi-link-variant", callback:lang.hitch(this, "onNewLine")},
-				{value:true, label:"Navigate Back", icon:"mdi mdi-ray-end-arrow", callback:lang.hitch(this, "onActionBack")},
-				{value:true, label:"Animation", icon:"mdi mdi-video", callback:lang.hitch(this, "onNewTransfromLine")}
+				{ value: false, label: "Link to screen or logic", shortcut:'L', icon: "Link", callback: lang.hitch(this, "onNewLine") },
+				{ value: true, label: "Navigate Back", icon: "NavigateBack", callback: lang.hitch(this, "onActionBack") },
+				{ value: true, label: "Animation", icon: "Animation", callback: lang.hitch(this, "onNewTransfromLine") }
 				//{value:true, label:"Simple Formuala", icon:"mdi mdi-flask-empty-plus-outline", callback:lang.hitch(this, "onActionWorkflow")}
 			]
 			return result;
 		},
 
-		getEventTypes (line, isWidget, btn){
+		getEventTypes(line, isWidget, btn) {
 
-			if (this.widget && (this.widget.type == "TextBox" || this.widget.type == "Password" )){ //
+			if (line.isTemplateTransition) {
 				return [
-					{value:"click", label:"Click", icon:"mdi mdi-cursor-default"},
-					{value:"KeyboardEnter" , label : "Keyboard Return", icon:"mdi mdi-keyboard-return"},
-					{value:"KeyboardUp" , label : "Key Up", icon:"mdi mdi-arrow-expand-up"}
+					{ value: "click", label: "Click", icon: "EventClick" },
+					{ value: "mouseover", label: "Mouse Over", icon: "mdi mdi-cursor-default" },
+					{ value: "mouseout", label: "Mouse Out", icon: "mdi mdi-cursor-default-outline" }
 				]
 			}
 
-			var triggers =  [
-       			{value:"click", label:"Click", icon:"mdi mdi-cursor-default"},
-				{value:"swipeLeft", label:"Left Swipe", icon:"mdi mdi-arrow-left-bold-circle"},
-				{value:"swipeRight", label:"Right Swipe", icon:"mdi mdi-arrow-right-bold-circle"},
-				{value:"swipeUp", label:"Up Swipe",icon:"mdi mdi-arrow-up-bold-circle"},
-				{value:"swipeDown", label:"Down Swipe", icon:"mdi mdi-arrow-down-bold-circle"},
-				{value:"scroll", label:"Scrolled in view", icon:"mdi mdi-unfold-more-horizontal"}
-		  	]
+
+			if (this.widget && (this.widget.type == "DragNDropTarget")) {
+				return [
+					{ value: "click", label: "Drop", icon: "EventClick" },
+					{ value: "hover", label: "Hover", icon: "EventHover" }
+				]
+			}
+
+
+			if (this.widget && (this.widget.type == "TextBox" || this.widget.type == "Password")) { //
+				return [
+					{ value: "click", label: "Click", icon: "EventClick" },
+					{ value: "InputChange", label: "Change", icon: "mdi mdi-contain-end" },
+					{ value: "KeyboardEnter", label: "Keyboard Return", icon: "mdi mdi-keyboard-return" },
+					{ value: "KeyboardUp", label: "Key Up", icon: "mdi mdi-arrow-expand-up" }
+				]
+			}
+
+			var triggers = [
+				{ value: "click", label: "Click", icon: "EventClick" },
+				{ value: "swipeLeft", label: "Left Swipe", icon: "EventSwipeLeft" },
+				{ value: "swipeRight", label: "Right Swipe", icon: "EventSwipeRight" },
+				{ value: "swipeUp", label: "Up Swipe", icon: "EventSwipeUp" },
+				{ value: "swipeDown", label: "Down Swipe", icon: "EventSwipeDown" },
+				{ value: "scroll", label: "Scrolled in view", icon: "Scroll" }
+			]
 
 			/**
 			 * Screens have also a timer...
 			 */
-			if(!isWidget){
+			if (!isWidget) {
 				var timerLbl = "Timer";
-				if(line.timer){
-					timerLbl ="Timer ( " + line.timer + "s )";
+				if (line.timer) {
+					timerLbl = "Timer ( " + line.timer + "s )";
 				}
-				triggers.push({value:"timer", label:timerLbl, icon:"mdi mdi-timer", callback2:lang.hitch(this, "onTimerSelected", btn, line)});
+				triggers.push({ value: "timer", label: timerLbl, icon: "EventTimer", callback2: lang.hitch(this, "onTimerSelected", btn, line) });
+				triggers.push({ value: "loaded", label: 'Loaded', icon: "EventLoaded" });
 			} else {
-				triggers.push({value:"hover", label:"Hover", icon:"mdi mdi-cursor-default-outline"});
+				triggers.push({ value: "hover", label: "Hover", icon: "EventHover" });
 			}
 
 			return triggers;
 		},
 
-		onSetActionCallback (widget, action, event, input, e) {
+		onSetActionCallback(widget, action, event, input, e) {
 			this.stopEvent(e)
 			let newAction = lang.clone(action)
 			newAction.callbacks = [
@@ -348,17 +367,19 @@ export default {
 			this.emit("updateAction", newAction);
 		},
 
-		setActionCallback (dialog, input, action, widget, e) {
+		setActionCallback(dialog, input, action, widget, e) {
 			action.callback = input.value
 			this.stopEvent(e);
 			dialog.close();
-			this.emit("updateAction", widget.id, {'callback': input.value});
+			this.emit("updateAction", widget.id, { 'callback': input.value });
 		},
 
-		onTimerSelected (btn, line){
+
+
+		onTimerSelected(btn, line) {
 
 			var timerValue = 1.5;
-			if(line.timer != null && line.timer!=undefined){
+			if (line.timer != null && line.timer != undefined) {
 				timerValue = line.timer;
 			}
 
@@ -371,7 +392,7 @@ export default {
 			/**
 			 * Focus and select the new input
 			 */
-			setTimeout(function(){
+			setTimeout(function () {
 				input.focus();
 				input.select();
 			}, 50);
@@ -380,18 +401,18 @@ export default {
 			 * Listen to some keyboard events..
 			 */
 			var me = this;
-			this.tempOwn(on(input, "keyup", function(e){
-				 var keyCode = e.keyCode ? e.keyCode : e.which;
+			this.tempOwn(on(input, "keyup", function (e) {
+				var keyCode = e.keyCode ? e.keyCode : e.which;
 				/**
 				 * Close on ESC
 				 */
-				if( 27 == keyCode){
+				if (27 == keyCode) {
 					btn.hideDropDown();
 				}
 				/**
 				 * Change will not be fired if the users presses enter without changing the value!
 				 */
-				if(13 == keyCode && timerValue == input.value){
+				if (13 == keyCode && timerValue == input.value) {
 					me.onLineTimerAndDurationByID(line.id, input, btn, line);
 				}
 			}));
@@ -404,98 +425,102 @@ export default {
 		},
 
 
-		getAnimationIconAndLabel (line){
+		getAnimationIconAndLabel(line) {
 
 			var result = {
-				"label" : "No Animation",
-				"icon" : "mdi mdi-close"
+				"label": "No Animation",
+				"icon": "Close"
 			};
 
-			switch(line.animation){
+			switch (line.animation) {
 				case "slideLeft":
-					result.icon ="mdi mdi-arrow-left";
-					result.label ="Left Slide";
-				    break;
+					result.icon = "AnimationLeft";
+					result.label = "Left Slide";
+					break;
 
 				case "slideRight":
-					result.icon ="mdi mdi-arrow-right";
-					result.label ="Right Slide";
-				    break;
+					result.icon = "AnimationRight";
+					result.label = "Right Slide";
+					break;
 
 				case "slideUp":
-					result.icon ="mdi mdi-arrow-up";
-					result.label ="Up Slide";
-				    break;
+					result.icon = "AnimationUp";
+					result.label = "Up Slide";
+					break;
 
 				case "slideDown":
-					result.icon ="mdi mdi-arrow-down";
-					result.label ="Down Slide";
-				    break;
+					result.icon = "AnimationDown";
+					result.label = "Down Slide";
+					break;
 
 				case "fadeIn":
-					result.icon ="mdi mdi-blur";
-					result.label ="Fade In";
-				    break;
-
-
-				case "rotateInTopLeft":
-					result.icon ="mdi mdi-screen-rotation";
-					result.label ="Rotate (Top Left)";
-				    break;
-
-				case  "popup":
-					result.icon ="mdi mdi-select-all";
-					result.label ="Popup";
-				    break;
+					result.icon = "AnimationFadeIn";
+					result.label = "Fade In";
+					break;
 
 				case "transform":
-					result.icon ="mdi mdi-auto-fix";
-					result.label ="Transform";
-				    break;
+					result.icon = "AnimationTransform";
+					result.label = "Transform";
+					break;
 
-				case "zoomIn" :
-					result.icon ="mdi mdi-arrow-all";
-					result.label ="Zoom In";
-				    break;
+				case "zoomIn":
+					result.icon = "AnimationTransform";
+					result.label = "Zoom In";
+					break;
 
-				case "zoomOut" :
-					result.icon ="mdi mdi-select-all";
-					result.label ="Zoom Out";
-				    break;
+				// legacy stuff
+				case "zoomOut":
+					result.icon = "mdi mdi-select-all";
+					result.label = "Zoom Out";
+					break;
+
+				case "popup":
+					result.icon = "AnimationZoom";
+					result.label = "Popup";
+					break;
+
+				case "rotateInTopLeft":
+					result.icon = "mdi mdi-screen-rotation";
+					result.label = "Rotate (Top Left)";
+					break;
 
 				case "slideLeftDown":
-					result.icon ="mdi mdi-arrow-bottom-left";
-					result.label ="Down Left Slide";
-				    break;
+					result.icon = "mdi mdi-arrow-bottom-left";
+					result.label = "Down Left Slide";
+					break;
 
 				case "slideLeftUp":
-					result.icon ="mdi mdi-arrow-top-left";
-					result.label ="Up Left Slide";
-				    break;
+					result.icon = "mdi mdi-arrow-top-left";
+					result.label = "Up Left Slide";
+					break;
 
 				case "slideRightDown":
-					result.icon ="mdi mdi-arrow-bottom-right";
-					result.label ="Up Right Slide";
-				    break;
-
+					result.icon = "mdi mdi-arrow-bottom-right";
+					result.label = "Up Right Slide";
+					break;
 
 				case "slideRightUp":
-					result.icon ="mdi mdi-arrow-top-right";
-					result.label ="Down Right Slide";
-				    break;
+					result.icon = "mdi mdi-arrow-top-right";
+					result.label = "Down Right Slide";
+					break;
 
-		       default:
-		    	   break;
+				case "scroll":
+					result.icon = "AnimationScroll";
+					result.label = "Scroll";
+					break;
+
+				default:
+					break;
 
 			}
 
-			if(line.duration){
+			if (line.duration) {
 				result.label += " ( " + line.duration / 1000 + " s )";
 			}
 			return result;
 		},
 
-		showActionSettings (line, node, e){
+		showActionSettings(line, node, e) {
 			this.stopEvent(e);
 			let db = new DomBuilder();
 			let popup = db.div(" MatcPadding").build();
@@ -505,21 +530,15 @@ export default {
 			settings.setValue(line);
 			settings.placeAt(cntr);
 
-			let bar = db.div("MatcButtonBar MatcButtonBarRelative MatcMarginTop").build(popup);
-			let write = db.div("MatcButton", "Save").build(bar);
+			let bar = db.div("MatcButtonBar MatcMarginTop").build(popup);
+			let write = db.div("MatcButton MatcButtonPrimary", "Save").build(bar);
 			let cancel = db.a("MatcLinkButton", "Cancel").build(bar);
-			let anim = db.a("MatcLinkButton MatcButtonRight")
-				.span(" mdi mdi-video")
-				.up()
-				.span("","Custom Animations")
-				.build(bar);
+		
 
+			let d = new Dialog({ overflow: true });
 
-			let d = new Dialog({overflow:true});
-
-			d.own(on(write, touch.press, lang.hitch(this,"setAnimation", d, settings, line)));
+			d.own(on(write, touch.press, lang.hitch(this, "setAnimation", d, settings, line)));
 			d.own(on(cancel, touch.press, lang.hitch(d, "close")));
-			d.own(on(anim, touch.press, lang.hitch(this, "showScreenAnim", d, line)));
 			d.own(on(d, "close", () => {
 				settings.destroy();
 			}));
@@ -527,23 +546,23 @@ export default {
 			this.tempOwn(settings.on("change", lang.hitch(this, "updateLine", line.id)));
 		},
 
-		showScreenAnim (d, line, e){
+		showScreenAnim(d, line, e) {
 			this.stopEvent(e);
 			d.close();
-			this.emit("showScreenAnimation",line);
+			this.emit("showScreenAnimation", line);
 		},
 
-		setAnimation (d, settings, line, e){
+		setAnimation(d, settings, line, e) {
 			this.stopEvent(e);
 			d.close();
-			this.emit("updateLineByID",line.id, settings.getValue());
+			this.emit("updateLineByID", line.id, settings.getValue());
 		},
 
-		onActionBack (){
-			this.emit("newAction",{type:"back"});
+		onActionBack() {
+			this.emit("newAction", { type: "back" });
 		},
 
-		setActionType (action, type) {
+		setActionType(action, type) {
 			action.type = type
 			this.emit("updateAction", action);
 		},
@@ -551,7 +570,7 @@ export default {
 		/*******************************************************************
 		 *  Variable Action
 		 *******************************************************************/
-		renderWorkFlowAction (item, db, action) {
+		renderWorkFlowAction(item, db, action) {
 			let label = 'Create Formula'
 			if (action.steps && action.steps[0]) {
 				let step = action.steps[0]
@@ -561,9 +580,9 @@ export default {
 			this.tempOwn(on(row, touch.press, lang.hitch(this, "showEditWorkflow", action)));
 		},
 
-		getWorkFlowLabel (step) {
+		getWorkFlowLabel(step) {
 			let label = 'Edit Formula'
-			
+
 			if (step.operation === 'set') {
 				label = `${step.databinding} = ${step.parameter}`
 			}
@@ -595,17 +614,17 @@ export default {
 			if (step.operation === 'toggle') {
 				label = `${step.databinding} = ${step.parameter} ? ${step.parameter2}`
 			}
-			
+
 			return label
 		},
 
 
-		onActionWorkflow () {
-			this.emit("newAction",{type:"workflow", steps: []});
+		onActionWorkflow() {
+			this.emit("newAction", { type: "workflow", steps: [] });
 		},
 
-		showEditWorkflow (action, e) {
-		
+		showEditWorkflow(action, e) {
+
 
 			var db = new DomBuilder();
 
@@ -621,21 +640,21 @@ export default {
 			settings.placeAt(cntr);
 
 
-			var bar = db.div("MatcButtonBar MatcButtonBarRelative MatcMarginTop").build(popup);
-			var write = db.div("MatcButton", "Save").build(bar);
+			var bar = db.div("MatcButtonBar MatcMarginTop").build(popup);
+			var write = db.div("MatcButton MatcButtonPrimary", "Save").build(bar);
 			var cancel = db.a("MatcLinkButton", "Cancel").build(bar);
 
-			var d = new Dialog({overflow:true});
+			var d = new Dialog({ overflow: true });
 
-			d.own(on(write, touch.press, lang.hitch(this,"setActionWorkflow", d, settings, action)));
+			d.own(on(write, touch.press, lang.hitch(this, "setActionWorkflow", d, settings, action)));
 			d.own(on(cancel, touch.press, lang.hitch(d, "close")));
-			d.own(on(d, "close", function(){
+			d.own(on(d, "close", function () {
 				settings.destroy();
 			}));
 			d.popup(popup, e.target);
 		},
 
-		setActionWorkflow (d, settings, action) {
+		setActionWorkflow(d, settings, action) {
 			let updatedAction = settings.getValue()
 			action.steps = updatedAction.steps
 			this.emit("updateAction", action);
@@ -646,53 +665,53 @@ export default {
 			/**
 			 * Show Popup
 			 */
-			this.emit("newAction",{type:"js"});
+			this.emit("newAction", { type: "js" });
 		},
 
-		onRemoveAction (action,e){
+		onRemoveAction(action, e) {
 			this.stopEvent(e);
-			this.emit("removeAction",action);
+			this.emit("removeAction", action);
 		},
 
 
-		onNewLine (e){
-			this.emit("newLine",e);
+		onNewLine(e) {
+			this.emit("newLine", e);
 		},
 
-		onNewTransfromLine (e){
-			this.emit("newTransformLine",e);
+		onNewTransfromLine(e) {
+			this.emit("newTransformLine", e);
 		},
 
-		updateLine (id, data){
-			this.emit("updateLineByID",id, data);
+		updateLine(id, data) {
+			this.emit("updateLineByID", id, data);
 		},
 
-		onRemoveLineByID (id){
-			this.emit("removeLineById",id);
+		onRemoveLineByID(id) {
+			this.emit("removeLineById", id);
 		},
 
-		setLinePropertyByID (id, prop, value){
-			this.emit("setLinePropertyByID",id, prop, value);
+		setLinePropertyByID(id, prop, value) {
+			this.emit("setLinePropertyByID", id, prop, value);
 		},
 
-		onLineTimerByID (id, input){
+		onLineTimerByID(id, input) {
 
 			var value = input.value;
 
-			if(this.isNumber(value)){
-				this.emit("setLinePropertyByID",id, "timer", value);
+			if (this.isNumber(value)) {
+				this.emit("setLinePropertyByID", id, "timer", value);
 			} else {
 				console.warn("onLineTimerByID > Data Warng")
 			}
 		},
 
-		onLineTimerAndDurationByID (id, input, btn, line){
+		onLineTimerAndDurationByID(id, input, btn, line) {
 			var value = input.value;
 
-			if(line.timer!= value){
-				if(this.isNumber(value)){
-					this.emit("setLinePropertyByID",id, "event", "timer");
-					this.emit("setLinePropertyByID",id, "timer", value);
+			if (line.timer != value) {
+				if (this.isNumber(value)) {
+					this.emit("setLinePropertyByID", id, "event", "timer");
+					this.emit("setLinePropertyByID", id, "timer", value);
 				} else {
 					console.warn("onLineTimerAndDurationByID > Data Warng")
 					btn.hideDropDown();
@@ -704,58 +723,58 @@ export default {
 
 		},
 
-		isNumber (n) {
-			 return !isNaN(parseFloat(n)) && isFinite(n);
+		isNumber(n) {
+			return !isNaN(parseFloat(n)) && isFinite(n);
 		},
 
-		onRemoveLine (e){
-			this.emit("removeLine",e);
+		onRemoveLine(e) {
+			this.emit("removeLine", e);
 		},
 
-		onLineValidation (value){
-			var val ={ all: value}
+		onLineValidation(value) {
+			var val = { all: value }
 			this.emit("setLineProperty", "validation", val);
 		},
 
 
-		onLineHideByID (id, value){
-			this.emit("setLinePropertyByID",id, "hidden", value);
+		onLineHideByID(id, value) {
+			this.emit("setLinePropertyByID", id, "hidden", value);
 		},
 
-		onLineScrollByID (id, value){
-			this.emit("setLinePropertyByID",id, "scroll", value);
+		onLineScrollByID(id, value) {
+			this.emit("setLinePropertyByID", id, "scroll", value);
 		},
 
 
-		onLineEventByID (id, value){
+		onLineEventByID(id, value) {
 			// FIXME: Copz line and do one change!
-			this.emit("setLinePropertyByID",id, "event", value);
+			this.emit("setLinePropertyByID", id, "event", value);
 
-			if(value == "swipeLeft"){
-				this.emit("setLinePropertyByID",id, "animation", "slideLeft");
-				this.emit("setLinePropertyByID",id, "duration", 250);
+			if (value == "swipeLeft") {
+				this.emit("setLinePropertyByID", id, "animation", "slideLeft");
+				this.emit("setLinePropertyByID", id, "duration", 250);
 
-			} else if(value == "swipeRight"){
-				this.emit("setLinePropertyByID",id, "animation", "slideRight");
-				this.emit("setLinePropertyByID",id, "duration", 250);
+			} else if (value == "swipeRight") {
+				this.emit("setLinePropertyByID", id, "animation", "slideRight");
+				this.emit("setLinePropertyByID", id, "duration", 250);
 
-			} else if(value == "swipeUp"){
-				this.emit("setLinePropertyByID",id, "animation", "slideUp");
-				this.emit("setLinePropertyByID",id, "duration", 250);
+			} else if (value == "swipeUp") {
+				this.emit("setLinePropertyByID", id, "animation", "slideUp");
+				this.emit("setLinePropertyByID", id, "duration", 250);
 
-			} else if(value == "swipeDown"){
-				this.emit("setLinePropertyByID",id, "animation", "slideDown");
-				this.emit("setLinePropertyByID",id, "duration", 250);
+			} else if (value == "swipeDown") {
+				this.emit("setLinePropertyByID", id, "animation", "slideDown");
+				this.emit("setLinePropertyByID", id, "duration", 250);
 			}
 		},
 
 
-		getRuleLabel (rule){
+		getRuleLabel(rule) {
 
-			var lbl ="???";
+			var lbl = "???";
 			var widget = this.model.widgets[rule.widget];
-			if(widget){
-				lbl = widget.name +" ";
+			if (widget) {
+				lbl = widget.name + " ";
 			} else {
 				if (rule.databinding) {
 					lbl = '${' + rule.databinding + '}'
@@ -770,60 +789,60 @@ export default {
 			}
 
 
-			switch(rule.operator){
+			switch (rule.operator) {
 				case "isValid":
-					lbl+= " is valid";
-				    break;
+					lbl += " is valid";
+					break;
 
 				case "checked":
-					lbl+= " == checked";
+					lbl += " == checked";
 					break;
 
 				case "notchecked":
-					lbl+= " != checked";
-			        break;
-
-			    case "active":
-			    	lbl+= " == active";
+					lbl += " != checked";
 					break;
 
-			    case "notactive":
-			    	lbl+= " != active";
-			        break;
-
-			    case "contains":
-			    	lbl+= " ~ ";
-			        break;
-
-			    case "==":
-			    	lbl+= " == ";
+				case "active":
+					lbl += " == active";
 					break;
 
-			    case "!=":
-			    	lbl+= " != ";
+				case "notactive":
+					lbl += " != active";
 					break;
 
-			    case ">":
-			    	lbl+= " &gt; ";
+				case "contains":
+					lbl += " ~ ";
 					break;
 
-			    case "<":
-			    	lbl+= " &lt; ";
+				case "==":
+					lbl += " == ";
 					break;
 
-			    case ">=":
-			    	lbl+= " &gt;= ";
+				case "!=":
+					lbl += " != ";
 					break;
 
-			    case "<=":
-			    	lbl+= " &lt;= ";
+				case ">":
+					lbl += " &gt; ";
 					break;
 
-			    default:
-			    	console.warn("getRuleLabel() > not supported operator", rule.operator)
+				case "<":
+					lbl += " &lt; ";
+					break;
+
+				case ">=":
+					lbl += " &gt;= ";
+					break;
+
+				case "<=":
+					lbl += " &lt;= ";
+					break;
+
+				default:
+					console.warn("getRuleLabel() > not supported operator", rule.operator)
 			}
 
-			if(rule.value){
+			if (rule.value) {
 				lbl += rule.value;
 			}
 
@@ -831,13 +850,13 @@ export default {
 			return lbl;
 		},
 
-		onEditRule (line, e){
+		onEditRule(line, e) {
 			try {
 				var db = new DomBuilder();
 
 				this.stopEvent(e);
 
-				var popup = db.div(" MatcPadding").build();
+				var popup = db.div(" MatcDialog MatcPadding").build();
 
 				var cntr = db.div("").build(popup);
 
@@ -849,14 +868,14 @@ export default {
 				rule.placeAt(cntr);
 
 				var bar = db.div("MatcButtonBar MatcMarginTop").build(popup);
-				var write = db.div("MatcButton", "Save").build(bar);
+				var write = db.div("MatcButton MatcButtonPrimary", "Save").build(bar);
 				var cancel = db.a("MatcLinkButton", "Cancel").build(bar);
 
-				var d = new Dialog({overflow:true});
+				var d = new Dialog({ overflow: true });
 
-				d.own(on(write, touch.press, lang.hitch(this,"setRule", d, rule, line)));
+				d.own(on(write, touch.press, lang.hitch(this, "setRule", d, rule, line)));
 				d.own(on(cancel, touch.press, lang.hitch(d, "close")));
-				d.own(on(d, "close", function(){
+				d.own(on(d, "close", function () {
 					rule.destroy();
 				}));
 				d.popup(popup, this.domNode);
@@ -867,25 +886,25 @@ export default {
 
 		},
 
-		getScreenIDs (){
+		getScreenIDs() {
 			let toLines = []
-			if(this.widget) {
+			if (this.widget) {
 				toLines = this.getToLines(this.widget);
 			}
 			let screenIDs = [];
-			for(let i=0; i< toLines.length; i++){
+			for (let i = 0; i < toLines.length; i++) {
 				let fromWidgetID = toLines[i].from;
 				let fromWidget = this.model.widgets[fromWidgetID];
-				if(fromWidget) {
+				if (fromWidget) {
 					let screen = this.getParentScreen(fromWidget)
-					if(screen){
+					if (screen) {
 						screenIDs.push(screen.id);
 					} else {
 						console.warn("getScreenIDs() > muito rules not supported.. ");
 					}
 				} else {
 					let screen = this.model.screens[fromWidgetID];
-					if(screen){
+					if (screen) {
 						screenIDs.push(screen.id);
 					}
 				}
@@ -893,10 +912,10 @@ export default {
 			return screenIDs;
 		},
 
-		setRule (d, ruleWidget, line){
-			if(ruleWidget.isValid()){
+		setRule(d, ruleWidget, line) {
+			if (ruleWidget.isValid()) {
 				var rule = ruleWidget.getValue();
-				if(rule){
+				if (rule) {
 					this.setLinePropertyByID(line.id, "rule", rule);
 					d.close();
 				}
@@ -907,9 +926,9 @@ export default {
 				d.shake();
 			}
 		}
-    },
-    mounted () {
-			this.domUtil = new DomUtil()
-    }
+	},
+	mounted() {
+		this.domUtil = new DomUtil()
+	}
 }
 </script>

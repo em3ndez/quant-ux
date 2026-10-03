@@ -4,30 +4,92 @@
 </template>
 <script>
 import RestEngine from 'core/RestEngine'
-// import lang from 'dojo/_base/lang'
 
 export default {
 	name: 'RestMixin',
   methods: {
-    async executeRest (screenID, widgetID, widget, line) {
-      this.logger.log(1,"executeRest","enter >  rest:" + widget.id, line );
 
-      let rest = widget.props.rest
+    async initLoadRest() {
+      this.logger.log(2,"initLoadRest","enter");
+
+      if (this.doNotExecuteScripts) {
+          this.logger.log(2,"initLoadRest","exit > Do not run" );
+          return
+      }
+      const widgets = this.getLoadRests()
+      for (let i=0; i< widgets.length; i++) {
+          const widget = widgets[i]
+          this.executeRest(widget)
+      }
+      this.logger.log(2,"initLoadRest","exit", this.dataBindingValues );
+    },
+
+    getLoadRests () {
+        return Object
+            .values(this.model.widgets)
+            .filter(w => w.type === 'Rest' && w.props.trigger === 'load')
+    },
+
+    async initRepeatRest() {
+      this.logger.log(2,"initRepeatRest","enter");
+
+      if (this.doNotExecuteScripts) {
+          this.logger.log(2,"initRepeatRest","exit > Do not run" );
+          return
+      }
+      this._repeatRestIntervals = []
+      const widgets = this.getRepeatRests()
+      for (let i=0; i< widgets.length; i++) {
+          const widget = widgets[i]
+          const id = setInterval(() => {
+            this.executeRest(widget)
+          }, widget.props.delay * 1000)
+          this._repeatRestIntervals.push(id)
+      }
+      this.logger.log(2,"initRepeatRest","exit", this.dataBindingValues );
+
+    },
+
+
+    getRepeatRests () {
+        return Object
+            .values(this.model.widgets)
+            .filter(w => w.type === 'Rest' && w.props.trigger === 'repeat')
+    },
+
+
+    cleanUpRepeatRests () {
+        this.logger.log(2,"cleanUpRepeatRests","enter" );
+        if (this._repeatRestIntervals) {
+            this._repeatRestIntervals.forEach(id => {
+                clearInterval(id)
+            })
+        }
+      
+    },
+
+
+    async executeRest (widget) {
+      this.logger.log(1,"executeRest","enter >  rest:" + widget.id);
+
+      const rest = widget.props.rest
       
       /**
        * get al the data we need!
        */
-      let requiredDataBindings = RestEngine.getNeededDataBings(rest)
+      const requiredDataBindings = RestEngine.getNeededDataBings(rest)
       let data = {}
       requiredDataBindings.forEach(path => {
-        let value = this.getDataBindingByPath(path)
+        const value = this.getDataBindingByPath(path)
         data[path] = value
       })
 
       try {
-        let result = await RestEngine.run(rest, data)
+        const result = await RestEngine.run(rest, data)
         if (rest.output.databinding) {
           this.setDataBindingByKey(rest.output.databinding, result)
+          // since 4.0.70 we also can the data binding...
+          this.updateAllDataBindings(this.currentScreen.id, rest.output.databinding, result)
           this.logger.log(-1, "executeRest","set data " + rest.output.databinding, this.dataBindingValues);
         }
         return true

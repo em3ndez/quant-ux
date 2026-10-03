@@ -4,20 +4,22 @@ const path = require('path')
 const compression = require('compression')
 const proxyMiddleware = require('http-proxy-middleware')
 
-
 /**
  * Some config stuff
  */
 const host = '0.0.0.0'
 const assetsRoot = path.resolve(__dirname, '../dist')
-const port = process.env.QUX_HTTP_PORT ?  process.env.QUX_HTTP_PORT * 1 : 8082
-const proxyUrl = process.env.QUX_PROXY_URL ?  process.env.QUX_PROXY_URL : 'https://v1.quant-ux.com'
-const wsUrl = process.env.QUX_WS_URL ?  process.env.QUX_WS_URL : 'wss://ws.quant-ux.com'
-const auth = process.env.QUX_AUTH ?  process.env.QUX_AUTH : 'qux'
-const tos = process.env.QUX_TOS_URL ?  process.env.QUX_TOS_URL : ''
-const keycloak_realm = process.env.QUX_KEYCLOAK_REALM ?  process.env.QUX_KEYCLOAK_REALM : ''
-const keycloak_client = process.env.QUX_KEYCLOAK_CLIENT ?  process.env.QUX_KEYCLOAK_CLIENT : ''
-const keycloak_url = process.env.QUX_KEYCLOAK_URL ?  process.env.QUX_KEYCLOAK_URL : ''
+const port = (process.env.QUX_HTTP_PORT * 1) || 8082
+const proxyUrl = process.env.QUX_PROXY_URL || 'https://v1.quant-ux.com'
+const wsUrl = process.env.QUX_WS_URL || 'wss://ws.quant-ux.com'
+const auth = process.env.QUX_AUTH || 'qux'
+const tos = process.env.QUX_TOS_URL || ''
+const keycloak_realm = process.env.QUX_KEYCLOAK_REALM || ''
+const keycloak_client = process.env.QUX_KEYCLOAK_CLIENT || ''
+const keycloak_url = process.env.QUX_KEYCLOAK_URL || ''
+const sharedLibs = process.env.QUX_SHARED_LIBS || ''
+const userAllowSignUp = process.env.QUX_USER_ALLOW_SIGNUP !== 'false'
+const userAllowedDomains = process.env.QUX_USER_ALLOWED_DOMAINS || '*'
 
 /**
  *
@@ -30,6 +32,7 @@ var app = express()
  */
 app.use(compression())
 
+
 /** 
  * make config dynamic on env variables
  */
@@ -38,6 +41,11 @@ app.get("/config.json", (_req, res) => {
     "auth": auth,
     "websocket": wsUrl,
     "tos": tos,
+    "sharedLibs": sharedLibs,
+    "user": {
+      "allowSignUp": userAllowSignUp,
+      "allowedDomains": userAllowedDomains
+    },
     "keycloak": {
       "realm": keycloak_realm,
       "clientId": keycloak_client,
@@ -49,9 +57,14 @@ app.get("/config.json", (_req, res) => {
 /**
  * init proxy.
  */
-app.use('/rest/', proxyMiddleware({
+app.use('/rest/', proxyMiddleware.createProxyMiddleware({
     target: proxyUrl,
     changeOrigin: true
+}))
+
+app.use('/ai/', proxyMiddleware.createProxyMiddleware({
+  target: proxyUrl,
+  changeOrigin: true
 }))
 
 
@@ -82,6 +95,8 @@ module.exports = server.listen(port, function (err) {
   console.log('Backend   : ' + proxyUrl)
   console.log('WebSocket : ' + wsUrl)
   console.log('Auth      : ' + auth)
+  console.log('SignUp    : ' + userAllowSignUp)
+  console.log('Domains   : ' + userAllowedDomains)
 })
 
 

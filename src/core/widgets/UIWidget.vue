@@ -11,6 +11,9 @@ import _Touch from "common/_Touch";
 import Layout from "core/Layout";
 import Gestures from "core/Gestures";
 import Logger from 'common/Logger'
+import on from "dojo/on";
+import touch from "dojo/touch";
+
 
 const styleKeysForResize = [
 			'fontSize',
@@ -45,10 +48,20 @@ export default {
   },
   components: {},
   methods: {
+
+  
+
     /**
      * Is called when in simulator to wire only when needed.
      */
     wireEvents () {},
+
+    wireHover (over = touch.over, out = touch.out) {
+      this.own(on(this.domNode, over, lang.hitch(this, "onDomMouseOver")));
+      this.own(on(this.domNode, out, lang.hitch(this, "onDomMouseOut")));
+    },
+
+   
 
     /**
      * Nmae to be shown in property sections
@@ -70,6 +83,12 @@ export default {
     /**
      * Widget can expose here some properties
      */
+    onSimulatoStarted () {
+    },
+
+    /**
+     * Widget can expose here some properties
+     */
     getValidationProperties () {
     },
 
@@ -81,15 +100,25 @@ export default {
       this.isPublic = p
     },
 
+
     /**
      * Gets called from the RenderFactory. Simple classes do not need to overwrite
      */
-    render: function(model, style, scaleX, scaleY) {
+    render (model, style, scaleX, scaleY) {
       this.model = model;
       this.style = style;
       this._scaleX = scaleX;
       this._scaleY = scaleY;
       this.setStyle(style, model);
+    },
+
+    shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const temp = array[i];
+            array[i] = array[j];
+            array[j] = temp;
+        }
     },
 
     /*
@@ -121,25 +150,25 @@ export default {
       );
     },
 
-    setGestures: function(hasGestures) {
+    setGestures (hasGestures) {
       this._hasGestures = hasGestures;
     },
 
-    _onWidgetGesture: function(gesture, startEvent, endEvent) {
+    _onWidgetGesture (gesture, startEvent, endEvent) {
       this.emit("gesture", gesture, startEvent, endEvent);
     },
 
     /**
      * Notify all other widgets to b
      */
-    emitOpenPopup: function() {
+    emitOpenPopup () {
       topic.publish("MatcSimulatorEvent", "popupOpen", null, this.model.id);
     },
 
     /**
      * Gets called by RenderFactory...
      */
-    beforeDestroy: function() {
+    beforeDestroy () {
       if (this._compositeState) {
         this.emitCompositeState();
       }
@@ -148,24 +177,24 @@ export default {
     /**
      * Get the node for inline editing
      */
-    getLabelNode: function() {
+    getLabelNode () {
       return null;
     },
 
     getValue () {
     },
 
-    setFactory: function(m) {
+    setFactory (m) {
       this.factory = m;
     },
 
-    emitDataBinding: function(value, key) {
+    emitDataBinding (value, key = "default") {
       if (!key) {
         key = "default";
       }
-      var databinding = this.getDataBinding(this.model);
+      const databinding = this.getDataBinding(this.model);
       if (databinding && databinding[key]) {
-        var variable = databinding[key];
+        const variable = databinding[key];
         this.emit("databinding", variable, value);
       }
     },
@@ -178,9 +207,9 @@ export default {
      *
      */
     setDataBinding (variable, value) {
-      var databinding = this.getDataBinding(this.model);
+      const databinding = this.getDataBinding(this.model);
       if (databinding && databinding["default"]) {
-        var widgetVarialbe = databinding["default"];
+        const widgetVarialbe = databinding["default"];
         if (widgetVarialbe === variable) {
           this._setDataBindingValue(value);
 
@@ -188,9 +217,8 @@ export default {
            * Since 4.0.41 we force a validation
            * after the data set set! We do this with some delay,
            * 
-           * FIXME: ecause the 
-           * setDataBindign is called before the animation hooks are regsitered,
-           * we need a timehout
+           * FIXME: because the setDataBindign is called before 
+           * the animation hooks are regsitered we need a timeout
            */
           setTimeout(() => {
             this.validate(value, true, true);
@@ -211,12 +239,11 @@ export default {
     /**
      * Can be overwritten by children to have proper type conversion
      */
-    _setDataBindingValue: function(v) {
-
+    _setDataBindingValue(v) {
       this.setValue(v);
     },
 
-    setAutoFocus: function(node) {
+    setAutoFocus (node) {
       if (node && this.model && this.model.props.focus === true) {
         setTimeout(function() {
           node.focus();
@@ -224,23 +251,23 @@ export default {
       }
     },
 
-    emitClick: function(e) {
+    emitClick (e) {
       this.emit("click", e);
     },
 
-    emitFocus: function(e) {
+    emitFocus (e) {
       this.emit("focus", e);
     },
 
-    emitHoverStart: function(e) {
+    emitHoverStart (e) {
       this.emit("hoverStart", e);
     },
 
-    emitHoverEnd: function(e) {
+    emitHoverEnd (e) {
       this.emit("hoverEnd", e);
     },
 
-    emitMouseMove: function(e, clicked) {
+    emitMouseMove (e, clicked) {
       if (!clicked) {
         clicked = 0;
       } else {
@@ -249,19 +276,19 @@ export default {
       this.emit("mousemove", e, clicked);
     },
 
-    emitMouseOver: function(e) {
+    emitMouseOver (e) {
       this.emit("mouseover", e);
     },
 
-    emitMouseOut: function(e) {
+    emitMouseOut (e) {
       this.emit("mouseout", e);
     },
 
-    emitValidationError: function(value) {
+    emitValidationError (value) {
       this.emit("validationError", { value: value });
     },
 
-    emitValidationOK: function() {
+    emitValidationOK () {
       this.emit("validationOK");
     },
 
@@ -271,8 +298,8 @@ export default {
      *
      * *ATTENTION* Also transition will be executed of exists...
      */
-    emitStateChange: function(type, value, e, time) {
-      var event = {
+    emitStateChange (type, value, e, time) {
+      const event = {
         type: type,
         value: value,
         runTransition: true,
@@ -281,7 +308,25 @@ export default {
       if (time) {
         event.time = time;
       }
-      var options = this.getStateOptions();
+      const options = this.getStateOptions();
+      if (options) {
+        event.options = options;
+      }
+      this.emit("stateChange", event);
+    },
+
+    emitHiddenStateChange (type, value, e, time) {
+      const event = {
+        hidden: true,
+        type: type,
+        value: value,
+        runTransition: false,
+        e: e
+      };
+      if (time) {
+        event.time = time;
+      }
+      const options = this.getStateOptions();
       if (options) {
         event.options = options;
       }
@@ -294,8 +339,8 @@ export default {
      *
      * ATTENTION* Transition will NOT be executed!
      */
-    emitNoTransitionStateChange: function(type, value, e, time) {
-      var event = {
+    emitNoTransitionStateChange (type, value, e, time) {
+      const event = {
         type: type,
         value: value,
         runTransition: false,
@@ -304,7 +349,7 @@ export default {
       if (time) {
         event.time = time;
       }
-      var options = this.getStateOptions();
+      const options = this.getStateOptions();
       if (options) {
         event.options = options;
       }
@@ -314,7 +359,7 @@ export default {
     /**
      * Returns the state of the widget
      */
-    getState: function() {
+    getState () {
       return null;
     },
 
@@ -328,13 +373,13 @@ export default {
      * for composite states that capture more complex interactions that take
      * several steps.
      */
-    setState: function() {},
+    setState () {},
 
     /**
      * Composite states
      */
 
-    initCompositeState: function(value, e) {
+    initCompositeState (value, e) {
       if (this._compositeState) {
         //console.warn("initCompositeState() > state already registered.. we will overwrite")
       }
@@ -353,7 +398,7 @@ export default {
       }
     },
 
-    addCompositeSubState: function(value) {
+    addCompositeSubState (value) {
       if (this._compositeState) {
         this._compositeState.children.push({
           time: new Date().getTime(),
@@ -362,11 +407,11 @@ export default {
       }
     },
 
-    emitCompositeState: function(type, value, e) {
+    emitCompositeState (type, value, e) {
       if (this._compositeState) {
         this._compositeState.type = type;
         this._compositeState.value = value;
-        var options = this.getStateOptions();
+        const options = this.getStateOptions();
         if (options) {
           this._compositeState.options = options;
         }
@@ -378,11 +423,11 @@ export default {
       }
     },
 
-    getStateOptions: function() {
+    getStateOptions () {
       return null;
     },
 
-    emitAnimation: function(id, duration, style, pos) {
+    emitAnimation (id, duration, style, pos) {
       var animation = {
         id: id,
         to: {
@@ -396,7 +441,7 @@ export default {
       this.emit("animation", animation);
     },
 
-    onDomMouseOver: function(e) {
+    onDomMouseOver (e) {
       if (this.model.hover) {
         this.emitAnimation(
           this.model.id,
@@ -407,7 +452,7 @@ export default {
       this.emitMouseOver(e);
     },
 
-    onDomMouseOut: function(e) {
+    onDomMouseOut (e) {
       if (this.model.hover) {
         if (this.value && this.model.active) {
           this.emitAnimation(
@@ -429,10 +474,10 @@ export default {
     /**
      * Just in the setState method...
      */
-    getLastSubState: function(state, t) {
-      var result = null;
+    getLastSubState (state, t) {
+      const result = null;
       if (state.children) {
-        var values = state.children;
+        const values = state.children;
 
         /**
          * Use time series here as i expect linear reads from the player.
@@ -446,26 +491,30 @@ export default {
       return result;
     },
 
-    onScreenRendered: function() {
+    onScreenRendered () {
       if (!this._onScreenRenderedCalled) {
         this.hideErrorLabel();
         this._onScreenRenderedCalled = true;
       }
     },
 
+    isHidden () {
+      return this.model?.style?.display === 'none'
+    },
+
     /**
      * Gets called on transitions and so on. Returns true if
      * the input is valid, otherwise false.
      */
-    isValid: function() {
+    isValid () {
       return true;
     },
 
-    _validateValue: function() {
+    _validateValue () {
       return true;
     },
 
-    validate: function(value, showError, forceValidation) {
+    validate (value, showError, forceValidation) {
       /**
        * backup for legacy
        */
@@ -518,7 +567,7 @@ export default {
       return this.lastValidation;
     },
 
-    getRef: function(id) {
+    getRef (id) {
       if (this.model.props.refs && this.model.props.refs[id]) {
         var refs = this.model.props.refs[id];
         //				if(refs.length == 1){
@@ -529,7 +578,7 @@ export default {
       return null;
     },
 
-    getErrorLabels: function() {
+    getErrorLabels () {
       var errorLabels = this.getRef("errorLabels");
       if (!errorLabels) {
         if (
@@ -543,13 +592,12 @@ export default {
       return errorLabels;
     },
 
-    hideErrorLabel: function() {
-      var errorLabels = this.getErrorLabels();
+    hideErrorLabel () {
+      const errorLabels = this.getErrorLabels();
 
       if (this.model.props.validation && errorLabels) {
-        for (var i = 0; i < errorLabels.length; i++) {
-          var target = errorLabels[i];
-
+        for (let i = 0; i < errorLabels.length; i++) {
+          const target = errorLabels[i];
           this.emitAnimation(target, this.erroAnimationDuration, {
             opacity: 0
           });
@@ -557,11 +605,11 @@ export default {
       }
     },
 
-    showErrorLabel: function() {
-      var errorLabels = this.getErrorLabels();
+    showErrorLabel () {
+      const errorLabels = this.getErrorLabels();
       if (this.model.props.validation && errorLabels) {
-        for (var i = 0; i < errorLabels.length; i++) {
-          var target = errorLabels[i];
+        for (let i = 0; i < errorLabels.length; i++) {
+          const target = errorLabels[i];
           this.emitAnimation(target, this.erroAnimationDuration, {
             opacity: 1
           });
@@ -572,22 +620,22 @@ export default {
     /**
      * DEPRECTAD: Use DataBinding instead!
      */
-    setValueLabel: function(value) {
-      var refs = this.getRef("valueLabel");
+    setValueLabel (value) {
+      const refs = this.getRef("valueLabel");
       if (refs) {
-        var id = refs[0];
+        const id = refs[0];
         if (id) {
           /**
            * FIXME: EVIL HACK:
            * We have to hack to old ref[valueLabel] mechanism. We have since
            * the data binding a widget, which has it's own state and get's therefore updated...
            */
-          var uiWidget = this.factory.getUIWidgetByID(id);
+          const uiWidget = this.factory.getUIWidgetByID(id);
           if (uiWidget) {
             uiWidget.hackValueLabel = true;
           }
 
-          var btn = this.factory.getLabelNodeById(id);
+          const btn = this.factory.getLabelNodeById(id);
           if (btn) {
             btn.innerHTML = value;
           } else {
@@ -600,7 +648,7 @@ export default {
       }
     },
 
-    setAnimatedPos: function(pos, style) {
+    setAnimatedPos (pos, style) {
       // FIXME: For rotate we ignore positioning!! This will
       // cause issues for transform things with onLoad.
       if (style && (style.rotate != null || style.rotate != undefined)) {
@@ -611,10 +659,10 @@ export default {
         /**
          * X and Y as css3 translate
          */
-        var trans = "translate(" + pos.x + "px," + pos.y + "px) ";
+        let trans = "translate(" + pos.x + "px," + pos.y + "px) ";
 
-        var w = pos.w + this.model.w;
-        var h = pos.h + this.model.h;
+        let w = pos.w + this.model.w;
+        let h = pos.h + this.model.h;
         // this.resize({w:w,h:h});
 
         if (pos.w != undefined || pos.h != undefined) {
@@ -625,7 +673,7 @@ export default {
           this.domNode.style.webkitTransformOrigin = "0% 0%";
         }
 
-        var node = this.getAnimationNode();
+        const node = this.getAnimationNode();
         if (node) {
           node.style.transform = trans;
           node.style.webkitTransform = trans;
@@ -641,11 +689,11 @@ export default {
     /**
      * Some widgets might need to animate the parent node, e.g. all text boxes.
      */
-    getAnimationNode: function() {
+    getAnimationNode () {
       return this.domNode;
     },
 
-    setAnimatedStyle: function(style) {
+    setAnimatedStyle (style) {
       if (this.domNode) {
         /**
          * FIXME: This will cause fat animations in the log!! Maybe
@@ -666,7 +714,7 @@ export default {
       }
     },
 
-    getAnimatedStyle: function() {
+    getAnimatedStyle () {
       if (this.animatedStyle) {
         return this.animatedStyle;
       }
@@ -674,11 +722,11 @@ export default {
       return this.style;
     },
 
-    setClickable: function() {
+    setClickable () {
       css.add(this.domNode, "MatcSimulatorClickable");
     },
 
-    stripHTML: function(s) {
+    stripHTML (s) {
       if (!s) {
         s = "";
       }
@@ -687,7 +735,7 @@ export default {
       return s;
     },
 
-    setInnerHTML: function(e, txt) {
+    setInnerHTML (e, txt) {
       if (e) {
         txt = this.stripHTML(txt);
         txt = txt.replace(/\n/g, "<br>");
@@ -715,7 +763,7 @@ export default {
       }
     },
 
-    setScalledNodeStyle: function(node, style, list) {
+    setScalledNodeStyle (node, style, list) {
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
         var w = this._getBorderWidth(style[p]);
@@ -723,14 +771,21 @@ export default {
       }
     },
 
-    setBorderColor: function() {
+    setBorderColorForNode (node, style) {
+      this._setBorderStyle("borderTopColor", node, style, this.model);
+      this._setBorderStyle( "borderBottomColor", node, style, this.model);
+      this._setBorderStyle( "borderRightColor", node, style, this.model);
+      this._setBorderStyle( "borderLeftColor", node, style, this.model);
+    },
+
+    setBorderColor () {
       this._setBorderStyle("borderTopColor", this.domNode, this.style, this.model);
       this._setBorderStyle( "borderBottomColor", this.domNode, this.style, this.model);
       this._setBorderStyle( "borderRightColor", this.domNode, this.style, this.model);
       this._setBorderStyle( "borderLeftColor", this.domNode, this.style, this.model);
     },
 
-    _setBorderRadius: function(node, style) {
+    _setBorderRadius (node, style) {
       for (var i = 0; i < this.borderRadius.length; i++) {
         var key = this.borderRadius[i];
         var w = this._getBorderWidth(style[key]);
@@ -738,12 +793,20 @@ export default {
       }
     },
 
-    _setBorder: function(node, style) {
+   _setBorderRadiusAt (node, style, borderRadius = []) {
+      for (let i = 0; i < borderRadius.length; i++) {
+        const key = borderRadius[i];
+        const w = this._getBorderWidth(style[key]);
+        node.style[key] = w + "px";
+      }
+    },
+
+    _setBorder (node, style) {
       this._setBorderRadius(node, style);
     },
 
     setStyle (style, model, isResize = false ) {
-
+    
       /**
        * Since 3.0.32 we to selective updates on zooms
        */
@@ -764,15 +827,13 @@ export default {
          * shadow styles were injected in ModelUtils. After detaching the token,
          * the none method would not be called.
          */
-        /*
         if (style['textShadow'] === undefined) {
           this._set_textShadow(this.domNode, style)
         }
         if (style['boxShadow'] === undefined) {
           this._set_boxShadow(this.domNode, style)
         }
-        */
-        for (var p in style) {
+        for (let p in style) {
           // we have to call the method, to be sure to also handle nulls,
           // e.g. for background images
           if (this["_set_" + p]) {
@@ -790,7 +851,7 @@ export default {
      * Rotate around middle! This would cause problems if there is any deformation like
      * scale going on!
      */
-    _set_rotate: function(parent, style) {
+    _set_rotate (parent, style) {
       var trans = "rotate(" + Math.round(style.rotate) + "deg)";
       this.domNode.style.transform = trans;
       this.domNode.style.webkitTransform = trans;
@@ -800,12 +861,12 @@ export default {
       this._currentTransform = trans;
     },
 
-    _set_fontSize: function(parent, style) {
-      var size = style.fontSize * this._scaleX;
+    _set_fontSize (parent, style) {
+      let size = style.fontSize * this._scaleX;
       if (this._scaleX < 1) {
         size = size * 0.95;
       }
-      parent.style.fontSize = size + "px";
+      parent.style.fontSize = Math.round(size) + "px";
     },
 
     _set_css: function(parent, style) {
@@ -813,17 +874,17 @@ export default {
     },
 
     _set_boxShadow: function(parent, style) {
-      var shadow = style.boxShadow;
+      const shadow = style.boxShadow;
       if (shadow) {
-        var v = this.getZoomed(shadow.v, this._scaleY);
-        var h = this.getZoomed(shadow.h, this._scaleX);
-        var b = this.getZoomed(shadow.b, Math.max(this._scaleY, this._scaleX));
+        const v = this.getZoomed(shadow.v, this._scaleY);
+        const h = this.getZoomed(shadow.h, this._scaleX);
+        const b = this.getZoomed(shadow.b, Math.max(this._scaleY, this._scaleX));
         var s = this.getZoomed(shadow.s, Math.max(this._scaleY, this._scaleX));
-        var inset = shadow.i ? "inset" : "";
-        var value = h + "px " + v + "px " + b + "px " + s + "px " + shadow.c + " " + inset;
+        const inset = shadow.i ? "inset" : "";
+        const value = h + "px " + v + "px " + b + "px " + s + "px " + shadow.c + " " + inset;
         if (this._shadowNodes) {
-          for (var i = 0; i < this._shadowNodes.length; i++) {
-            var node = this._shadowNodes[i];
+          for (let i = 0; i < this._shadowNodes.length; i++) {
+            const node = this._shadowNodes[i];
             node.style.boxShadow = value;
           }
         } else {
@@ -834,22 +895,25 @@ export default {
       }
     },
 
-    _setShadow: function(parent, shadow) {
-      var v = this.getZoomed(shadow.v, this._scaleY);
-      var h = this.getZoomed(shadow.h, this._scaleX);
-      var b = this.getZoomed(shadow.b, Math.max(this._scaleY, this._scaleX));
-      var s = this.getZoomed(shadow.s, Math.max(this._scaleY, this._scaleX));
-      var inset = shadow.i ? "inset" : "";
-      var value = h + "px " + v + "px " + b + "px " + s + "px " + shadow.c + " " + inset;
-      parent.style.boxShadow = value;
+    _setShadow (parent, shadow) {
+      if (shadow) {
+        const v = this.getZoomed(shadow.v, this._scaleY);
+        const h = this.getZoomed(shadow.h, this._scaleX);
+        const b = this.getZoomed(shadow.b, Math.max(this._scaleY, this._scaleX));
+        const s = this.getZoomed(shadow.s, Math.max(this._scaleY, this._scaleX));
+        const inset = shadow.i ? "inset" : "";
+        const value = h + "px " + v + "px " + b + "px " + s + "px " + shadow.c + " " + inset;
+        parent.style.boxShadow = value;
+      }
+
     },
 
     _set_textShadow: function(parent, style) {
-      var shadow = style.textShadow;
+      const shadow = style.textShadow;
       if (shadow) {
-        var v = this.getZoomed(shadow.v, this._scaleY);
-        var h = this.getZoomed(shadow.h, this._scaleX);
-        var b = this.getZoomed(shadow.b, Math.max(this._scaleY, this._scaleX));
+        const v = this.getZoomed(shadow.v, this._scaleY);
+        const h = this.getZoomed(shadow.h, this._scaleX);
+        const b = this.getZoomed(shadow.b, Math.max(this._scaleY, this._scaleX));
         parent.style.textShadow = h + "px " + v + "px " + b + "px " + shadow.c;
       } else {
         parent.style.textShadow = "none";
@@ -1072,14 +1136,74 @@ export default {
     _set_background: function(parent, style) {
       if (this._backgroundNodes) {
         for (var i = 0; i < this._backgroundNodes.length; i++) {
-          var node = this._backgroundNodes[i];
+          const node = this._backgroundNodes[i];
+     
+          const background = style.background;
           if (node) {
-            node.style.background = style.background;
+            if (background && background.colors) {
+              const value = this._get_gradient_css(background);
+              node.style.background = "linear-gradient" + value;
+              node.style.background = "-webkit-linear-gradient" + value;
+            } else {
+              // Use the longhand here, since the "background" shorthand
+              // resets background-image/background-clip, which would wipe
+              // out a gradient text effect set by _set_gradient_color()
+              // on the same node.
+              node.style.backgroundColor = style.background;
+            }
           } else {
             console.warn("UIWidget._set_background() > No node ", this.model);
           }
         }
       }
+    },
+
+    _set_gradient_color(parent, style) {
+        const c = style.color 
+        if (c.gradient) {
+          const value = this._get_gradient_css(c);
+          const gradient = 'linear-gradient' + value
+          parent.style.backgroundImage = gradient
+          parent.style.color = 'transparent';
+          parent.style.backgroundClip = 'text';
+        } else {
+          parent.style.backgroundImage = ''
+          parent.style.color = style.color;
+          parent.style.backgroundClip = '';
+        }
+    },
+
+    _get_gradient_css(background) {
+      let value = "( " + background.direction + "deg ";
+      const sortedColors = background.colors.slice()
+      sortedColors.sort((a, b) => {
+        return a.p - b.p
+      })
+      for (let i = 0; i < sortedColors.length; i++) {
+        const color = sortedColors[i];
+        value += "," + color.c + " " + color.p + "% ";
+      }
+      value += " )";
+      return value;
+    },
+
+    _set_background_gradient(node, background) {
+        if (background && background.colors) {
+          let value = "(" + background.direction + "deg";
+          const sortedColors = background.colors.slice()
+          sortedColors.sort((a, b) => {
+            return a.p - b.p
+          })
+          for (let i = 0; i < sortedColors.length; i++) {
+            const color = sortedColors[i];
+            value += "," + color.c + " " + color.p + "% ";
+          }
+          value + ");";
+          node.style.backgroundImage = "linear-gradient" + value;
+          node.style.backgroundImage = "-webkit-linear-gradient" + value;
+        } else {
+          node.style.background = background;
+        }
     },
 
 
@@ -1113,7 +1237,7 @@ export default {
       /**
        * With the new update of the RemderFacory, this should be set in the image node...
        */
-      var img = style.backgroundImage;
+      const img = style.backgroundImage;
       if (img) {
         if (this._imageNodes) {
             this._imageNodes.forEach(node => {
@@ -1122,10 +1246,9 @@ export default {
               }
             })
         } else {
-          console.warn('UIWidget._set_backgroundImage() > no image nodes passed...')
+          //console.warn('UIWidget._set_backgroundImage() > no image nodes passed...')
           this._set_backgroundImageInNode(parent, style, model)
         }
-
       }
     },
 
@@ -1147,7 +1270,7 @@ export default {
           if (!this.isPublic) {
             this.logger.sendError(new Error('No hash for image'))
           }
-          var url = "url(/rest/images/" + img.url + ")";
+          const url = "url(/rest/images/" + img.url + ")";
           parent.style.backgroundImage = url;
         }
 
@@ -1158,7 +1281,7 @@ export default {
         }
 
         if (style.backgroundPosition && this.model) {
-          var pos = style.backgroundPosition;
+          const pos = style.backgroundPosition;
           parent.style.backgroundPosition = Math.round(pos.left * this.model.w) + "px " + Math.round(pos.top * this.model.h) + "px";
           parent.style.webkitBackgroundPosition = Math.round(pos.left * this.model.w) + "px " + Math.round(pos.top * this.model.h) + "px";
         } else {
@@ -1174,15 +1297,21 @@ export default {
 
     _set_verticalAlign: function(parent, style) {
       if (this._labelNodes) {
+        // Every rule in widgets.scss is compound ("-top-left", "-middle-
+        // center", ...) - there is no bare ".MatcInlineEditVAlign-middle".
+        // A widget that reaches here with verticalAlign set but no
+        // textAlign (any node HTML2QUX didn't happen to capture a
+        // text-align for - a <span>, a future/unlisted tag, anything) used
+        // to get a class that matches nothing in the stylesheet, so the
+        // centering silently did not render at all. Default to 'left' here
+        // instead of relying on every producer of `style` to always set
+        // both together.
+        var textAlign = style.textAlign || "left";
         for (var i = 0; i < this._labelNodes.length; i++) {
           var label = this._labelNodes[i];
           // reset class.. this is a little hacky! We should not do this too often!
           label.className = "MatcInlineEditable";
-          if (style.textAlign) {
-            css.add(label, "MatcInlineEditVAlign-" + style.verticalAlign + "-" + style.textAlign);
-          } else {
-            css.add(label, "MatcInlineEditVAlign-" + style.verticalAlign);
-          }
+          css.add(label, "MatcInlineEditVAlign-" + style.verticalAlign + "-" + textAlign);
         }
       }
     },

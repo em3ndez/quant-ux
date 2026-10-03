@@ -4,7 +4,6 @@
 </template>
 <script>
 
-// import css from 'dojo/css'
 import lang from 'dojo/_base/lang'
 import on from 'dojo/on'
 import topic from 'dojo/topic'
@@ -13,19 +12,29 @@ export default {
 	name: 'ScrollMixin',
     methods: {
         initScroll (){
-
 			/**
 			 * Hook in window scroll listener if the simulator is launched in the
 			 * mobile.
 			 */
 			if(!this.scrollListenerInited){
-				if(this.scrollListenTarget == "window"){
+				if(this.scrollListenTarget === "window"){
 					this.own(on(window, "scroll", lang.hitch(this, "onScrollWindow")));
-				} else {
+				} else if (this.scrollListenTarget === 'simpleBar'){
+					// we have to wait for the simple scroll to change the DOM
+					setTimeout(() => {
+						const parent = this.getSimpleBarScrollParent()
+						if (parent) {
+							this.logger.log(-1,"initScroll","enter > simpleBar");
+							this.own(on(parent, "scroll", lang.hitch(this, "onScrollParent" )));
+						} else {
+							this.logger.warn("initScroll","enter > could not find simpleBbar");
+						}
+					}, 300)				
+			 	} else {
 					if (this.domNode.parentNode) {
 						this.own(on(this.domNode.parentNode, "scroll", lang.hitch(this, "onScrollParent" )));
 					} else {
-						console.warn('initScroll() > no parent,, wait 200')
+						this.logger.warn("initScroll"," no parent");
 						return
 					}
 				}
@@ -37,11 +46,15 @@ export default {
 			}
 		},
 
+		getSimpleBarScrollParent () {
+			const parent = this.domNode?.parentNode?.parentNode
+			return parent
+		},
+
 		/**********************************************************
 		 * Scrolling
 		 **********************************************************/
 		onVommondScroll (p, scrollTop){
-
 			this.onScroll(scrollTop);
 		},
 
@@ -55,7 +68,7 @@ export default {
 				return false;
 			}
 
-			var scrollTop = (window.pageYOffset !== undefined)
+			const scrollTop = (window.pageYOffset !== undefined)
 				? window.pageYOffset
 				: (document.documentElement || document.body.parentNode || document.body).scrollTop;
 
@@ -63,22 +76,21 @@ export default {
 		},
 
 		onScrollParent (e){
-
-			var node = e.target;
-			var scrollTop = (node.pageYOffset !== undefined) ? node.pageYOffset : node.scrollTop;
+			const node = e.target;
+			const scrollTop = (node.pageYOffset !== undefined) ? node.pageYOffset : node.scrollTop;
 			this.onScroll(scrollTop);
 		},
 
 		onScroll (scrollTop){
 
-			var p = (scrollTop / this.currentScreen.h);
-			var now = new Date().getTime();
+			const p = (scrollTop / this.currentScreen.h);
+			const now = new Date().getTime();
 			if(this.logScroll){
 				/**
 				 * We do not want to record all scroll events. We stick to
 				 * every 30ms...
 				 */
-				var event = {
+				const event = {
 					time : now,
 					value : p
 				};
@@ -200,30 +212,82 @@ export default {
 		},
 
 		setScrollContainer (s){
+			console.error('DEPCRECATED >>> setScrollContainer()')
 			this.scrollContainer = s;
         },
 
-
-		scrollToTop (){
-			if(this.mode != "debug" && this.mode!= "recordFlow"){
-				this.logger.log(-1,"scrollToTop","enter");
-				window.scrollTo(0, 0);
-				/**
-				 * Also set last scroll, so the onScroll() method will
-				 * ignore the event from this forced scrolling
-				 */
-				this.lastScroll = new Date().getTime();
+		setScrollListenTarget (hasSimpleBar) {
+			if (hasSimpleBar) {
+				this.scrollListenTarget = "simpleBar";
 			} else {
-				if(this.scrollListenTarget !== "window"){
-					this.logger.log(-1,"scrollToTop","enter > parent");
-					this.domNode.parentNode.scrollTop = 0
+				this.scrollListenTarget = "parent";
+			}
+			this.logger.log(-1,"setScrollListenTarget","exit > " + this.scrollListenTarget);
+		},
+
+		scrollToY (y) {
+			/**
+			 * In 4.2.30: Cleaned this up to be related to scroll target
+			 */
+			 if (this.scrollListenTarget === "window") {
+				window.scrollTo(0, y);
+			} 
+			if (this.scrollListenTarget === 'parent'){
+				this.domNode.parentNode.scrollTop = y
+			}
+			if (this.scrollListenTarget === 'simpleBar') {
+				const parent = this.getSimpleBarScrollParent()
+				if (parent) {
+					parent.scrollTop = y
+				} else {
+					this.logger.error("scrollToTop","No simple bar");
 				}
 			}
+
+			this.onScroll(y)
+		},
+	
+
+		scrollToTop (){
+			this.logger.log(1,"scrollToTop","enter > " + this.mode, this.scrollListenTarget);
+		
+			/**
+			 * In 4.2.30: Cleaned this up to be related to scroll target
+			 */
+			if (this.scrollListenTarget === "window") {
+				window.scrollTo(0, 0);
+			} 
+			if (this.scrollListenTarget === 'parent'){
+				this.domNode.parentNode.scrollTop = 0
+			}
+			if (this.scrollListenTarget === 'simpleBar') {
+				const parent = this.getSimpleBarScrollParent()
+				if (parent) {
+					parent.scrollTop = 0
+				} else {
+					this.logger.error("scrollToTop","No simple bar");
+				}
+			}
+			// if(this.mode != "debug" && this.mode!= "recordFlow"){
+			// 	this.logger.log(-1,"scrollToTop","enter");
+			// 	window.scrollTo(0, 0);
+			// 	/**
+			// 	 * Also set last scroll, so the onScroll() method will
+			// 	 * ignore the event from this forced scrolling
+			// 	 */
+				
+			// } else {
+			// 	if(this.scrollListenTarget !== "window"){
+			// 		this.logger.log(-1,"scrollToTop","enter > parent");
+			// 		this.domNode.parentNode.scrollTop = 0
+			// 	}
+			// }
 
 			/**
 			 * Notify the ScrollContainer
 			 */
 			topic.publish("VommondScrollContainerScrollToTop");
+			this.lastScroll = new Date().getTime();
 			this.currentScrollTop = 0;
 			this.currentScrollTopRelative = 0;
 		}

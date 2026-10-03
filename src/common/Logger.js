@@ -1,12 +1,10 @@
 
-import request from '../dojo/request'
-import Services from '../services/Services'
-
 var vommonLoggingQueue = []
 var vommonLoggingQueuePos = 0
 var vommonLoggingQueueMax = 50
 var vommonLoggingDebugLevel = 0
-var vommondLoggingErros = 0
+var vommonLoggingErrorListener = null
+
 
 export default class Logger {
 
@@ -21,6 +19,10 @@ export default class Logger {
 		this.className = className;
 	}
 
+	static setErrorCallback(callback) {
+		vommonLoggingErrorListener = callback
+	}
+
 	setUser (){
 	}
 
@@ -32,7 +34,7 @@ export default class Logger {
 			});
 			for(var i=0; i < vommonLoggingQueue.length - 1; i++){
 				if(vommonLoggingQueue[i]){
-					q+=new Date(vommonLoggingQueue[i].t).toISOString() + " - "  + vommonLoggingQueue[i].m +"\n";
+					q+= vommonLoggingQueue[i].m +"\n";
 				}
 			}
 		} catch (e){
@@ -43,47 +45,10 @@ export default class Logger {
 
 
 	sendError (e){
-		var plugins = "";
-		for(var i=0;i<navigator.plugins.length;i++){
-			plugins+=navigator.plugins[i].name + "/n";
-		}
-
-		if(vommondLoggingErros < 10){
-			var q = this.writeQueue();
-			let u = Services.getUserService().getUser();
-			if (u) {
-				u = {
-					id: u.id,
-					email: u.email
-				}
-			}
-
-			var msg = {
-				level : 0,
-				url : location.hostname,
-				message : e.message,
-				stack : e.stack,
-				ua : navigator.userAgent,
-				appCodeName : navigator.appCodeName,
-				appName : navigator.appName,
-				platform : navigator.platform,
-				user : 'User@4.0.40',
-				plugins : plugins,
-				queue : q
-			};
-
-			var params = {
-				handleAs: "json",
-				method : "post",
-				sync: false,
-				data : JSON.stringify(msg)
-			};
-			request(this.url, params).then(function (){
-
-			}, function(err){
-				console.warn("Logger.sendError() > could not send", err)
-			});
-			vommondLoggingErros++
+		if (vommonLoggingErrorListener) {
+			vommonLoggingErrorListener(e, this.writeQueue())
+		} else {
+			console.error('sendError() >> ', e)
 		}
 	}
 
@@ -94,10 +59,12 @@ export default class Logger {
 			console.error(error.message);
 			console.error(error.stack);
 		}
+		this.saveLog('ERROR', meth, message)
 	}
 
 	warn (method, message, obj){
 		this.warning(0, method, message, obj);
+		this.saveLog('WARN', method, message)
 	}
 
 	info (method, message, data1){
@@ -135,29 +102,30 @@ export default class Logger {
 			if(this.prefix){
 				if(m.indexOf(this.prefix) == 0){
 					if (obj){
-						console.debug(m + " >> " + message, obj);
+						console.info(m + " >> " + message, obj);
 					} else {
-						console.debug(m + " >> " + message);
+						console.info(m + " >> " + message);
 					}
 				}
 			}else{
 				if (obj !== undefined){
-					console.debug(m + " >> " + message, obj);
+					console.info(m + " >> " + message, obj);
 				} else {
-					console.debug(m + " >> " + message);
+					console.info(m + " >> " + message);
 				}
 			}
 		}
+		this.saveLog('LOG', method, message)
+	}
 
-		if(this.serverDebugLevel > level){
-			var entry = {
-				t: new Date().getTime(),
-				m : m+ " >> " + message
-			}
-			vommonLoggingQueue[vommonLoggingQueuePos] = entry;
-			vommonLoggingQueuePos = (vommonLoggingQueuePos+1) % vommonLoggingQueueMax;
+	saveLog(level, method, message) {
+		var m = level + ':: ' + this.className + "." + method + " >> " + message;
+		const entry = {
+			t: new Date().getTime(),
+			l: level,
+			m : m+ " >> " + message
 		}
-
-
+		vommonLoggingQueue[vommonLoggingQueuePos] = entry;
+		vommonLoggingQueuePos = (vommonLoggingQueuePos+1) % vommonLoggingQueueMax;
 	}
 }

@@ -21,16 +21,45 @@ export default {
 				this.own(on(this.dndContainer, "mouseup", (e) => this.dispatchMouseUp(e)));
 				this.own(on(this.dndContainer, touch.over, (e) => this.dispatchOver(e)));
 				this.own(on(this.dndContainer, touch.out, (e) => this.dispatchOut(e)));
-				this.own(on(this.dndContainer, 'dblclick', (e) => this.disPatchDoubleClick(e)));
+				this.own(on(this.dndContainer, 'dblclick', (e) => this.dispatchDoubleClick(e)));
+				this.own(on(this.container, "mousedown", (e) => this.dispatchBackroundClick(e)));
+				this.own(on(this.dndContainer, "contextmenu", (e) => this.dispatchContextMenu(e)));
 			},
-
-			disPatchDoubleClick () {
-				this.logger.log(-1, "disPatchDoubleClick", "enter");
+			
+			dispatchContextMenu (e) {
+				this.logger.log(-1, "dispatchContextMenu", "enter", this.mode);
+				this.stopEvent(e)
+				const target = e.target
+				this.onContextMenu(e, target._widgetID, target._screenID)
+				return false
+			},
+			dispatchDoubleClick (e) {
+				this.logger.log(-1, "dispatchDoubleClick", "enter", this.mode);			
+				const target = e.target				
+				if (this.mode === "svg") {
+					return
+				}
+				if (target._widgetID) {
+					this.onWidgetDoubleClick(target._widgetID)
+					return
+				}
 				this.forceCompleteRender()
 				this.rerender()
 			},
 
+			dispatchBackroundClick (e) {
+				this.logger.log(-1, "dispatchBackroundClick", "enter", this._inlineEditStarted);
+				if (this._inlineEditStarted) {
+					let target = e.target
+					if (this._inlineEditDiv === target) {
+						return
+					}
+					this.dispatchMouseDownCanvas(e, target)
+				}
+			},
+
 			dispatchOver (e) {
+	
 				let target = e.target
 				if (target._widgetID) {
 					let widget = this.model.widgets[target._widgetID];
@@ -86,15 +115,33 @@ export default {
 					let target = e.target
 					if (target._widgetID) {
 						this.onLineEndSelected(target._widgetID, e)
+						return
 					}
 					if (target._screenID) {
 						this.onLineEndSelected(target._screenID, e)
+						return
 					}
+					this.onLineSuggestEnd(e)
+					
 				}
 			},
 
 			dispatchMouseDown (e) {
-				let target = e.target
+			
+				const target = e.target
+				const isCntrl = e.ctrlKey || e.metaKey;
+
+				// right mouse click
+				if (e.button === 2){
+					return false
+				}
+
+				/**
+				 * Since 5.0.0 we will show the context menu
+				 */
+				if (isCntrl) {
+					return false
+				}
 
 				/**
 				 * First dispatch tools
@@ -130,7 +177,7 @@ export default {
 				}
 
 				/**
-				 * Otherwise check selection on screen, widget or canbas
+				 * Otherwise check selection on screen, widget or canvas
 				 */
 				if (target._widgetID) {
 					this.dispatchMouseDownWidget(e, target._widgetID, target)
@@ -157,47 +204,58 @@ export default {
 					return
 				}
 
+				if (target._commentID) {
+					this.dispatchMouseDownComment(e, target._commentID, target)
+					return
+				}
+
 				this.dispatchMouseDownCanvas(e, target)
 
 			},
 
+			dispatchMouseDownComment (e, id, div) {
+				this.logger.log(1,"dispatchMouseDownComment", "enter", id);
+				// the event might come from a comment child
+				if (this.commentDivs[id]) {
+					div = this.commentDivs[id];
+				}				
+				this.onDragStart(div, id, "onCommentDndStart", "onCommntDndMove", "onCommentDndEnd", "onCommentDndClick", e);
+			},
+
 			dispatchMouseDownWidget (e, id) {
-				this.logger.log(-1,"dispatchMouseDownWidget", "enter", id);
+				this.logger.log(1,"dispatchMouseDownWidget", "enter", id);
 
-				let widget = this.model.widgets[id];
-
+				const widget = this.model.widgets[id];
 				if (!widget) {
 					return
 				}
-
 				if(this.mode == "addLine") {
 					this.onLineEndSelected(id, e)
 					return
 				}
-
 				if (this.isElementLocked(widget) || this.isElementHidden(widget)) {
 					return
 				}
-
-				let div = this.widgetDivs[widget.id];
+				const div = this.widgetDivs[widget.id];
 				if (widget.inherited){
 					this.onInheritedWidgetSelected(widget.id);
 					return
 				}
 
 				if (this.mode == "edit" || this.mode == "addLine"){
+					/**
+					 * we check if the widget can move. This is not the case,
+					 * if it is locked, or if it not selected in case we have the Slected2Move mode on
+					 */
+					if(this.widgetCanMove(widget)){
+						
+						this.onDragStart(div, widget.id, "onWidgetDndStart", "onWidgetDndMove", "onWidgetDndEnd", "onWidgetDndClick", e);
+					} else {
 						/**
-						 * we check if the widget can move. This is not the case,
-						 * if it is locked, or if it not selected in case we have the Slected2Move mode on
+						 * shouldbe mouse up...
 						 */
-						if(this.widgetCanMove(widget)){
-							this.onDragStart(div, widget.id, "onWidgetDndStart", "onWidgetDndMove", "onWidgetDndEnd", "onWidgetDndClick", e);
-						} else {
-							/**
-							 * shouldbe mouse up...
-							 */
-							this.onWidgetDndClick(id, div, null, e)
-						}
+						this.onWidgetDndClick(id, div, null, e)
+					}
 					return
 				}
 
@@ -209,7 +267,10 @@ export default {
 			},
 
 			widgetCanMove(widget) {
-				if (widget.style.locked) {
+				if (widget?.style?.locked) {
+					return false
+				}
+				if (widget.inherited) {
 					return false
 				}
 				if (this.isMoveOnlySelected) {
@@ -222,8 +283,8 @@ export default {
 				return true
 			},
 
-			dispatchMouseDownScreen (e, id) {
-				this.logger.log(-1,"dispatchMouseDownScreen", "enter", id);
+			dispatchMouseDownScreen (e, id, target) {
+				this.logger.log(1,"dispatchMouseDownScreen", "enter", id);
 
 				let dndDiv = this.screenDivs[id];
 				let screen = this.model.screens[id];
@@ -235,6 +296,15 @@ export default {
 				if (this.mode == "addLine") {
 					this.onLineEndSelected(id, e)
 					return
+				}
+
+				// since 4.1.02 we allow to 
+				// screen selection only on labels
+				if (!this.hasSelectOnScreen) {
+					if (target._screenDND) {
+						this.onSelectionStarted(e);
+						return
+					}
 				}
 
 				if (this.isElementLocked(screen)) {
@@ -260,7 +330,7 @@ export default {
 			},
 
 			screenCanMove(screen) {
-				if (screen.style.locked) {
+				if (screen?.style?.locked) {
 					return false
 				}
 				if (this.isMoveOnlySelected) {
@@ -275,7 +345,7 @@ export default {
 
 			dispatchMouseDownLine (e, lineID, pointIndex, div) {
 				this.logger.log(-1,"dispatchMouseDownLine", "enter", lineID, pointIndex);
-	     	let line = this.model.lines[lineID];
+	     		let line = this.model.lines[lineID];
 				if (line) {
 					/**
 					 * We distaptch in the touch div, but we want to move the parent
@@ -297,6 +367,8 @@ export default {
 					this.onSelectionStarted(e);
 					return
 				}
+
+				this.onCanvasBackgroundClickCallback(e)
 			},
 
 

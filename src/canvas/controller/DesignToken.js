@@ -1,5 +1,6 @@
 
 import Widget from './Widget'
+import DesignTokenUtil from '../../core/DesignTokenUtil'
 
 export default class DesignToken extends Widget{
 
@@ -7,31 +8,78 @@ export default class DesignToken extends Widget{
 		super()
 	}
 
+	/**
+	 * If the user sets a color or background directly, the linked design token is overwritten and removed
+	 */
+	removeOverwrittenDesignTokens (widget, props, type) {
+		const tokens = widget?.designtokens?.[type]
+		if (!tokens || !props) {
+			return
+		}
+		const overwritableKeys = DesignTokenUtil.getDesignTokenKeys()
+		for (let key in props) {
+			if (overwritableKeys.has(key) && tokens[key] !== undefined) {
+				delete tokens[key]
+			}
+		}
+		// clean up empty containers
+		if (Object.keys(tokens).length === 0) {
+			delete widget.designtokens[type]
+		}
+		if (Object.keys(widget.designtokens).length === 0) {
+			delete widget.designtokens
+		}
+	}
+
+	newDesignToken(token) {
+		this.logger.log(-1,"newDesignToken", "enter > ", token);
+		this.startModelChange()
+
+		token.id = 'dt' + this.getUUID()
+		token.modified = new Date().getTime()	
+
+		if (!this.model.designtokens) {
+			this.model.designtokens = {}
+		}
+		this.model.designtokens[token.id] = token
+
+
+		this.onModelChanged([{type:"designtoken", action:'add', id: null}]);
+		
+		this.commitModelChange()
+
+		return token.id
+	}
+
 	addDesignToken (id, tokenType, cssProps, cssState, name, modelType) {
 		this.logger.log(-1,"addDesignToken", "enter > " + id, tokenType, cssProps);
 
-		let token = this.modelAddDesignToken(id, tokenType, cssProps,cssState, name, modelType)
+		this.startModelChange()
+
+		const token = this.modelAddDesignToken(id, tokenType, cssProps,cssState, name, modelType)
 		if (!token) {
+			console.error('No token')
 			return
 		}
 
-		/**
-		 * make command
-		 */
-		var command = {
-			timestamp : new Date().getTime(),
-			type : "AddDesignToken",
-			modelId: id,
-			tokenName: name,
-			tokenId: token.id,
-			modelType: modelType,
-			cssProps: cssProps,
-			cssState: cssState,
-			tokenType: tokenType
-		};
+		// /**
+		//  * make command
+		//  */
+		// const command = {
+		// 	timestamp : new Date().getTime(),
+		// 	type : "AddDesignToken",
+		// 	modelId: id,
+		// 	tokenName: name,
+		// 	tokenId: token.id,
+		// 	modelType: modelType,
+		// 	cssProps: cssProps,
+		// 	cssState: cssState,
+		// 	tokenType: tokenType
+		// };
 
-		this.addCommand(command);
+		// this.addCommand(command);
 		this.render();
+		this.commitModelChange()
 
 		this.logger.log(-1,"addDesignToken", "exit");
 	}
@@ -108,7 +156,7 @@ export default class DesignToken extends Widget{
 
 	unlinkDesignToken (id, tokenId, cssState, modelType) {
 		this.logger.log(-1,"unlinkDesignToken", "enter > " + id, tokenId);
-
+		this.startModelChange()
 		let cssProps = this.modelUnLinkDesignToken(id, tokenId, cssState, modelType)
 		/**
 		 * make command
@@ -125,6 +173,7 @@ export default class DesignToken extends Widget{
 
 		this.addCommand(command);
 		this.render();
+		this.commitModelChange()
 		this.logger.log(-1,"unlinkDesignToken", "exit");
 	}
 
@@ -195,13 +244,13 @@ export default class DesignToken extends Widget{
 	linkDesignToken (id, tokenId, cssState, cssProps, modelType) {
 		this.logger.log(-1,"linkDesignToken", "enter > " + id, tokenId);
 
-
+		this.startModelChange()
 		this.modelLinkDesignToken(id, tokenId, cssState, cssProps, modelType)
 
 		/**
 		 * make command
 		 */
-		 var command = {
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "LinkDesignToken",
 			modelId: id,
@@ -213,10 +262,34 @@ export default class DesignToken extends Widget{
 
 		this.addCommand(command);
 		this.render();
-
+		this.commitModelChange()
 		this.logger.log(-1,"unlinkDesignToken", "exit");
 	}
 
+
+	/**
+	 * Links the design token to all given ids in one model change
+	 */
+	linkDesignTokenMulti (ids, tokenId, cssState, cssProps, modelType) {
+		this.logger.log(-1,"linkDesignTokenMulti", "enter > ", ids, tokenId);
+
+		this.startModelChange()
+		ids.forEach(id => {
+			this.modelLinkDesignToken(id, tokenId, cssState, cssProps, modelType)
+			this.addCommand({
+				timestamp : new Date().getTime(),
+				type : "LinkDesignToken",
+				modelId: id,
+				tokenId: tokenId,
+				modelType: modelType,
+				cssState: cssState,
+				cssProps: cssProps
+			});
+		})
+		this.render();
+		this.commitModelChange()
+		this.logger.log(-1,"linkDesignTokenMulti", "exit");
+	}
 
 	modelLinkDesignToken (id, tokenId, cssState, cssProps, modelType) {
 
@@ -280,12 +353,9 @@ export default class DesignToken extends Widget{
 			return
 		}
 
-		let token = this.model.designtokens[id]
-
-		/**
-		 * make command
-		 */
-		 var command = {
+		this.startModelChange()
+		const token = this.model.designtokens[id]
+		const command = {
 			timestamp : new Date().getTime(),
 			type : "UpdateDesignToken",
 			modelId: id,
@@ -302,6 +372,7 @@ export default class DesignToken extends Widget{
 		this.modelUpdateDesignToken(id, name, value)
 		this.addCommand(command);
 		this.render();
+		this.commitModelChange()
 
 		this.logger.log(-1,"updateDesignToken", "exit");
 	}
@@ -331,6 +402,82 @@ export default class DesignToken extends Widget{
 	redoUpdateDesignToken (command) {
 		this.logger.log(-1,"undoUpdateDesignToken", "enter > ", command);
 		this.modelUpdateDesignToken(command.modelId, command.n.name, command.n.value)
+		this.render()
+	}
+
+	/**********************************************************************
+	 * delete design token
+	 **********************************************************************/
+	deleteDesignToken (id) {
+		this.logger.log(-1,"deleteDesignToken", "enter > " + id);
+
+		if (!this.model.designtokens || !this.model.designtokens[id]) {
+			this.logger.warn("deleteDesignToken", "NO Design tokens in model", id);
+			return
+		}
+
+		this.startModelChange()
+		const token = this.model.designtokens[id]
+		const command = {
+			timestamp : new Date().getTime(),
+			type : "DeleteDesignToken",
+			modelId: id,
+			token: token
+		};
+
+		this.modelDeleteDesignToken(id)
+		this.addCommand(command);
+		this.render();
+		this.commitModelChange()
+		this.logger.log(-1,"deleteDesignToken", "exit");		
+	}
+
+
+	modelDeleteDesignToken (id) {
+		if (!this.model.designtokens || !this.model.designtokens[id]) {
+			this.logger.warn("deleteDesignToken", "NO Design tokens in model", id);
+			return
+		}
+		delete this.model.designtokens[id]
+		// FIXME: Make this undoable...
+		const types = ['style', 'hover', 'error', 'active']
+		for (let widetID in this.model.widgets) {
+			const widget = this.model.widgets[widetID]
+			if (widget.designtokens) {
+				const designtokens = widget.designtokens
+				for (let type of types) {
+					const style =designtokens[type]
+					if (style) {
+						for (let key in style) {
+							if (style[key] === id) {
+								this.logger.warn("modelDeleteDesignToken", `delete ${id} in ${type}@${widetID}`);
+								delete style[key]
+							}
+						}
+					}
+				}
+			}
+		}
+		this.onModelChanged([{type: 'designtoken', action:'delete', id: id}]);
+	}
+
+	modelUnDeleteDesignToken (id, token) {
+		if (!this.model.designtokens){
+			this.model.designtokens = {}
+		}
+		this.model.designtokens[id] = token
+		this.onModelChanged([{type: 'designtoken', action:'undelete', id: id}]);
+	}
+
+	undoDeleteDesignToken (command) {
+		this.logger.log(-1,"undoDeleteDesignToken", "enter > ", command);
+		this.modelUnDeleteDesignToken(command.modelId, command.token)
+		this.render()
+	}
+
+	redoDeleteDesignToken (command) {
+		this.logger.log(-1,"redoDeleteDesignToken", "enter > ", command);
+		this.modelDeleteDesignToken(command.modelId)
 		this.render()
 	}
 }

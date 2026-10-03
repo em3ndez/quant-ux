@@ -9,7 +9,7 @@ export default class FigmaService {
     this.buttonTypes = ['RECTANGLE', 'TEXT', 'FRAME']
     this.ignoredTypes = ['GROUP', 'INSTANCE']
     this.allAsVecor = false
-    this.max_ids = 50
+    this.max_ids = 10
     this.pluginId = '858477504263032980',
     this.downloadVectors = true
   }
@@ -52,12 +52,13 @@ export default class FigmaService {
     return pages
   }
 
-  getImages (key, ids) {
+  getImages (key, ids, scale=2) {
+    Logger.log(1, 'getImages() > enter', scale)
     return new Promise ((resolve, reject) => {
       /**
        * Get in double resolution
        */
-      let url = this.baseURL + 'images/' + key + '?format=png&scale=2&ids=' + ids
+      let url = this.baseURL + 'images/' + key + '?format=png&scale=' + scale + '&ids=' + ids
       fetch(url, {
         method: 'get',
         credentials: "same-origin",
@@ -139,13 +140,37 @@ export default class FigmaService {
     return model
   }
 
+  async getPreviews (id, fModel, importChildren, screenSize, selectedPages = []) {
+    Logger.log(1, 'getPreviews() > enter importChildren:' + importChildren)
+    let model = this.createApp(id, fModel, screenSize)
+    let fDoc = fModel.document
+
+    if (fDoc.children) {
+      fDoc.children.forEach(page => {
+        if (page.children && selectedPages.indexOf(page.id) >= 0 || selectedPages.length === 0) {
+          Logger.log(1, 'parse() > enter page:' + page.id, page.id)
+          page.children.forEach(screen => {
+            if (screen.visible !== false) {
+              this.parseScreen(screen, model, fModel, screenSize)
+            } else {
+              Logger.log(-1, 'parse() >ignore screen:' + screen.id, screen.name)
+            }     
+          })
+        }
+      })
+    }
+
+    await this.addBackgroundImages(id, model, importChildren)
+    return model.screens
+  }
+
   setLineTos (model) {
-    let widgetMapping = {}
+    const widgetMapping = {}
     Object.values(model.widgets).forEach(w => {
       widgetMapping[w.figmaId] = w.id
     })
 
-    let screenMapping = {}
+    const screenMapping = {}
     Object.values(model.screens).forEach(s => {
       screenMapping[s.figmaId] = s.id
     })
@@ -154,6 +179,10 @@ export default class FigmaService {
       if (widgetMapping[line.figmaFrom] && screenMapping[line.figmaTo]) {
         line.from = widgetMapping[line.figmaFrom]
         line.to = screenMapping[line.figmaTo]
+      } else if (widgetMapping[line.figmaFrom] && widgetMapping[line.figmaTo]) {
+        line.from = widgetMapping[line.figmaFrom]
+        line.to = widgetMapping[line.figmaTo]
+        line.scroll = true
       } else {
         Logger.error(-1, 'setLineTos() > Can NOT find', line.figmaFrom +' -> '+ line.figmaTo + ' = ', widgetMapping[line.figmaFrom] + ' ' + screenMapping[line.figmaTo])
       }
@@ -163,17 +192,27 @@ export default class FigmaService {
 
   async addBackgroundImages(id, model, importChildren) {
     if (this.downloadVectors) {
-      let vectorWidgets = this.getElementsWithBackgroundIMage(model, importChildren)
+      const vectorWidgets = this.getElementsWithBackgroundIMage(model, importChildren)
+      const maxWidth = Math.max(... vectorWidgets.map(v => v.w))
+      const maxHeight = Math.max(... vectorWidgets.map(v => v.h))
+      const scale = this.getScale(maxWidth, maxHeight)
       if (vectorWidgets.length > 0) {  
-        Logger.log(-1, 'addBackgroundImages() > vectors', vectorWidgets.length)
-        let batches = this.getChunks(vectorWidgets, this.max_ids)  
-        let promisses = batches.map((batch,i) => {
-          return this.addBackgroundImagesBatch(id, batch, i)
+        Logger.log(-1, `addBackgroundImages() > vectors ${vectorWidgets.length} , w: ${maxWidth}, h: ${maxHeight}, scale: ${scale}`)
+        const batches = this.getChunks(vectorWidgets, this.max_ids)  
+        const promisses = batches.map((batch,i) => {
+          return this.addBackgroundImagesBatch(id, batch, i, scale)
         })
         await Promise.all(promisses)
       }
       Logger.log(1, 'addBackgroundImages() > exit')
     }
+  }
+
+  getScale(width, height) {
+    if (width > 2000 || height > 3000) {
+      return 1
+    }
+    return 2
   }
 
   getElementsWithBackgroundIMage (model, importChildren) {
@@ -184,11 +223,11 @@ export default class FigmaService {
     }
   }
 
-  async addBackgroundImagesBatch(id, batch, i) {
-    Logger.log(3, 'addBackgroundImagesBatch() > start', i)
+  async addBackgroundImagesBatch(id, batch, i, scale = 2) {
+    Logger.log(-1, 'addBackgroundImagesBatch() > batch : ' + i + ' @ '+ scale)
     return new Promise((resolve, reject) => {
       let vectorWidgetIds = batch.map(w => w.figmaId).join(',')
-      this.getImages(id, vectorWidgetIds).then(imageResponse => {
+      this.getImages(id, vectorWidgetIds, scale).then(imageResponse => {
         if (imageResponse.err === null) {
           Logger.log(3, 'addBackgroundImagesBatch () > end', i)
           let images = imageResponse.images
@@ -222,6 +261,10 @@ export default class FigmaService {
   parseScreen (fScreen, model, fModel, screenSize) {
     Logger.log(1, 'parseScreen()', fScreen.name)
     let pos = this.getPosition(fScreen)
+    if (pos.w == 0 || pos.h == 0) {
+      Logger.error('parseScreen() > Wrong dimension:', fScreen.name)
+      return
+    }
     let qScreen = {
       id: 's' + this.getUUID(model),
       figmaId: fScreen.id,
@@ -536,7 +579,7 @@ export default class FigmaService {
           style.borderRightWidth = element.strokeWeight
         }
 
-        if (element.strokeAlign !== 'INSIDE' && element.strokeWeight) {
+        if (widget && element.strokeAlign !== 'INSIDE' && element.strokeWeight) {
           widget.x -= element.strokeWeight
           widget.w += element.strokeWeight * 2
           widget.y -= element.strokeWeight
@@ -723,6 +766,30 @@ export default class FigmaService {
               Logger.log(0, 'addHotspots', 'cannot add hotspot for line', line)
           }
       })
+
+      Object.values(model.lines).forEach(line => {
+        let from = model.widgets[line.from]
+        let to = model.widgets[line.to]
+        if (from && to) {
+            let fromParent = widgetScreenMapping[from.id]
+            let toParent = widgetScreenMapping[to.id]
+            if (toParent && fromParent && fromParent.id === toParent.id) {
+                from.type = 'HotSpot'
+                from.style = {}
+                result[from.id] = from
+                toParent.children.push(from.id)
+
+                to.type = 'HotSpot'
+                to.style = {}
+                result[to.id] = to
+                toParent.children.push(to.id)
+
+                console.debug('ADD Scroll HOTSPOT', from.name, from.figmaId)
+            }
+        } else {
+            Logger.log(0, 'addHotspots', 'cannot add hotspot for line', line)
+        }
+    })
       Logger.log(2, 'addHotspots', 'exit', result)
       return result
   }

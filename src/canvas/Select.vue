@@ -3,7 +3,9 @@ import lang from 'dojo/_base/lang'
 import css from 'dojo/css'
 
 import topic from 'dojo/topic'
-
+import CanvasSelection from './CanvasSelection'
+import * as SelectionUtil from 'core/SelectionUtil'
+import * as LayoutContainerUtil from 'core/LayoutContainerUtil'
 
  export default {
     name: 'Select',
@@ -18,139 +20,328 @@ import topic from 'dojo/topic'
     components: {},
     methods: {
 
-			isScreenSelected (id) {
-				if (this._selectedScreen) {
-					return this._selectedScreen.id === id
-				}
-				if (this._selectMulti) {
-					return this._selectMulti.indexOf(id) > -1
-				}
-				return false
-			},
+		initSelection () {
+			this._canvasSelection = new CanvasSelection()
+		},
 
-			isWidgetSelected (id) {
-				if (this._selectWidget) {
-					return this._selectWidget.id === id
-				}
-				if (this._selectMulti) {
-					return this._selectMulti.indexOf(id) > -1
-				}
-				if (this._selectGroup && this._selectGroup.children) {
-					return this._selectGroup.children.indexOf(id) > -1
-				}
-				return false
-			},
+		/**********************************************************************
+		 * Screen Select
+		 **********************************************************************/
 
-      
-	 
-	 		onWidgetSelected (id, forceSelection = false, ignoreParentGroups = null){
-				this.logger.log(1,"onWidgetSelected", "enter > "+ id + " > ignoreParentGroups : "+ ignoreParentGroups);
+		setSelectedScreens (screenIDs, expand = false, render = true) {
+			this.logger.log(-1, 'setSelectedScreens', screenIDs, expand, render)
+			this.unSelect()					
+			this._canvasSelection.setSelectedScreens(this.model, screenIDs, expand)
+			if (render) {
+				this.renderScreenSelection()
+			}
+		},
 
-				/**
-				 * Check here if the widget was select a second time. In this case
-				 * trigger the inline edit unless the forceSelection flag is set. This happens
-				 * normally only after a complete rendering. Check this.renderSelection() for
-				 * more details.
+		hasScreenSelection() {
+			return this._canvasSelection.screens.length > 0
+		},
+
+		renderScreenSelection () {
+			this.logger.log(-1, "renderScreenSelection", "enter > ");
+			if (this._canvasSelection.screens.length === 1) {
+				this.renderSingleScreenSelection()
+			} 
+			if (this._canvasSelection.screens.length > 1) {
+				this.renderMultiScreenSelection()
+			}
+		},
+
+		renderMultiScreenSelection () {
+			this.logger.log(1, "renderMultiScreenSelection", "enter > ");
+
+			const divs = []
+			const ids = []
+			for (let i = 0; i < this._canvasSelection.screens.length; i++) {
+				const scrn = this._canvasSelection.screens[i]
+				const id = scrn.id
+				ids.push(id)
+				if (this.model.screens[id]) {			
+					const parent = this.screenDivs[id];
+					divs.push(parent)		
+				}
+			}
+			this.onSelectionChanged(null, "screens", false);
+			this.selectMultiBoxes(divs)
+
+			try {
+				/** 
+				 * this is the layerlist...
 				 */
-				if(this._selectWidget && this._selectWidget.id == id && !forceSelection){
-					topic.publish("matc/canvas/click", "", "");
-					this.inlineEditInit(this._selectWidget);
-				} else {
-					this.onSelectionChanged(id, "widget");
-					if (this.model.widgets[id]){
-						this._selectWidget = this.model.widgets[id];
-
-						if (ignoreParentGroups === true) {
-							this._dragNDropIgnoreGroup = true
-						}
-
-						var parent = this.widgetDivs[id];
-						if (parent){
-							if (this.showCustomHandlers) {
-								this.showCustomHandlers(this._selectWidget, parent)
-							}
-							this.showResizeHandles(this._selectWidget,id, parent, "widget", true);
-							this.selectBox(parent);
-							this.selectDnDBox(id);
-						}
-						this.controller.onWidgetSelected(id);
-					} else {
-						console.warn("onWidgetSelected() > No widget with id", id);
-					}
+				if (this.selectionListener) {
+					this.selectionListener.selectScreens(ids);
 				}
-				css.add(this.domNode, "MatcCanvasSelection");
-				try {
-					if (this.selectionListener) {
-						this.selectionListener.selectWidget(id);
-					}
-				} catch (e){
-					console.debug(e)
-					this.logger.error("onWidgetSelected", "could not call selectionListener > ", e);
-				}
-			},
-
-			onInheritedWidgetSelected (id) {
-				this.logger.log(-3,"onInheritedWidgetSelected", "enter > "+id);
+			} catch (e){
+				this.logger.error("_selectSingleScreen", "could not call selectionListener > ", e);
+			}
 			
-				let widget = this.model.widgets[id];
-				if (widget){
+			css.add(this.domNode, "MatcCanvasSelection");
+		},
 
-					this.onSelectionChanged(id, "inheritedWidget");
-					this.controller.onInheritedWidgetSelected(widget);
-					var parent  = this.widgetDivs[widget.id];
-					this._selectInheritedWidget = widget
-					this.selectBox(parent);
-					this.showResizeHandles(widget, widget.id, parent, "inheritedWidget", true);
-				} else {
-					this.logger.log(-3,"onInheritedWidgetSelected", "cannot find > " + id);
-				}
-				
-			},
+		renderSingleScreenSelection () {
+			this.logger.log(1, "renderSingleScreenSelection", "enter > ");
 
+			const scrn = this._canvasSelection.screens[0]
+			const id = scrn.id
+			this.onSelectionChanged(id, "screen", false);
 
-		onScreenSelected (id){
-			this.logger.log(3,"onScreenSelected", "enter > "+ id);
-
-			this.onSelectionChanged(id, "screen");
-
-			/**
-			 * The screen could have just been deleted!
-			 */
-			if(this.model.screens[id]){
-				this._selectedScreen = this.model.screens[id];
-
-				var parent = this.screenDivs[id];
-				this.showResizeHandles(this._selectedScreen, id, parent, "screen", true);
+			if (this.model.screens[id]) {			
+				const parent = this.screenDivs[id];
+				this.showResizeHandles(scrn, id, parent, "screen", true);
 				this.selectBox(parent);
 
 				this.controller.onScreenSelected(id);
+				// select in layerList???s
 				css.add(this.domNode, "MatcCanvasSelection");
 			}
 
 			try {
+				/** 
+				 * this is the layerlist...
+				 */
 				if (this.selectionListener) {
-					this.selectionListener.unSelect();
+					this.selectionListener.selectScreens([id]);
 				}
 			} catch (e){
-				this.logger.error("onGroupSelected", "could not call selectionListener > ", e);
+				this.logger.error("_selectSingleScreen", "could not call selectionListener > ", e);
 			}
-
+		
 		},
 
+		getSelectedScreen () {
+			if (this._canvasSelection.screens.length === 1) {
+				/**
+				 * FIXME: After a zoom this might be the wrong object...
+				 */
+				return this._canvasSelection.screens[0]
+			}
+			return null
+		},
+
+		isScreenSelected (id) {
+			if (this.getSelectedScreen()) {
+				return this.getSelectedScreen().id === id
+			}
+			if (this._selectMulti) {
+				return this._selectMulti.indexOf(id) > -1
+			}
+			return false
+		},
+
+		/**********************************************************************
+		 * Widget Select
+		 **********************************************************************/
+
+		setSelectionById (id) {
+			const selectedWidget = this.getSelectedWidget()
+			const selectedGroup = this.getSelectedGroup()
+			const [selectedWidgetID, selectedGroupId] = SelectionUtil.updateSelection(
+				this.model, id, 
+				selectedWidget?.id, 
+				selectedGroup?.id
+			)
+			// if (selectedWidgetID) {
+			// 	const layoutContainerChildren = SelectionUtil.getLayoutContainer(this.model, selectedWidgetID)
+			// 	if (layoutContainerChildren) {
+			// 		this.onMutliSelected(layoutContainerChildren)
+			// 		return
+			// 	}
+			// }
+			if (selectedWidgetID) {
+				this.onWidgetSelected(id);
+				this._dragNDropIgnoreGroup = true;
+			}
+			if (selectedGroupId) {
+				this.onGroupSelected(selectedGroupId, true);
+			}
+		},
+
+		isWidgetSelected (id) {
+			if (this._selectWidget) {
+				return this._selectWidget.id === id
+			}
+			if (this._selectMulti) {
+				return this._selectMulti.indexOf(id) > -1
+			}
+			if (this._selectGroup && this._selectGroup.children) {
+				return this._selectGroup.children.indexOf(id) > -1
+			}
+			return false
+		},
+
+		setSelectedWidget (id, expand = false, render = true) {
+			const w = this.model.widgets[id]
+			if (w) {
+				this._selectWidget = w
+			} else {
+				this.logger.error("setSelectedScreens", "No widget with id"+ id, expand, render);
+			}
+		},
+	
+
+		getSelectedWidget() {
+			return this._selectWidget
+		},
+	
+	
+		onWidgetSelected (id, forceSelection = false, ignoreParentGroups = null){
+			this.logger.log(2,"onWidgetSelected", "enter > "+ id + " > ignoreParentGroups : "+ ignoreParentGroups);
+
+			const now = new Date().getTime()
+			const lastSelectedWidget = this._selectWidget ? this._selectWidget.id : null
+		
+			/**
+			 * Check here if the widget was select a second time. In this case
+			 * trigger the inline edit unless the forceSelection flag is set. This happens
+			 * normally only after a complete rendering. Check this.renderSelection() for
+			 * more details.
+			 */
+			if(this._selectWidget && this._selectWidget.id == id && !forceSelection){
+		
+				// if (now - this._lastWidgetSelected < 3000) {
+				// 	this.onWidgetDoubleClick(this._selectWidget)
+				// } else {
+				// 	this.logger.log(1,"onWidgetSelected", "ignore double > ");
+				// }
+			
+			} else {
+				this.unSelect()
+				this.onSelectionChanged(id, "widget", false);
+				if (this.model.widgets[id]){
+					this._selectWidget = this.model.widgets[id];
+
+					if (ignoreParentGroups === true) {
+						this._dragNDropIgnoreGroup = true
+					}
+
+					const parent = this.widgetDivs[id];
+					if (parent){
+						if (this.showCustomHandlers) {
+							this.showCustomHandlers(this._selectWidget, parent)
+						}
+						this.showResizeHandles(this._selectWidget,id, parent, "widget", true);
+						this.selectBox(parent);
+						this.selectDnDBox(id);
+					}
+					this.controller.onWidgetSelected(id);
+
+					// we continue the inline editing here, if another
+					// widget was in inline edit before
+					if ((now - this._inlineEditLastStop) < 300) {
+						// Check, because otherwise the ESC listener might
+						// throw us back to inline editing the same widget
+						if (lastSelectedWidget !== id) {
+							this.inlineEditInit(this._selectWidget)	
+						}
+					}
+				} else {
+					console.warn("onWidgetSelected() > No widget with id", id);
+				}
+			}
+			css.add(this.domNode, "MatcCanvasSelection");
+			try {
+				if (this.selectionListener) {
+					this.selectionListener.selectWidget(id);
+				}
+			} catch (e){
+				console.debug(e)
+				this.logger.error("onWidgetSelected", "could not call selectionListener > ", e);
+			}
+			this._lastWidgetSelected = now
+		},
+
+		onWidgetDoubleClick (widgetID) {
+			this.logger.log(-3,"onWidgetDoubleClick", "enter > "+ widgetID);
+
+			// Since 4.6.0 we listen to real double clicks. We must make sure
+			// this works only on the selected widget
+			if (!this._selectWidget ?? this._selectWidget.id !== widgetID) {
+				return
+			}
+			const widget = this.model.widgets[widgetID]
+		
+			topic.publish("matc/canvas/click", "", "");
+			if (widget.type === 'Script') {
+				if (this.toolbar) {
+					this.toolbar.showScriptDialog(widget)
+				}
+				return
+			}
+			if (widget.type === 'Rest') {
+				if (this.toolbar) {
+					this.toolbar.showRestDialog(widget)
+				}
+				return
+			}
+			if (widget.type === 'SVGPaths') {
+				this.editSVG(widget)
+				return
+			}
+			this.inlineEditInit(widget)	
+		},
+
+		onInheritedWidgetSelected (id) {
+			this.logger.log(-3,"onInheritedWidgetSelected", "enter > "+id);
+		
+			const widget = this.model.widgets[id];
+			if (widget){
+				this.unSelect()
+				this.onSelectionChanged(id, "inheritedWidget", false);
+				this.controller.onInheritedWidgetSelected(widget);
+				const parent  = this.widgetDivs[widget.id];
+				this._selectInheritedWidget = widget
+				this.selectBox(parent);
+				this.showResizeHandles(widget, widget.id, parent, "inheritedWidget", true);
+			} else {
+				this.logger.log(-3,"onInheritedWidgetSelected", "cannot find > " + id);
+			}	
+		},
 
 		onLineSelected (id){
 			this.logger.log(-1,"onLineSelected", "enter ");
-			this.onSelectionChanged(id, "line");
+			this.unSelect()
+			this.onSelectionChanged(id, "line", false);
 			this._selectedLine = this.model.lines[id];
 			this.setLineColor(id, "orange");
 			this.controller.onLineSelected(id);
 			css.add(this.domNode, "MatcCanvasSelection");
 		},
 
+		/**********************************************************************
+		 * Multi Select
+		 **********************************************************************/
+
+		setMultiSelection(ids, expand = false) {
+			if (!Array.isArray(ids)) {
+				this.logger.error("setMultiSelection", "no array ");
+				console.trace()
+				ids = [ids]
+			}
+			//console.warn('setMultiSelection', ids)
+			if (expand) {
+				if (!this._selectMulti) {
+					this._selectMulti = []
+				}
+				this._selectMulti = this._selectMulti.concat(ids)
+			} else {
+				this._selectMulti = ids
+			}
+			
+		},
+	
+		getMultiSelection() {
+			return this._selectMulti
+		},
+
 		onMutliSelected (selection){
 			this.logger.log(1,"onMutliSelected", "enter ", selection);
 
-			this.onSelectionChanged(null, "multi");
+			this.unSelect()
+			this.onSelectionChanged(null, "multi", false);
 			this._dragNDropIgnoreGroup = false;
 
 			this._selectMulti = selection;
@@ -168,9 +359,26 @@ import topic from 'dojo/topic'
 			}
 		},
 
+		/**********************************************************************
+		 * Group Select
+		 **********************************************************************/
+		setSelectedGroup(id, expand = false, render = false) {
+			const g = this.model.groups[id]
+			if (g) {
+				this._selectGroup = g
+			} else {
+				this.logger.error("setSelectedGroups", "No widget with id"+ id, expand, render);
+			}
+		},
+
+		getSelectedGroup() {
+			return this._selectGroup
+		},
+
 		onGroupSelected (groupID, fromLayerList) {
 			this.logger.log(2,"onGroupSelected", "enter > " + groupID);
-			this.onSelectionChanged(null, "group");
+			this.unSelect()
+			this.onSelectionChanged(null, "group", false);
 			/**
 			 * This can be triggered from the LayerList. If a widget was before
 			 * selectd we migh tbe weird stuff
@@ -188,6 +396,7 @@ import topic from 'dojo/topic'
 					 */
 					let allChildren = this.getAllGroupChildren(this._selectGroup)
 					this._selectGroup = lang.clone(this._selectGroup)
+					this._selectGroup._isVirtual = true
 					this._selectGroup.children = allChildren
 					this.showGroupResizeHandlers(this._selectGroup.children, groupID, "group", true);
 					this.controller.onGroupSelected(groupID);
@@ -211,11 +420,17 @@ import topic from 'dojo/topic'
 			}
 		},
 
+		/**********************************************************************
+		 * Canvas Select
+		 **********************************************************************/
+	
 		onCanvasSelected (){
-			this.logger.log(3,"onCanvasSelected", "enter ");
-			this.onSelectionChanged(null);
+			this.logger.log(-3,"onCanvasSelected", "enter ");
+			this.unSelect()
+			this.onSelectionChanged(null, 'canvas', false);
 			this.controller.onCanvasSelected();
 
+			this._dragNDropIgnoreGroup = false
 			try {
 				if (this.selectionListener) {
 					this.selectionListener.unSelect();
@@ -245,51 +460,98 @@ import topic from 'dojo/topic'
 				if(this._selectChangeListener){
 					this._selectChangeListener();
 				}
+				if (this.currentTool && this.currentTool.stop) {
+					this.currentTool.stop()
+				}
+
+				topic.publish("matc/canvas/click", id, type);
 			} catch( e){
+				this.logger.error("onSelectionChanged", "enter > ", e);
 				this.logger.sendError(e);
 			}
 			if (type !== 'group') {
 				this.logger.log(1,"onSelectionChanged", "clear group children > ");
 				delete this._dragNDropGroupChildren;
 			}
-			try{
-				/**
-				 * make sure all popups are closed!
-				 */
-				topic.publish("matc/canvas/click", id, type);
-				this.unSelect();
-			} catch( e){
-				this.logger.sendError(e);
-			}
+
+			/**
+			 * FIXME: Why is this needed?
+			 */
+			this.cleanUpResizeHandles()		
 		},
 
-		unSelect (){
-			this.logger.log(3,"unSelect", "enter > ");
+		isInSelection (id) {
+			if (this.getSelectedScreen()) {
+				return this.getSelectedScreen().id === id 
+			}
+			if (this._selectWidget) {
+				return this._selectWidget.id === id 
+			}
+			if (this._selectMulti) {
+				return this._selectMulti.indexOf(id) >= 0
+			}
+			if (this._selectGroup) {
+				const children = this.getAllGroupChildren(this._selectGroup)
+				return children.indexOf(id) >= 0
+			}
+			return false
+		},
 
-			this._selectedScreen = null;
+		hasSelection () {
+			return (this.getSelectedScreen() !== null  && this.getSelectedScreen() !== undefined ) ||
+					(this._selectWidget !== null  && this._selectWidget !== undefined ) ||
+					(this._selectMulti !== null  && this._selectMulti !== undefined ) ||
+					(this._selectGroup !== null  && this._selectGroup !== undefined ) ||
+					(this._selectInheritedWidget !== null  && this._selectInheritedWidget !== undefined )
+		},
+
+		resetCanvasSelection () {
+			this._canvasSelection.reset()
+		},
+
+		unSelect (){		
+			this.logger.log(1,"unSelect", "enter > ");
+			this.cleanUpResizeHandles();
+			this.onDistributeEnd();
+			this.onGridResizeEnd();
 			this._selectWidget = null;
 			this._selectMulti = null;
 			this._selectGroup = null;
-			this._selectInheritedWidget = null
+			this._selectInheritedWidget = null		
+			this.resetCanvasSelection()
+			this.unHoverDNDBox()
 
 			css.remove(this.domNode, "MatcCanvasSelection");
 
 			if(this._selectedLine){
 				this.setLineColor(this._selectedLine.id);
-			}
-			this._selectedLine = null;
-			this.cleanUpResizeHandles();
+			}		
 			if(this._selectedDiv){
 				css.remove(this._selectedDiv, "MatcBoxSelected");
 			}
 			if(this._selectedDnDDiv){
 				css.remove(this._selectedDnDDiv, "MatcBoxSelected");
 			}
+			if (this._selectedSourceDiv){
+				css.remove(this._selectedSourceDiv, "MatcWidgetSelected");
+			}
+			if (this._selectedSourceDiv){
+				css.remove(this._selectedSourceDiv, "MatcWidgetSelected");
+			}
+			if (this._selectedDivList) {
+				this._selectedDivList.forEach(div => {
+					css.remove(div, "MatcMultiBoxSelected");
+				})
+			}
+
+			delete this._selectedLine
+			delete this._selectedDivList
 			delete this._selectedDiv;
 			delete this._selectedDnDDiv;
+			delete this._selectedSourceDiv;
 			delete this._selectChangeListener;
 			delete this._selectStartListener;
-			this.onDistributeEnd();
+	
 		},
 
 		addSelectionChangeListener (listener){
@@ -307,25 +569,31 @@ import topic from 'dojo/topic'
 		 */
 		renderSelection (){
 			this.logger.log(5,"renderSelection", "enter > ", this._selectWidget);
+	
 
 			if(this._selectWidget){
 				this.onWidgetSelected(this._selectWidget.id, true);
+				return
 			}
 
-			if(this._selectedScreen){
-				this.onScreenSelected(this._selectedScreen.id, true);
+			if(this.hasScreenSelection()){
+				this.renderScreenSelection()
+				return
 			}
 
-			if(this._selectMulti){
+			if (this._selectMulti){
 				this.onMutliSelected(this._selectMulti, true);
+				return
 			}
 
 			if(this._selectGroup){
 				this.onGroupSelected(this._selectGroup.id, true);
+				return
 			}
 
 			if (this._selectInheritedWidget) {
 				this.onInheritedWidgetSelected(this._selectInheritedWidget.id, true);
+				return
 			}
 		},
 
@@ -336,7 +604,7 @@ import topic from 'dojo/topic'
 			 * Since 4.0.40 we can just update the resizeHandlers for zooms etc.
 			 * We still provide a call to renderSelection() as fallback
 			 */
-			let box = this.getSelectedBox()
+			const box = this.getSelectedBox()
 			if (box) {
 				this._updateResizeHandlers(box)
 			} else {
@@ -352,9 +620,10 @@ import topic from 'dojo/topic'
 				}
 			}
 
-			if(this._selectedScreen){
-				if(this.model.screens[this._selectedScreen.id]){
-					return this.model.screens[this._selectedScreen.id]
+			if(this.getSelectedScreen()){
+				const screenID = this.getSelectedScreen().id
+				if(this.model.screens[screenID]){
+					return this.model.screens[screenID]
 				}
 			}
 
@@ -378,9 +647,16 @@ import topic from 'dojo/topic'
 			
 		},
 
-		getSelectedIds (){
+		getSelectedIds (extendLayoutContainer=false){
 
 			if(this._selectWidget){
+				// Since 5.0.24 we handle layout containers as
+				// virtual groups. because getSelectedIds() is called alos in select,
+				// we introduced the extendLayoutContainer param.
+				if (extendLayoutContainer && LayoutContainerUtil.isLayoutContainerWidget(this._selectWidget)) {
+					const children = LayoutContainerUtil.getLayoutContainerChildren(this._selectWidget.id, this.model, this.treeIndex)
+					return children
+				}
 				return [this._selectWidget.id];
 			}
 			if(this._selectMulti){
@@ -418,17 +694,59 @@ import topic from 'dojo/topic'
 			css.add(div, "MatcBoxSelected");
 		},
 
+
+		selectMultiBoxes (divList){
+			divList.forEach(div => {
+				css.add(div, "MatcMultiBoxSelected");
+			})
+			this._selectedDivList = divList;
+		},
+
 		selectDnDBox (id){
 			if(this.widgetDivs[id]){
 				this._selectedDnDDiv = this.widgetDivs[id];
 				css.add(this._selectedDnDDiv, "MatcBoxSelected");
 			}
+	
+			if(this.widgetBackgroundDivs[id]){
+				this._selectedSourceDiv = this.widgetBackgroundDivs[id];
+				css.add(this._selectedSourceDiv, "MatcWidgetSelected");
+			}
+		},
+
+		hoverDNDBox(id ) {
+			if (id !== this._hoverBoxID) {
+				this.unHoverDNDBox()
+			}
+			this._hoverBoxID = id
+			if(this.widgetDivs[id]){
+				this._hoverDNDDiv = this.widgetDivs[id];
+				css.add(this._hoverDNDDiv, "MatcBoxHover");
+			}
+	
+			if(this.widgetBackgroundDivs[id]){
+				this._hoverSourceDiv = this.widgetBackgroundDivs[id];
+				css.add(this._hoverSourceDiv, "MatcBoxHover");
+			}
 		},
 
 
-    /**********************************************************************
-     * Remove
-     **********************************************************************/
+		unHoverDNDBox () {
+			if (this._hoverDNDDiv) {
+				css.remove(this._hoverDNDDiv, "MatcBoxHover");
+			}
+			if (this._hoverSourceDiv) {
+				css.remove(this._hoverSourceDiv, "MatcBoxHover");
+			}
+			delete this._hoverSourceDiv
+			delete this._hoverDNDDiv
+			delete this._hoverBoxID
+		},
+
+
+		/**********************************************************************
+		 * Remove
+		 **********************************************************************/
 
 		onRemoveSelected (){
 			this.logger.log(3,"onRemoveSelected", "enter");
@@ -461,23 +779,30 @@ import topic from 'dojo/topic'
 
 			if(this._selectWidget){
 				let id = this._selectWidget.id;
-				let group = this.getParentGroup(this._selectWidget.id);
 				this.unSelect();
-				if(!group){
-					this.controller.removeWidget(id);
+				// Since 5.0.24 we handle layout containers
+				// as virtual groups.
+				if (LayoutContainerUtil.isLayoutContainer(id, this.model)){
+					this.logger.log(-1, "onRemoveSelected", "Remove layout container")
+					const children = LayoutContainerUtil.getLayoutContainerChildren(id, this.model, this.treeIndex)
+					this.controller.removeMultiWidget(children);
 				} else {
-					/**
-					 * We should have here a method removeFromGroup
-					 */
-					this.controller.removeGroupAndWidgets(group.id);
+					this.controller.removeWidget(id);
 				}
 				return true;
 			}
 
-			if(this._selectedScreen){
-				let id = this._selectedScreen.id;
+			if(this.getSelectedScreen()){
+				let id = this.getSelectedScreen().id;
 				this.unSelect();
 				this.controller.removeScreen(id);
+				return true;
+			}
+
+			if(this._canvasSelection.screens.length > 1){
+				const ids = this._canvasSelection.screens.map(s => s.id)
+				this.unSelect();
+				this.controller.removeMultiScreen(ids);
 				return true;
 			}
 
@@ -495,44 +820,30 @@ import topic from 'dojo/topic'
 		 * Context Stuff
 		 **********************************************************************/
 
-		onContextMenu (e){
-			this.logger.log(-1,"onContextMenu", "enter", e.target);
+		onContextMenu (e, widgetID, screenID){
+			this.logger.log(-1,"onContextMenu", `enter . ${widgetID} > ${screenID}`);
 			this.stopEvent(e);
+			// check if we need to make a selection
+			if (!this.hasSelection()) {
+				if (widgetID) {
+					this.setSelectionById(widgetID)
+				}
+				if (screenID) {
+					this.setSelectedScreens([screenID], false, true)
+				}
+			}
+			if (this.$refs.contextMenu) {
+				this.$refs.contextMenu.show(e, this.hasSelection(), this._selectMulti, this._selectGroup)
+			}
 			return false;
 		},
-
-		hideContextMenu (){
-			if(this._contextMenu){
-				var listeners = this._contextMenu.listeners;
-				for(var i=0; i < listeners.length; i++){
-					listeners[i].remove();
-				}
-
-				this.domNode.removeChild(this._contextMenu.background);
-			}
-			delete this._contextMenu;
-		},
-
-
 
 		/**********************************************************************
 		 * Helper
 		 **********************************************************************/
 
 		allignToKeyBoard (pos){
-			/**
-			 * If shift was pressed
-			 */
-			if(this._currentKeyPressed === 16){
-				var min = Math.min(pos.w, pos.h);
-				pos.h = min;
-				pos.w = min;
-				if(pos.snapp){
-					pos.snapp.square = true;
-				}
-				//delete pos.snapp;
-			}
-			return pos;
+			console.error('allignToKeyBoard() > DECRECTAED', pos)
 		}
 
 

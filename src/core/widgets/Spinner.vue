@@ -23,26 +23,21 @@ export default {
   },
   components: {},
   methods: {
-    postCreate: function() {
+    postCreate () {
       this._borderNodes = [this.domNode];
       this._backgroundNodes = [this.domNode];
       this._shadowNodes = [this.domNode];
     },
 
-    wireEvents: function() {
-      this.wired = true;
-      for (var i = 0; i < this.options.length; i++) {
-        this.tempOwn(
-          this.addTouchStart(
-            this.options[i],
-            lang.hitch(this, "onDndStart", this.values[i], i)
-          )
-        );
-        //this.tempOwn(on(this.options[i], touch.press, lang.hitch(this, "onDndStart", this.values[i], i)));
-      }
+    wireEvents () {
+        this.wired = true;
+        for (let i = 0; i < this.options.length; i++) {
+          this.tempOwn(this.addTouchStart(this.options[i],lang.hitch(this, "onDndStart", this.values[i], i)))
+        }
+        this.wireHover()
     },
 
-    onDndStart: function(value, pos, e) {
+    onDndStart (value, pos, e) {
       this.stopEvent(e);
       this.dndStartPos = this.getMouse(e);
       this.dndStartTime = new Date().getTime();
@@ -58,7 +53,7 @@ export default {
       return false;
     },
 
-    onDnDMove: function(e) {
+    onDnDMove (e) {
       this.stopEvent(e);
       var pos = this.getMouse(e);
       var difY = pos.y - this.dndStartPos.y;
@@ -68,7 +63,7 @@ export default {
       return false;
     },
 
-    onDndEnd: function(option, pos, e) {
+    onDndEnd (option, pos, e) {
       this.stopEvent(e);
       if (this.dndStartPos) {
         var mPos = this.getMouse(e);
@@ -110,7 +105,7 @@ export default {
       this.cleanUp();
     },
 
-    cleanUp: function() {
+    cleanUp () {
       if (this.moveListener) {
         this.moveListener.remove();
       }
@@ -140,7 +135,10 @@ export default {
 
       var db = new DomBuilder();
 
-      var options = this.model.props.options;
+      let options = this.model.props.options;
+      if (!options) {
+        options = []
+      }
       var cntr = db.div("MatcWidgetTypeSpinnerCntr").build();
       this.options = [];
       this.values = [];

@@ -1,17 +1,17 @@
 
 <template>
-  <div :class="'TaskCreateDialog ' + model.type">
+  <div :class="'MatcDialog TaskCreateDialog ' + model.type">
     <div class="TaskCreateDialogCntr">
       <div class="FormCntr" >
 
-          <div class="field">
+          <div class="form-group">
             <label>Name</label>
-            <input  v-model="task.name" type="text" class="input" placeholder="Name"  />
+            <input  v-model="task.name" type="text" class="form-control" placeholder="Name" ref="inputName"/>
           </div>
 
-          <div class="field">
+          <div class="form-group">
             <label>Description</label>
-            <textarea  v-model="task.description" type="text" class="input"  placeholder="An explaination for the users"  />
+            <textarea  v-model="task.description" type="text" class="form-control"  placeholder="An explaination for the users"  />
           </div>
 
 
@@ -51,7 +51,7 @@
           <p class="MatcHint">
             Select the next screen to show
           </p>
-          <div v-for="box in abScreens" :key="box.id" class="button is-primary" @click="selectABLine(box)">
+          <div v-for="box in abScreens" :key="box.id" class="MatcButton" @click="selectABLine(box)">
             {{box.name}}
           </div>
         </div>
@@ -61,15 +61,15 @@
     </div>
 
 
-    <div class="buttons mt-16">
-      <a class="button is-primary" @click="onSave">Save</a>
-      <a class="button is-text" @click="onCancel" >Cancel</a>
+    <div class="MatcButtonBar">
+      <a class="MatcButton MatcButtonPrimary" @click="onSave">Save</a>
+      <a class="MatcLinkButton" @click="onCancel" >Cancel</a>
     </div>
 
   </div>
 </template>
 <style lang="scss">
-  @import '../../../style/scss/task_create_dialog.scss';
+  @import '../../../style/components/task_create_dialog.scss';
 </style>
 <script>
 import DojoWidget from "dojo/DojoWidget";
@@ -82,7 +82,7 @@ import Util from "core/Util";
 import domGeom from "dojo/domGeom";
 
 export default {
-  name: "TaskRecorder",
+  name: "TaskCreateDialog",
   props: ['model'],
   mixins: [Util, DojoWidget],
   data: function() {
@@ -118,7 +118,7 @@ export default {
         return {
           screen: this.getScreenName(event.screen),
           widget: this.getWidgetName(event.widget),
-          type:  this.getEventLabel(event.type),
+          type:  this.getEventLabelWithState(event),
           label: event.widget ? this.getWidgetName(event.widget) + ' @ ' + this.getScreenName(event.screen): this.getScreenName(event.screen)
         }
       })
@@ -126,12 +126,19 @@ export default {
   },
   methods: {
 
+    getEventLabelWithState (event) {
+      if (event.state && (event.type === 'WidgetClick' || event.type === 'WidgetChange')) {
+        return this.getEventStateLabel(event.state)
+      }
+      return this.getEventLabel(event.type)
+    },
+
     setRecordOnlyScreenView (v) {
       this.recordOnlyScreenViews = v
     },
 
     postCreate () {
-      this.logger = new Logger("TaskRecorder");
+      this.logger = new Logger("TaskCreateDialog");
       this.logger.log(-1, "postCreate", "enter > " + this.appID + "> " + this.hash);
       setTimeout(() => {
         this.createSimulator()
@@ -139,8 +146,8 @@ export default {
     },
 
     createSimulator () {
-      let wrapper = this.$refs.wrapper
-      var pos = this.resizeSimulatorContainer(this.model, this.$refs.simCntr, 0.7);
+      const wrapper = this.$refs.wrapper
+      const pos = this.resizeSimulatorContainer(this.model, this.$refs.simCntr, 0.7);
       wrapper.style.width = pos.w + 'px'
       wrapper.style.height = pos.h + 'px'
       this.simulator = this.$new(Simulator, {
@@ -189,8 +196,17 @@ export default {
         let pos = domGeom.position(node)
         pos.h = 600
         if (app.type == 'smartphone') {
-            pos = this.getScaledSize(pos, "height", app);
+            // there might be wide screen apps
+            if (app.screenSize.h < app.screenSize.w) {
+              this.logger.log(-1,  'resizeSimulatorContainer', 'Wide screen')
+ 
+              pos = this.getScaledSize(pos, "width", app);
+            } else {
+              pos = this.getScaledSize(pos, "height", app);
+            }
+            
         } else {
+        
             pos = this.getScaledSize(pos, "width", app);
         }
         return pos
@@ -258,6 +274,13 @@ export default {
 
     setValue (task) {
       this.task = lang.clone(task)
+    },
+
+    focus() {
+      setTimeout(() => {
+        this.$refs.inputName.focus()
+        this.$refs.inputName.select()
+      }, 200)
     },
 
     cleanUp: function() {

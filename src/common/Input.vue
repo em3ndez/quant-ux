@@ -1,6 +1,6 @@
 
 <template>
-     <div :class="['VommondInput', {'VommondInputOpenTop': top}]">
+     <div :class="['VommondInput ', {'VommondInputOpenTop': top}]">
 		<!-- removed form because entremight trigger reloead -->
 		<input
 			type="text"
@@ -296,14 +296,14 @@ export default {
 			}
 		},
     mounted () {
-			this.log = new Logger("Input");
-			if (this.hints) {
-				this.setHints(this.hints)
-			}
-			if (this.value) {
-				this.setValue(this.value)
-			}
-			this.log.log(0, 'mounted', 'enter ')
+		this.log = new Logger("Input");
+		if (this.hints) {
+			this.setHints(this.hints)
+		}
+		if (this.value) {
+			this.setValue(this.value)
+		}
+		this.log.log(0, 'mounted', 'enter ')
     }
 }
 </script>

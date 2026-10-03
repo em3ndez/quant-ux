@@ -1,4 +1,5 @@
 import Tool from './Tool'
+import * as SVGUtil from '../SVGUtil'
 import Logger from '../../common/Logger'
 
 export default class MoveTool extends Tool{
@@ -6,37 +7,32 @@ export default class MoveTool extends Tool{
     constructor (editor) {
         super(editor)
         this.logger = new Logger('MoveTool')
-        let selected = this.editor.getSelectedElements()
+        this.showBoundingBox()
+    }
+
+    showBoundingBox () {
+        this.logger.log(3, 'showBoundingBox', 'enter')
+        const selected = this.editor.getSelectedElements()
         if (selected && selected.length > 0) {
-            let boxes = selected.map(s => {
-                let svg = this.editor.getSVGElement(s)
-                return svg.getBBox()
+            const boxes = selected.map(s => {
+                const svg = this.editor.getSVGElement(s)
+                return SVGUtil.getBBox(svg)
             })
-            let boundingBox = this.getBoundingBoxByBoxes(boxes)
+            const boundingBox = SVGUtil.getBoundingBoxByBoxes(boxes)
             this.selected = selected
             this.editor.setBoundingBox(boundingBox)
 
         } else {
-            this.logger.error('constructor', 'No selection')
+            this.logger.error('showBoundingBox', 'No selection')
         }
     }
 
-    getBoundingBoxByBoxes (boxes) {
-        var result = { x: 100000000, y: 100000000, w: 0, h: 0 };
-
-        for (var i = 0; i < boxes.length; i++) {
-            var box = boxes[i];
-            result.x = Math.min(result.x, box.x);
-            result.y = Math.min(result.y, box.y);
-            result.w = Math.max(result.w, box.x + box.width);
-            result.h = Math.max(result.h, box.y + box.height);
-        }
-
-        result.h -= result.y;
-        result.w -= result.x;
-
-        return result;
+    onZoom (z) {
+        this.logger.log(3, 'onZoom', 'enter', z)
+        this.zoom = z
+        this.showBoundingBox()
     }
+
 
     /**
      * Implement some state machine:
@@ -49,10 +45,7 @@ export default class MoveTool extends Tool{
      *
      */
     onClick() {
-        this.logger.log(-1, 'onClick', 'enter')
-        // FIXME: Click might be called if we release
-        // on canvas an not the handler. Do we have to have some kind
-        // of timeout?
+        this.logger.log(3, 'onClick', 'enter')
         if (this.isResize) {
             this.cleanMove()
             return
@@ -75,23 +68,27 @@ export default class MoveTool extends Tool{
         }
     }
 
-    resizeBoundingBox (bbox, pos) {
-        // update bounding box
-        let newBoundingBox = this.getResizedBundingBox(bbox, this.handler.type, pos)
-
+    resizeBoundingBox (zoomedBoundingBox, pos) {   
+        // resize bounding box!
+        let newZoomedBoundingBox = this.getResizedBundingBox(zoomedBoundingBox, this.handler.type, pos)
+        if (pos.shiftKey) {
+            newZoomedBoundingBox = this.scaleToSelection(zoomedBoundingBox, newZoomedBoundingBox, this.handler.type)
+        }
+        const newBoundingBox = SVGUtil.getUnZoomedBox(newZoomedBoundingBox, this.zoom)
+      
         // scale paths
         this.selected.forEach((element,i) => {
-            let positions = this.positions[i]
+            const relativePositions = this.relativePositions[i]
             if (element.type === 'Path') {
                 element.d.forEach((point,j) => {
-                    let rel = positions[j]
+                    const rel = relativePositions[j]
                     point.x = newBoundingBox.x + newBoundingBox.w * rel.x
                     point.y = newBoundingBox.y + newBoundingBox.h * rel.y
 
                     /**
                      * Check also x1 and x2 for Curves
                      */
-                    if (point.t === 'C') {
+                    if (point.t === 'C' || point.t === 'CZ') {
                         point.x1 = newBoundingBox.x + newBoundingBox.w * rel.x1
                         point.y1 = newBoundingBox.y + newBoundingBox.h * rel.y1
                         point.x2 = newBoundingBox.x + newBoundingBox.w * rel.x2
@@ -101,14 +98,42 @@ export default class MoveTool extends Tool{
             }
         })
 
-        this.editor.setBoundingBox(newBoundingBox)
+        this.editor.setBoundingBox(newZoomedBoundingBox)
+    }
+
+    scaleToSelection(source, target, type = '') {       
+        if (type === 'North' || type === 'South') {
+            const scale = target.h / source.h
+            const w =  Math.round(target.w * scale)
+            const offset = (type === 'LeftUp' || type === 'LeftDown') ? (w - target.w) : 0
+            return {
+                x: target.x - offset,
+                y: target.y,
+                w: w,
+                h: target.h
+            }
+        }
+        if (type === 'East' || type === 'West') {
+            const scale = target.w / source.w
+            const h =  Math.round(target.h * scale)
+            const offset = (type === 'LeftUp' || type === 'RightUp' )? (h - target.h) : 0   
+            //console.debug('scale', scale, ' >> ',source.w, source.h, target.h, '==', h)
+            return {
+                x: target.x,
+                y: target.y - offset,
+                w: target.w,
+                h: h
+            }
+        }
+        // FIXME: here is still a bug for the corners
+        return target
     }
 
     getResizedBundingBox (box, type, pos) {
-        let difX = pos.x - this.startPos.x
-        let difY = pos.y - this.startPos.y
-
-        let result = Object. assign({}, box)
+        // this pos is unZoomed, but the bounding box is zoomed.
+        const difX = (pos.x - this.startPos.x) * this.zoom
+        const difY = (pos.y - this.startPos.y) * this.zoom
+        const result = Object. assign({}, box)
         switch (type) {
             case 'LeftUp':
                 result.x = result.x + difX
@@ -159,23 +184,23 @@ export default class MoveTool extends Tool{
     }
 
     moveBoundingBox (pos) {
-        let difX = pos.x - this.startPos.x
-        let difY = pos.y - this.startPos.y
-        //this.logger.log(-1, 'moveBoundingBox', 'enter', difX + ' ' + difY)
+        const difX = pos.x - this.startPos.x
+        const difY = pos.y - this.startPos.y
+        //this.logger.log(-1, 'moveBoundingBox', 'enter', this.startPos)
 
         // update paths
         this.selected.forEach((element,i) => {
-            let positions = this.positions[i]
+            const positions = this.positions[i]
             if (element.type === 'Path') {
                 element.d.forEach((point,j) => {
-                    let start = positions[j]
+                    const start = positions[j]
                     point.x = start.x + difX
                     point.y = start.y + difY
 
                     /**
                      * Check also x1 and x2 for Curves
                      */
-                    if (point.t === 'C') {
+                    if (point.t === 'C' || point.t === 'CZ') {
                         point.x1 = start.x1 + difX
                         point.y1 = start.y1 + difY
                         point.x2 = start.x2 + difX
@@ -185,10 +210,11 @@ export default class MoveTool extends Tool{
             }
         })
 
-        // update bounding box
-        let newBoundingBox = {
-            x: this.bbox.x + difX,
-            y: this.bbox.y + difY,
+        // update bounding box. We have to zoom 
+        // here the difs, because the bounding box is not scalled
+        const newBoundingBox = {
+            x: this.bbox.x + difX * this.zoom,
+            y: this.bbox.y + difY * this.zoom,
             w: this.bbox.w,
             h: this.bbox.h
         }
@@ -196,12 +222,13 @@ export default class MoveTool extends Tool{
     }
 
     onBBoxMouseDown (bbox, pos) {
-        this.logger.log(-1, 'onBBoxMouseDown', 'enter')
+        this.logger.log(1, 'onBBoxMouseDown', 'enter')
+        this.editor.setBoundingBoxVisible(false)
         this.initMove(bbox, pos)
         this.positions = this.selected.map(element => {
             if (element.type === 'Path') {
                 return element.d.map(point => {
-                    if (point.t === 'C') {
+                    if (point.t === 'C' || point.t === 'CZ') {
                         return {
                             x: point.x,
                             y: point.y,
@@ -224,47 +251,53 @@ export default class MoveTool extends Tool{
     }
 
     onBBoxMouseUp () {
-        this.logger.log(-1, 'onBBoxMouseUp', 'enter')
+        this.logger.log(1, 'onBBoxMouseUp', 'enter')
         if (this.isMove) {
             this.cleanMove()
+            this.editor.setBoundingBoxVisible(true)
             this.editor.setCursor('default')
+            this.editor.onChange()
         }
     }
 
     onBBoxMouseClick () {
     }
 
-    onResizeMouseDown (handler, bbox, pos) {
-        this.logger.log(-1, 'onResizeMouseDown', 'enter', handler.type)
-        this.initMove(bbox, pos)
-        this.positions = this.selected.map(element => {
-            if (element.type === 'Path') {
-                return element.d.map(point => {
-                    if (point.t === 'C') {
-                        return {
-                            x: (point.x - bbox.x) / bbox.w,
-                            y: (point.y - bbox.y) / bbox.h,
-                            x1: (point.x1 - bbox.x) / bbox.w,
-                            y1: (point.y1 - bbox.y) / bbox.h,
-                            x2: (point.x2 - bbox.x) / bbox.w,
-                            y2: (point.y2 - bbox.y) / bbox.h
-                        }
-                    }
-                    return {
-                        x: (point.x - bbox.x) / bbox.w,
-                        y: (point.y - bbox.y) / bbox.h
-                    }
-                })
-            }
-            return []
-        })
+    onResizeMouseDown (handler, zoomedBBox, pos) {
+        this.logger.log(1, 'onResizeMouseDown', 'enter', handler.type)
+       
+        this.initMove(zoomedBBox, pos)
+        const bbox = SVGUtil.getUnZoomedBox(zoomedBBox, this.zoom)
+        this.relativePositions = SVGUtil.getRelativePaths(bbox, this.selected)
         this.handler = handler
         this.isResize = true
     }
 
+    onResizeMouseUp () {
+        this.editor.onChange()
+    }
+
     onResizeMouseClick () {
-        this.logger.log(-1, 'onResizeMouseClick', 'enter')
+        this.logger.log(1, 'onResizeMouseClick', 'enter')
         this.cleanMove()
+    }
+
+    onElementHover(path) {
+        this.editor.setHover(path.id)
+    }
+
+    onElementBlur() {
+        this.editor.setHover(null)
+    }
+
+    onElementClick (path) {
+        this.logger.log(1, 'onResizeMouseClick', 'enter')
+        this.select([path.id])
+    }
+
+    onDelete () {
+        this.logger.log(1, 'onDelete', 'enter')
+        this.editor.deleteSelection()
     }
 
 
@@ -273,10 +306,19 @@ export default class MoveTool extends Tool{
         this.startPos = pos
     }
 
+
+    onMouseDown (point) {
+        this.logger.log(5, 'onMouseDown', 'enter', point)
+        if (!this.isMove) {
+            this.editor.setState('moveCanvasMouseDown', point)
+        }
+    }
+
     cleanMove () {
         delete this.bbox
         delete this.startPos
         delete this.positions
+        delete this.relativePositions
         delete this.handler
         delete this.isResize
         delete this.isMove

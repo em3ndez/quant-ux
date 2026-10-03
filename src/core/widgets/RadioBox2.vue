@@ -11,7 +11,6 @@ import css from "dojo/css";
 import lang from "dojo/_base/lang";
 import topic from "dojo/topic";
 import UIWidget from 'core/widgets/UIWidget'
-// import RadioBox from "core/widgets/RadioBox";
 
 export default {
   name: "RadioBox2",
@@ -24,20 +23,19 @@ export default {
   },
   components: {},
   methods: {
-    postCreate: function() {
+    postCreate () {
       this._borderNodes = [this.domNode];
       this._backgroundNodes = [this.domNode];
       this._shadowNodes = [this.domNode];
     },
 
-    wireEvents: function() {
-      this.own(
-        this.addClickListener(this.domNode, lang.hitch(this, "onChange"))
-      );
+    wireEvents () {
+      this.own(this.addClickListener(this.domNode, lang.hitch(this, "onChange")));
       this.own(topic.subscribe(this.topic, lang.hitch(this, "onOtherChecked")));
+      this.wireHover()
     },
 
-    onOtherChecked: function(event) {
+    onOtherChecked (event) {
       if (event && this.model && event.id != this.model.id) {
         if (this.getFormGroup(this.model) === event.formGroup) {
           this.setValue(false);
@@ -45,7 +43,7 @@ export default {
       }
     },
 
-    render: function(model, style, scaleX, scaleY) {
+    render (model, style, scaleX, scaleY) {
       this.model = model;
       this.style = style;
       this._scaleX = scaleX;
@@ -65,21 +63,21 @@ export default {
       this.setValue(model.props.checked);
     },
 
-    getValue: function() {
+    getValue () {
       return this.value;
     },
 
     /**
      * Can be overwritten by children to have proper type conversion
      */
-    _setDataBindingValue: function(v) {
+    _setDataBindingValue (v) {
       if (v !== true && v !== false && v >= 1) {
         v = true;
       }
       this.setValue(v);
     },
 
-    setValue: function(value) {
+    setValue (value) {
       this.value = value;
 
       if (value) {
@@ -95,26 +93,26 @@ export default {
       }
     },
 
-    getState: function() {
+    getState () {
       return {
         type: "radiobox.checked",
         value: this.value
       };
     },
 
-    setState: function(state) {
+    setState (state) {
       if (state && state.type == "radiobox.checked") {
         this.setValue(state.value);
       }
     },
 
-    getFormGroup: function(widget) {
+    getFormGroup (widget) {
       if (widget.props) {
         return widget.props.formGroup;
       }
     },
 
-    onChange: function(e) {
+    onChange (e) {
       if (!this.value) {
         this.emitDataBinding(true);
         this.setValue(true);

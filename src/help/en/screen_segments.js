@@ -4,7 +4,7 @@ export let texts = [
         "name":"Screen Segments",
         "title": "Screen Segments",
         "body": `
-            Screen Segments allow you to embed a screen in another screen, for instance to allow
+            Screen Segments allow you to embed a screen in another screen, for instance, to allow
             vertical or horizontal scrolling. To create a screen segment perform the following steps:
             <br>
                 <ol>
@@ -24,7 +24,7 @@ export let texts = [
                     </li>
                     <li>
                         Select the Screen Segment widget. In the properties section, click 
-                        on the <strong>Select Screen Segment</strong> option. I dialog will show up, listing all the
+                        on the <strong>Select Screen Segment</strong> option. A dialog will show up, listing all the
                         segment screens.
                     </li>
                     <li>
@@ -32,7 +32,19 @@ export let texts = [
                     </li>
                 </ol>
             <br>
-            Please note, that the screen background will not be copied. Set the background on the segment widget instead.
+
+            <p class="MatcHelpCallout">
+                Please note that the screen background will not be copied. 
+                Set the background on the segment widget instead.
+            </p>
+
+            You can also bind a screen segment to a data variable, to enbale dynamic chaning of the content.
+            In this case, the screen segment will load the screen, where the name matches the 
+            value in the variable. If the value is set to "Start", the start screen
+            will be loaded, if the value is "Welcome", the welcome screen will be loaded. 
+            <br>
+           
+            
         `
     }
 ]

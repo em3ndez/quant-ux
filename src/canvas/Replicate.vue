@@ -20,6 +20,8 @@ export default {
       onReplicate (){
         this.logger.log(0,"onReplicate", "enter");
 
+        this.cleanUpGridResize()
+
         // toggle between states
         if (!this._resizeDnDEndHandler){
           this._resizeDnDMoveHandler = "onReplicateDnDMove";
@@ -27,17 +29,18 @@ export default {
           css.add(this.container, "MatcCanvasModeReplicate");
 
           this._selectCloneIds = []
-          if (this._selectGroup){
-            this._selectCloneIds = this._selectGroup.children
+          if (this.getSelectedGroup()){
+            this._selectCloneIds = this.getSelectedGroup().children
           }
-          if (this._selectWidget){
-            this._selectCloneIds.push(this._selectWidget.id)
+          if (this.getSelectedWidget()){
+            this._selectCloneIds.push(this.getSelectedWidget().id)
           }
-          if (this._selectMulti){
-            this._selectCloneIds = this._selectMulti;
+          if (this.getMultiSelection()){
+            this._selectCloneIds = this.getMultiSelection();
           }
-
+          this.setSubMode('replicate')
         } else {
+          this.setSubMode('')
           delete this._resizeDnDMoveHandler;
           delete this._resizeDnDEndHandler;
           css.remove(this.container, "MatcCanvasModeReplicate");
@@ -78,13 +81,16 @@ export default {
         /**
          * Create models
          */
-        var pos = this._getSizePos(e);
-        var cloneIDs = this.getController().replicateWidgets(this._selectCloneIds, pos, this._selectGroup);
+        const pos = this._getSizePos(e);
+        const cloneIDs = this.getController().replicateWidgets(this._selectCloneIds, pos, this.getSelectedGroup());
 
         /**
          * Select everything
+         * 
+         * @FIXME: IF we have copied groups the distrubute does not
+         * work properly
          */
-        var selection = cloneIDs.widgets.concat(this._selectCloneIds);
+        const selection = cloneIDs.widgets.concat(this._selectCloneIds);
         this.onMutliSelected(selection)
         this.onResizeDnDCleanUp();
         this.renderSelection();
@@ -126,6 +132,7 @@ export default {
       },
 
       cleanUpReplicate (){
+        this.setSubMode('')
         //this.logger.log(0,"cleanUpReplicate", "enter");
         if (this._resizeCopyJobsDivs) {
           for(var i=0; i< this._resizeCopyJobsDivs.length; i++){

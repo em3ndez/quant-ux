@@ -1,13 +1,9 @@
-import Logger from 'common/Logger'
-import lang from 'dojo/_base/lang'
+import * as TemplateService from './templates/TemplateService'
 
 export default class ModelFactory {
 
 	constructor() {
-		this.logger = new Logger("ModelFactory");
-		this.logger.log(2, "constructor", "entry");
 	}
-
 
 	setModel(model) {
 		this.model = model;
@@ -15,10 +11,6 @@ export default class ModelFactory {
 		this.screenHeight = model.screenSize.h;
 	}
 
-
-	/**********************************************************************
-	 *  Templated Model
-	 **********************************************************************/
 	createTemplatedModel(param) {
 
 		if (this.model.templates && this.model.templates[param.id]) {
@@ -26,7 +18,7 @@ export default class ModelFactory {
 			/**
 			 * get the template from somewhere, in this case the model
 			 */
-			var template = this.model.templates[param.id];
+			const template = this.model.templates[param.id];
 
 			if (this["createTemplated" + template.templateType]) {
 				return this["createTemplated" + template.templateType](template);
@@ -40,31 +32,12 @@ export default class ModelFactory {
 	}
 
 	createTemplatedWidget(t) {
-		var model = {
-			id: t.id,
-			name: t.name,
-			w: t.w,
-			h: t.h,
-			x: t.x,
-			y: t.y,
-			z: t.z,
-			template: t.id,
-			type: t.type,
-			props: lang.clone(t.props),
-			has: lang.clone(t.has),
-			style: {} // do not copy style! this will always be rendered from the template style!
-		};
-		return model;
+		// do not copy style! this will always be rendered from the template style!
+		return TemplateService.createTemplatedWidget(t);
 	}
 
 	createTemplatedGroup(t) {
-		var model = {
-			id: t.id,
-			name: t.name,
-			template: t.id,
-			children: lang.clone(t.children)
-		};
-		return model;
+		return TemplateService.createTemplatedGroup(t);
 	}
 
 	createAppModel(name, des, type) {
@@ -78,12 +51,11 @@ export default class ModelFactory {
 				},
 				factor: 2
 			};
-			this.logger.sendError(new Error());
 		}
 
-		var grid = 8;
-		var model = {
-			version: 2.1,
+		const grid = 8;
+		const model = {
+			version: 4,
 			name: name,
 			description: des,
 			screenSize: type.screenSize,
@@ -95,7 +67,7 @@ export default class ModelFactory {
 			templates: {},
 			designtokens: {},
 			lastUUID: 10000,
-			lastUpdate: 0,
+			lastUpdate: new Date().getTime(),
 			created: 0,
 			startScreen: "",
 			grid: {
@@ -116,7 +88,7 @@ export default class ModelFactory {
 	 **********************************************************************/
 
 	createScreenModel() {
-		var screen = {
+		const screen = {
 			id: null,
 			name: "",
 			x: 0,
@@ -146,7 +118,7 @@ export default class ModelFactory {
 	 **********************************************************************/
 
 	createLineModel() {
-		var line = {
+		const line = {
 			id: null,
 			from: null,
 			to: null,

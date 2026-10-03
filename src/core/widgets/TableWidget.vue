@@ -55,6 +55,7 @@ export default {
           this.own(this.addClickListener(action.div, (e) => this.onActionClick(e, action)))
         })
       }
+      this.wireHover()
     },
 
     onClick (e) {
@@ -73,7 +74,7 @@ export default {
     toggleCheckBox (e, box) {
       this.stopEvent(e);
 
-      var pos = this.selected.indexOf(box.id);
+      const pos = this.selected.indexOf(box.id);
       if (pos < 0) {
         this.selected.push(box.id);
       } else {
@@ -96,7 +97,6 @@ export default {
         tr.style.color = this.style.hoverColor
       }
       css.add(tr, 'MatcWidgetTypeTableRowHover')
-      //FIXME: emit some state
     },
 
     onHoverEnd (tr, i) {
@@ -113,7 +113,6 @@ export default {
         tr.style.color = this.style.color
       }
       css.remove(tr, 'MatcWidgetTypeTableRowHover')
-      //FIXME: emit some state
     },
 
     setSelected (selected) {
@@ -129,6 +128,20 @@ export default {
       }
     },
 
+    onInputChange (r, c, value) {
+      console.debug('onInputChange', r, c, value)
+      if (this.value) {
+        //const isArray = this.isArrayOfArray(this.value)
+      }
+      
+      // FIXME find out if we have data binding???
+      // if see, chekc if isArrray?
+    },
+
+    rerender () {
+      this.render(this.model, this.style, this._scaleX, this._scaleY)
+    },
+
     render (model, style, scaleX, scaleY) {
       this.model = model;
       this.style = style;
@@ -136,87 +149,92 @@ export default {
       this._scaleX = scaleX;
       this._scaleY = scaleY;
 
+      this.cleanUpTempListener()
       this.removeAllChildren(this.domNode)
-      // this.domNode.innerHTML = "";
+  
       this.checkBoxes = []
       this.cells = []
       this.trs = []
       this.actions = []
 
-      let data = this.getTable()
-      let columns = data.columns
-      let rows = data.rows
+      const data = this.getTable()
+      const columns = this.getColumns(data, style)
+      const rows = data.rows
 
-      let widths = this.getWidths(model.props.widths, this.style, this.props );
-      let borderStyle = this.getBorderStyle(model);
+      const widths = this.getWidths(model.props, this.style);
+      const borderStyle = this.getBorderStyle(model);
+   
+      const db = new DomBuilder();
+      const tableHeader = this.renderTable(db, style, borderStyle)
+      this.renderHeader(rows, columns, tableHeader, style, borderStyle, widths, db)
+      this.renderRows(rows, columns, tableHeader, style, borderStyle, this.props.tableActions, db)
+      this.domNode.appendChild(tableHeader);
 
-      let db = new DomBuilder();
-      let table = db.table("MatcWidgetTypeTableBorder" + borderStyle).build();
 
+      // FIXME: add pagination?
+
+      this.setStyle(style, model);
+      this.renderOddRows(rows, style)
+    },
+
+    renderTable (db, style , borderStyle) {
+      const table = db.table("MatcWidgetTypeTableBorder" + borderStyle).build();
       if ("Out" == borderStyle || "Cell" == borderStyle) {
         table.style.borderColor = style.borderBottomColor;
         table.style.borderWidth = this._getBorderWidth(style.borderBottomWidth) + "px";
         table.style.borderStyle = "solid";
+      } else {
+        table.style.border='none'
       }
-
-      // if we have a checkbox we need to add
-      // an empty row and also some adjustments to the table
-      if (style.checkBox) {
-        columns = [''].concat(columns)
-        // FIXME: we should only do this if we miss widths. Later we could add this
-        // with some handlers
-        //widths = [0.10].concat(widths)
-        //widths = widths.map(w => w / 1.10)
-      }
-
-      if (this.props.tableActions && this.props.tableActions.length > 0) {
-        columns = columns.concat([''])
-        //let w = 0.2 * this.props.tableActions.length
-        //widths = widths.concat([w])
-        //widths = widths.map(w => w / (1 + w))
-      }
-
-      this.renderHeader(rows, columns, table, style, borderStyle, widths, db)
-
-      this.renderRows(rows, columns, table, style, borderStyle, this.props.tableActions, db)
-
-      this.domNode.appendChild(table);
-      this.setStyle(style, model);
-
-      this.renderOddRows(rows, style)
+      return table
     },
 
-    getWidths (widths,style, props, fontFactor = 0.6) {
-      var result = [];
-      if (widths) {
-        var sum = 0;
-        let padding = this._getBorderWidth(style.paddingLeft) + this._getBorderWidth(style.paddingRight)
-
-        if (style.checkBox) {
-          let w = style.checkBoxSize ? style.checkBoxSize : style.fontSize
-          widths = [w + padding].concat(widths);
-        }
-        if (props.tableActions && props.tableActions.length > 0) {
-          let text = props.tableActions.map(a => a.label).join()
-          let w = text.length * style.fontSize * fontFactor + padding * props.tableActions.length
-          widths = widths.concat(w)
-        }
-        for (let i = 0; i < widths.length; i++) {
-          sum += widths[i];
-        }
-        for (let i = 0; i < widths.length; i++) {
-          result[i] = widths[i] / sum;
-        }
-      }
-      return result;
-    },
-
+   
     renderHeader (rows, columns, table, style, borderStyle, widths, db) {
+
+      // since 4.0.70 we have stikcy headers
       let tr = db
-        .element("thead")
+        .element("thead", style.headerSticky ? 'MatcWidgetTypeTableSticky': '')
         .element("tr")
         .build(table);
 
+
+      this.setHeaderStyle(tr, style)
+
+      this.renderRowBorder(tr, 0, style, borderStyle, rows.length);
+
+      /**
+       * 3.0.19. Bulma set somehow stupid default table widths!
+       */
+      const fontSize = this._getBorderWidth(style.fontSize) + 'px'
+
+      for (let j = 0; j < columns.length; j++) {
+        const td = document.createElement("td");
+        td.setAttribute("valign", "top");
+        td.textContent = columns[j].label;
+        td.style.fontSize = fontSize
+
+        this.renderCellBorder(td, 0, j, style, borderStyle, rows.length, columns.length);
+
+        if (style.headerBottomBorderWidth) {
+          td.style.borderBottomWidth = style.headerBottomBorderWidth + 'px'
+        }
+
+        tr.appendChild(td);
+        this._paddingNodes.push(td);
+
+        if (widths[j]) {
+          this.setCellWidth(td, widths[j])
+        }
+      }
+    },
+
+    setCellWidth (td, width) {
+      td.style.width = Math.round(width * 100) + "%";
+    },
+
+
+    setHeaderStyle (tr, style) {
       tr.style.color = style.headerColor;
       tr.style.background = style.headerBackground;
       if (style.headerFontStyle) {
@@ -228,29 +246,7 @@ export default {
       if (style.headerTextDecoration) {
         tr.style.textDecoration = style.headerTextDecoration;
       }
-
-      this.renderRowBorder(tr, 0, style, borderStyle, rows.length);
-
-      /**
-       * 3.0.19. Bulma set somehow stupid default table widths!
-       */
-      let fontSize = this._getBorderWidth(style.fontSize) + 'px'
-
-      for (let j = 0; j < columns.length; j++) {
-        let td = document.createElement("td");
-        td.setAttribute("valign", "top");
-        td.textContent = columns[j];
-
-        td.style.fontSize = fontSize
-        this.renderCellBorder(td, 0, j, style, borderStyle, rows.length, columns.length);
-
-        tr.appendChild(td);
-        this._paddingNodes.push(td);
-
-        if (widths[j]) {
-          td.style.width = Math.round(widths[j] * 100) + "%";
-        }
-      }
+    
     },
 
 
@@ -271,23 +267,36 @@ export default {
         this.cells[i] = [];
         let tr = db.element("tr", "MatcWidgetTypeTableRow").build(tbody);
         this.trs.push(tr)
-        this.renderRowBorder(tr, i, style, borderStyle, columns.length);
+        this.renderRowBorder(tr, i, style, borderStyle, rows.length);
 
         let start = style.checkBox ? -1 : 0
         for (let j = start; j < row.length; j++) {
+          const colNumber = j-start // because of start slack
           let td = document.createElement("td");
           td.setAttribute("valign", "top");
+
+          this.setColumnColor(td, columns, colNumber)
+
+        
           if (j === -1) {
             this.renderCheckBox(row, i, td, style, db)
+            this._paddingNodes.push(td);
           } else {
-            td.textContent = row[j];
+            if (columns[colNumber]?.isEditable) {
+              const input = db.input('MatcWidgetTypeTableInput').build(td)
+              input.value = row[j];
+              this._paddingNodes.push(input);
+              this.tempOwn(on(input, 'change', (e => this.onInputChange(i, j, input.value, e))))
+            } else {
+              td.textContent = row[j];
+              this._paddingNodes.push(td);
+            }
           }
 
           tr.appendChild(td);
-          this._paddingNodes.push(td);
+        
           this.renderCellBorder(td, i, j,style, borderStyle, rows.length, columns.length);
           this.cells[i].push(td);
-
         }
 
 
@@ -304,6 +313,9 @@ export default {
             if (action.color) {
               a.style.color = action.color
             }
+            if (action.background) {
+              a.style.background = action.background
+            }
             if (action.isHover) {
               css.add(a, 'MatcWidgetTypeTableActionOnlyHover')
             }
@@ -316,6 +328,16 @@ export default {
             })
           })
         }
+      }
+    },
+
+    setColumnColor (td, columns, j) {
+      if (columns[j] && columns[j].color) {
+        td.style.color = columns[j].color
+      }
+
+      if (columns[j] && columns[j].background) {
+        td.style.background = columns[j].background
       }
     },
 
@@ -374,9 +396,17 @@ export default {
 
     renderCellBorder (td, r, c, style, borderStyle, rows, columns) {
       if ("Cell" === borderStyle) {
-        td.style.borderColor = style.borderBottomColor;
-        td.style.borderWidth = this._getBorderWidth(style.borderBottomWidth) + "px";
-        td.style.borderStyle = "solid";
+        const width = this._getBorderWidth(style.borderBottomWidth) + 'px'
+        if (c < columns - 1) {
+          td.style.borderRightColor = style.borderBottomColor;
+          td.style.borderRightWidth =  width
+          td.style.borderRightStyle = "solid";
+        }
+        if (r < rows -1) {
+          td.style.borderBottomColor = style.borderBottomColor;
+          td.style.borderBottomWidth =  width
+          td.style.borderBottomStyle = "solid";
+        }
       }
       if ("VLines" === borderStyle) {
         if (c < columns - 1) {
@@ -395,15 +425,118 @@ export default {
     },
 
     getTable () {
-      /**
-       * FIXME: I am not sure where I am messing with the rows,
-       * but I do not clone temp updates will produce blank rows...
-       */
-      let data = lang.clone(this.parseData(this.model.props.data))
-      return {
-        columns: data[0],
-        rows: data.splice(1)
+      let table = this.getCVSData()
+      // since 4.0.70 we support data binding
+      if (this.value) {
+        table = this.getDataBindingTable(table)
       }
+      return table
+    },
+
+    getCVSData() {
+      const data = lang.clone(this.parseData(this.model.props.data))
+      if (!data || data.length === 0) {
+        console.error('TableWidget.getCVSData() > Empty data', data)
+        return  {
+          columns: [],
+          rows: []
+        }
+      }
+      const table = {
+        columns: data[0].map(c => {
+          return {
+            label: c,
+            isEditable: false,
+            isSortable: false,
+            isSearchable: false
+          }
+        }),
+        rows: data
+      }
+
+      if (this.model.props.columns) {
+
+        table.columns = this.model.props.columns
+        this.model.props.columns.forEach((c,i) => {
+          table.rows.forEach(r => {
+            if (r[i] === undefined) {
+              r[i] = "-"
+            }
+          }) 
+        })
+      } else {
+        table.rows = table.rows.splice(1)
+      }
+
+      // since 4.0.70 we overwrite columns
+      //this.setTabelColumns(table)
+      return table
+    },
+
+    setTabelColumns (table) {
+      if (this.model.props.columns) {
+        this.model.props.columns.forEach((c,i) => {
+          if (table.columns[i]) {
+           
+            table.columns[i].isEditable = c.isEditable
+            table.columns[i].isSortable = c.isSortable
+            table.columns[i].isSearchable = c.isSearchable
+            table.columns[i].databinding = c.databinding
+            table.columns[i].color = c.color
+            table.columns[i].background = c.background
+          }
+        })
+      }
+      return table
+    },
+
+
+    getDataBindingTable (table) {
+        // 1) only arrays and objects are tabular. Anything else (string, number...)
+        // falls back to the csv data
+        let value = this.value
+        if (!Array.isArray(value)) {
+          if (value && typeof value === 'object') {
+            // 2) for obejct we just take the values
+            value = Object.values(value)
+          } else {
+            return table
+          }
+        }
+
+        // remove csv data, header come still from cvs!
+        table.rows = []
+
+        // 3) now we loop. We need to know if children are
+        // objects or arrays
+        const isArray = this.isArrayOfArray(value)
+        value.forEach(row => {
+          let values = []
+          table.columns.forEach((col,i) => {
+              if (isArray) {
+                values.push(row[i])
+              } else if (col.databinding) {
+                values.push(row[col.databinding])
+              } else {
+                let key = col.label
+                if (!row[key]) {
+                  key = key.toLowerCase()
+                }
+                values.push(row[key])
+              }
+          })
+          table.rows.push(values)
+        })
+      
+        return table      
+    },
+
+    isArrayOfArray (value) {
+      if (Array.isArray(value)) {
+        let child = value[0]
+        return Array.isArray(child)
+      }
+      return false
     },
 
     parseData (data) {
@@ -411,16 +544,85 @@ export default {
        * for now assume csv
        */
       if (data.substring) {
-        var table = [];
-        var lines = data.split("\n");
+        const table = [];
+        const lines = data.split("\n");
         for (let i = 0; i < lines.length; i++) {
-          let line = lines[i];
+          const line = lines[i];
           table.push(line.split(","));
         }
         return table;
-      } else {
-        return data;
       }
+      // FIXME: check for Array of Dicts
+      return data;
+    },
+
+     getColumns (data, style) {
+      let columns = data.columns
+
+      // if we have a checkbox we need to add
+      // an empty row and also some adjustments to the table
+      if (style.checkBox) {
+        columns = [''].concat(columns)
+      }
+
+      if (this.props.tableActions && this.props.tableActions.length > 0) {
+        columns = columns.concat([''])
+      }
+      return columns
+    },
+
+    getRowHeight(style) {
+      const h = this._getBorderWidth(style.fontSize) + 
+              this._getBorderWidth(style.paddingLeft) + 
+              this._getBorderWidth(style.paddingRight) + 
+              this._getBorderWidth(style.borderBottomWidth) + 
+              this._getBorderWidth(style.borderTopWidth) 
+      
+      return h
+    },
+
+    getWidths (props, style, fontFactor = 0.6) {
+      const result = [];
+      
+      let widths = this.getRawWidths(props)
+      if (widths) {
+        let sum = 0;
+        const padding = this._getBorderWidth(style.paddingLeft) + this._getBorderWidth(style.paddingRight)
+
+        if (style.checkBox) {
+          const w = style.checkBoxSize ? style.checkBoxSize : style.fontSize
+          widths = [w + padding].concat(widths);
+        }
+        if (props.tableActions && props.tableActions.length > 0) {
+          const text = props.tableActions.map(a => a.label).join()
+          const w = text.length * style.fontSize * fontFactor + padding * props.tableActions.length
+          widths = widths.concat(w)
+        }
+        for (let i = 0; i < widths.length; i++) {
+          sum += widths[i];
+        }
+        for (let i = 0; i < widths.length; i++) {
+          result[i] = widths[i] / sum;
+        }
+      }
+      return result;
+    },
+
+    getRawWidths (props) {
+      let widths = []
+      if (props.columns) {
+        props.columns.forEach((col, i) => {
+          if (col.width) {
+            widths[i] = col.width * 1
+          }
+        })
+      }
+      return widths
+    },
+
+    setValue (value) {
+      this.value = value
+      this.rerender()
     }
   },
   mounted() {}

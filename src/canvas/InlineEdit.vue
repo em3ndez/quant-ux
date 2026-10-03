@@ -1,6 +1,7 @@
 <script>
 import domAttr from 'dojo/domAttr'
 import css from 'dojo/css'
+import on from 'dojo/on'
 
 export default {
     name: 'InlineEdit',
@@ -12,62 +13,62 @@ export default {
     },
     components: {},
     methods: {
-      inlineEditInit (widget, resizeToWidth = false){
-				this.logger.log(-1,"inlineEditInit", "enter", resizeToWidth);
-				this.cleanUpInlineEdit();
-
-				var div = this.renderFactory.getLabelNode(widget);
-				if(div){
-					this._inlineEditWidget = widget;
-					this._inlineEditDiv = div;
-					this._inlineEditResizeToWidth = resizeToWidth
-					this._inlineFocus(null, false, resizeToWidth);
-
-					// this._inlineEditWidgetDiv = this.widgetDivs[widget.id]
-					// console.debug('iniline', this._inlineEditWidgetDiv)
-					// if (this._inlineEditWidgetDiv) {
-					//	css.add(this._inlineEditWidgetDiv, 'MatcBoxInlineEditing')
-					// }
+      	inlineEditInit (widget, resizeToWidth = false){
+			this.logger.log(-1,"inlineEditInit", "enter", resizeToWidth);
+			this.cleanUpInlineEdit();
+			const div = this.renderFactory.getLabelNode(widget);
+			if(div){
+				this._inlineEditWidget = widget;
+				this._inlineEditDiv = div;
+				this._inlineEditResizeToWidth = resizeToWidth
+				this._inlineFocus(null, false, resizeToWidth);
+	
+				const dndDiv = this.widgetDivs[widget.id]
+				if (dndDiv) {
+					this._inlineEditDnDDiv = dndDiv
+					css.add(dndDiv, 'MatcDnDLayerSelectet')
 				}
-			},
+			}
+		},
 
-			inlineEditKeyPress (e){
-				if(!this._inlineEditStarted){
-					if(this._selectWidget){
-						var div = this.renderFactory.getLabelNode(this._selectWidget);
-						if(div){
-							this.logger.log(0,"inlineEditKeyPress", "enter");
-							this._inlineEditWidget = this._selectWidget;
-							this._inlineEditDiv = div;
-							this._inlineFocus(e, false);
-						}
-					}
-				}
-			},
-
-			inlineEditGetCurrent (){
-				if(this._inlineEditWidget && this._inlineEditStarted){
-					var div = this.renderFactory.getLabelNode(this._inlineEditWidget);
+		inlineEditKeyPress (e){
+			if(!this._inlineEditStarted){
+				if(this.getSelectedWidget()){
+					const div = this.renderFactory.getLabelNode(this.getSelectedWidget());
 					if(div){
-						var txt = div.innerHTML;
-						txt = txt.replace(/<div><br>/g, "\n");
-						txt = txt.replace(/<div>/g, "\n");
-						txt = txt.replace(/<br>/g, "\n");
-						txt = txt.replace(/<\/?[^>]+(>|$)/g, "");
-						txt = txt.replace(/%/g, "$perc;"); // Mongo cannot deal with % on undo
-						if(txt != this._inlineInnerHTML){
-							return txt;
-						}
+						this.logger.log(0,"inlineEditKeyPress", "enter");
+						this._inlineEditWidget = this.getSelectedWidget();
+						this._inlineEditDiv = div;
+						this._inlineFocus(e, false);
 					}
 				}
-			},
+			}
+		},
+
+		inlineEditGetCurrent (){
+			if(this._inlineEditWidget && this._inlineEditStarted){
+				const div = this.renderFactory.getLabelNode(this._inlineEditWidget);
+				if(div){
+					let txt = div.innerHTML;
+					txt = txt.replace(/<div><br>/g, "\n");
+					txt = txt.replace(/<div>/g, "\n");
+					txt = txt.replace(/<br>/g, "\n");
+					txt = txt.replace(/<\/?[^>]+(>|$)/g, "");
+					txt = txt.replace(/%/g, "$perc;"); // Mongo cannot deal with % on undo
+					if(txt != this._inlineInnerHTML){
+						return txt;
+					}
+				}
+			}
+		},
 
 		inlineEditStop (){
+			this.logger.log(2,"inlineEditStop", "enter", this._inlineEditResizeToWidth);
 
 			if(this._inlineEditWidget && this._inlineEditStarted){
-				var div = this.renderFactory.getLabelNode(this._inlineEditWidget);
+				const div = this.renderFactory.getLabelNode(this._inlineEditWidget);
 				if(div){
-					var txt = div.innerHTML;
+					let txt = div.innerHTML;
 
 					/**
 					 * This is some weird shit with inline editing. Sometimes
@@ -79,8 +80,13 @@ export default {
 					txt = txt.replace(/<\/?[^>]+(>|$)/g, "");
 					txt = txt.replace(/%/g, "$perc;"); // Mongo cannot deal with % on undo
 
-					if (txt != this._inlineInnerHTML){
-						var id  = this._inlineEditWidget.id;
+					const resizeToWidth = this._inlineEditResizeToWidth
+					this._inlineEditLastStop = new Date().getTime()
+					
+					// only chnag ethe widget label when there was a real change, or
+					// we need to resize (because we a created a new widget with default message)
+					if (txt != this._inlineInnerHTML || resizeToWidth){
+						const id  = this._inlineEditWidget.id;
 
 						/**
 						 * In case of zoom we might flush the value, which will
@@ -97,26 +103,39 @@ export default {
 						 * trigger an rerender > onChangedSelection > etc recursive
 						 * loop!
 						 */
-						let resizeToWidth = this._inlineEditResizeToWidth
-						let noWrap = this._inlineEditWidget.style.nowrap
+						const noWrap = this._inlineEditWidget.style.nowrap
 						this.cleanUpInlineEdit();
 
-						this.logger.log(1,"inlineEditStop", "exit > FLUSH > " + txt);
+						this.logger.log(2,"inlineEditStop", "exit > FLUSH > " + txt, resizeToWidth);
 						if (resizeToWidth || noWrap === true) {
 							this.controller.updateWidgetLabel(id, txt);
 						} else {
 							this.controller.updateWidgetProperties(id, {label : txt}, "props", true);
 						}
-
+					
 						return txt;
 					} else {
 						this.logger.log(3,"inlineEditStop", "exit > no chnage!");
 					}
+			
 				}
 			}
+	
 			this.cleanUpInlineEdit();
+			this.clearInlineEditSelections()
 		},
 
+		clearInlineEditSelections () {
+			if (window.getSelection) {
+				if (window.getSelection().empty) {  // Chrome
+					window.getSelection().empty();
+				} else if (window.getSelection().removeAllRanges) {  // Firefox
+					window.getSelection().removeAllRanges();
+				}
+				} else if (document.selection) {  // IE?
+				document.selection.empty();
+			}
+		},
 
 
 		inlineEditStarted  (){
@@ -136,6 +155,8 @@ export default {
 			}
 
 			if(!this._inlineEditStarted && this._inlineEditDiv){
+				// on ESC cancel editing, BUT save
+				this.setCanvasCancelCallback('inlineEditStop')
 
 				if(!this._inlineEditWidget.props.label &&!doNotEmptyOnNull){
 				    this._inlineEditDiv.innerHTML = "";
@@ -154,6 +175,21 @@ export default {
 				}
 				css.add(this.domNode, "MatcCanvasModeInlineEdit");
 			}
+
+			// make sure we just past raw text
+			this._inlineCopyEventListener = on(this._inlineEditDiv, 'paste', e => {
+				try {
+					const paste = (e.clipboardData || window.clipboardData).getData('text');
+					const selection = window.getSelection();
+					if (!selection.rangeCount) return;
+					selection.deleteFromDocument();
+					selection.getRangeAt(0).insertNode(document.createTextNode(paste));
+					selection.collapseToEnd();
+					e.preventDefault()
+				} catch (err) {
+					this.logger.error("_inlineFocus", "Some error on paste", err);
+				}
+			})
 
 			this._inlineEditStarted = true;
 
@@ -180,6 +216,14 @@ export default {
 				this._inlineEditWidgetDiv = null;
 			}
 
+			if (this._inlineCopyEventListener) {
+				this._inlineCopyEventListener.remove()
+			}
+
+			if (this._inlineEditDnDDiv) {
+				css.remove(this._inlineEditDnDDiv, 'MatcDnDLayerSelectet')
+			}
+
 			if(this._inlineEditDiv){
 				domAttr.set(this._inlineEditDiv, "contenteditable", false);
 				this._inlineEditDiv.setAttribute("contentEditable", false);
@@ -197,9 +241,10 @@ export default {
 				this._inlineMouseUp.remove();
 				this._inlineMouseUp = null;
 			}
-
+			
 			this._inlineEditWidget = null;
 			this._inlineInnerHTML = null;
+			this._inlineEditDnDDiv = null
 			this._inlineEditStarted = false;
 			this._inlineEditResizeToWidth = false
 

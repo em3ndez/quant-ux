@@ -3,32 +3,13 @@ import Evented from '../dojo/Evented'
 import ModelGeom from './ModelGeom'
 import ModelResizer from './ModelResizer'
 import ModelUtil from './ModelUtil'
+import * as DistributeUtil  from './DistributionUtil'
 
+// FIXME: I believe we do not need  evented
 export default class Core extends Evented {
 
     constructor() {
         super()
-    }
-
-    getContainedChildWidgets(container, model) {
-        let result = []
-        /*
-         * Loop over sorted list
-         */
-        let sortedWidgets = this.getOrderedWidgets(model.widgets)
-        let found = false
-        for (let i = 0; i < sortedWidgets.length; i++) {
-            let widget = sortedWidgets[i]
-            if (container.id != widget.id) {
-                if (found && this._isContainedInBox(widget, container)) {
-                    widget.container = container.id
-                    result.push(widget)
-                }
-            } else {
-                found = true
-            }
-        }
-        return result;
     }
 
     /**
@@ -38,13 +19,13 @@ export default class Core extends Evented {
      * @param {*} container
      */
     getParentWidgets(widget, model) {
-        let result = []
+        const result = []
         /*
          * Loop over sorted list
          */
-        let sortedWidgets = this.getOrderedWidgets(model.widgets)
+        const sortedWidgets = this.getOrderedWidgets(model.widgets)
         for (let i = 0; i < sortedWidgets.length; i++) {
-            let container = sortedWidgets[i]
+            const container = sortedWidgets[i]
             //console.debug('Repeater.core', container.name, container.isContainer, container.id, widget.id)
             /**
              * if the widget is the potential container, we can stop,
@@ -78,29 +59,29 @@ export default class Core extends Evented {
      **********************************************************************/
     getClones(ids, target) {
 
-        var result = [];
-        var previews = [];
+        const result = [];
+        const previews = [];
 
         // 1) get bounding box
-        var boudingBox = this.getBoundingBox(ids);
+        const boudingBox = this.getBoundingBox(ids);
 
-        var xFactor = 1;
+        let xFactor = 1;
         if (boudingBox.x > target.x) {
             xFactor = -1;
         }
 
-        var yFactor = 1;
+        let yFactor = 1;
         if (boudingBox.y > target.y) {
             yFactor = -1;
         }
 
-        var xCount = Math.floor(target.w / boudingBox.w);
-        var yCount = Math.floor(target.h / boudingBox.h);
-        var xSpace = Math.round((target.w - xCount * boudingBox.w) / Math.max(1, xCount - 1));
-        var ySpace = Math.round((target.h - yCount * boudingBox.h) / Math.max(1, yCount - 1));
+        const xCount = Math.floor(target.w / boudingBox.w);
+        const yCount = Math.floor(target.h / boudingBox.h);
+        const xSpace = Math.round((target.w - xCount * boudingBox.w) / Math.max(1, xCount - 1));
+        const ySpace = Math.round((target.h - yCount * boudingBox.h) / Math.max(1, yCount - 1));
         //console.debug("getClones > x: ", xCount,xSpace, " y:", yCount, ySpace, " >> bb: ", boudingBox.w, boudingBox.h, boudingBox.y)
 
-        var offSets = {};
+        const offSets = {};
         for (let i = 0; i < ids.length; i++) {
             let id = ids[i];
             var box = this.getBoxById(id);
@@ -112,16 +93,16 @@ export default class Core extends Evented {
         }
 
         // now create grid but not at 0,0
-        var count = 0;
+        let count = 0;
         for (let x = 0; x < xCount; x++) {
             for (let y = 0; y < yCount; y++) {
                 if (x != 0 || y != 0) {
                     let id;
                     for (let i = 0; i < ids.length; i++) {
                         id = ids[i];
-                        var offset = offSets[id];
+                        const offset = offSets[id];
                         //console.debug(id,offset.x, offset.y , offset.box.h + ySpace + offset.y)
-                        var clone = {
+                        const clone = {
                             w: boudingBox.w,
                             h: boudingBox.h,
                             x: boudingBox.x + (x * (boudingBox.w + xSpace) + offset.x) * xFactor,
@@ -135,7 +116,7 @@ export default class Core extends Evented {
                     /**
                      * FIXME: Should this be in the loop?
                      */
-                    var preview = {
+                    const preview = {
                         w: boudingBox.w,
                         h: boudingBox.h,
                         x: boudingBox.x + x * (boudingBox.w + xSpace) * xFactor,
@@ -174,9 +155,9 @@ export default class Core extends Evented {
         if (!model) {
             model = this.model
         }
-        for (var id in model.screens) {
-            var screen = model.screens[id];
-            var i = screen.children.indexOf(widget.id);
+        for (let id in model.screens) {
+            const screen = model.screens[id];
+            const i = screen.children.indexOf(widget.id);
             if (i > -1) {
                 return screen;
             }
@@ -185,7 +166,7 @@ export default class Core extends Evented {
     }
 
     getWidgetPostionInScreen(widget, model) {
-        var screen = this.getParentScreen(widget, model);
+        const screen = this.getParentScreen(widget, model);
         if (screen) {
             return {
                 x: widget.x - screen.x,
@@ -203,21 +184,11 @@ export default class Core extends Evented {
         }
     }
 
-    _correctBoundindBox(boundingbox, modelBoundingBox) {
-        if (Math.abs(boundingbox.x - modelBoundingBox.x) <= 2) {
-            boundingbox.x = modelBoundingBox.x;
-        }
-
-        if (Math.abs(boundingbox.y - modelBoundingBox.y) <= 2) {
-            boundingbox.y = modelBoundingBox.y;
-        }
-        return boundingbox;
-    }
-
     /**
      * Gets the new position for a group child
      */
     _getGroupChildResizePosition(widget, oldGroup, newGroup, dif) {
+        console.warn("DEPRECATED! _getGroupChildResizePosition()")
         return ModelResizer.getGroupChildResizePosition(widget, oldGroup, newGroup, dif)
     }
 
@@ -232,15 +203,8 @@ export default class Core extends Evented {
     }
 
     getArrayFromObject(obj, key) {
-        var result = [];
-        for (var i in obj) {
-            var item = obj[i];
-            if (key) {
-                item[key] = i;
-            }
-            result.push(item);
-        }
-        return result;
+        console.error('Core.getArrayFromObject() > Deprecated')
+        return ModelUtil.getArrayFromObject(obj, key)
     }
 
     getWidgetsByDistanceAndType(widget, types) {
@@ -278,276 +242,7 @@ export default class Core extends Evented {
      * Distribute Tool
      **********************************************************************/
     _distributedPositions(type, ids, boundingBox) {
-        /**
-         * 1) get all subsets (rows or columns) depending on type
-         */
-        var sets = [];
-        for (let i = 0; i < ids.length; i++) {
-            var widgetID = ids[i];
-            var widget = this.model.widgets[widgetID];
-            if (widget) {
-                /**
-                 * Attention: This seems counter intuitive. But for vertical,
-                 * we have to find columns (x axis) and for horizontal we need
-                 * rows (z - axis).
-                 */
-                if (type == "vertical") {
-                    let start = widget.x;
-                    let end = widget.x + widget.w;
-                    this._addToDisSet(sets, widget, start, end);
-                } else {
-                    let start = widget.y;
-                    let end = widget.y + widget.h;
-                    this._addToDisSet(sets, widget, start, end);
-                }
-            }
-        }
-
-        /**
-         * Now resize for every set!
-         */
-        var result = {};
-        var distances = [];
-        for (let i = 0; i < sets.length; i++) {
-            var set = sets[i];
-            var temp = this._distributedPositionsInSubSet(
-                type,
-                set.children,
-                boundingBox
-            );
-            var tempPositions = temp.positions;
-            for (var id in tempPositions) {
-                if (!result[id]) {
-                    result[id] = tempPositions[id];
-                }
-            }
-            distances = distances.concat(temp.distances);
-        }
-
-        return {
-            positions: result,
-            distances: distances
-        };
-    }
-
-    _addToDisSet(sets, widget, start, end) {
-        var overlapps = [];
-
-        for (let i = 0; i < sets.length; i++) {
-            var set = sets[i];
-            var overlap = this._getDisOverlap(start, end, set.start, set.end);
-            if (overlap > 0) {
-                set.start = Math.min(set.start, start);
-                set.end = Math.max(set.end, end);
-                set.children.push(widget.id);
-                set.pos = i;
-                overlapps.push(set);
-            }
-        }
-        if (overlapps.length == 0) {
-            sets.push({
-                start: start,
-                end: end,
-                children: [widget.id]
-            });
-        }
-
-        /**
-         * If an element is in two sets, the sets should be merged!
-         * This is not super important, as we would have in worst
-         * case one set, which would fuck up rending in worst case...
-         * Actually this should not happen often (or at all)
-         */
-        if (overlapps.length > 1) {
-            var merged = {
-                start: start,
-                end: end,
-                children: []
-            };
-            for (let i = 0; i < overlapps.length; i++) {
-                let temp = overlapps[i];
-                merged.start = Math.min(merged.start, temp.start);
-                merged.end = Math.max(merged.end, temp.end);
-                merged.children = merged.children.concat(temp.children);
-                sets.splice(temp.pos, 1);
-            }
-        }
-    }
-
-    _getDisOverlap(a, b, c, d) {
-        //return Math.max(0, Math.min(max1, max2) - Math.max(min1, min2))
-        return (
-            Math.min(Math.max(a, b), Math.max(c, d)) -
-            Math.max(Math.min(c, d), Math.min(a, b))
-        );
-    }
-
-    _distributedPositionsInSubSet(type, ids, boundingBox) {
-        var result = {};
-
-        /**
-         * 1) find groups... This can be bounding boxes or single widgets
-         */
-        var boxes = this._getSelectionGroupPositions(ids);
-
-        /**
-         * 2) Now we calculate the positions
-         */
-        var positions = this._getDistributedPositions(type, boxes, boundingBox);
-        var distances = [];
-        /**
-         * 3) now we fit the group children to their parents...
-         */
-        for (var id in positions) {
-            var newPos = positions[id];
-            if (newPos.children) {
-                for (var widgetID in newPos.children) {
-                    var widgetPos = newPos.children[widgetID];
-                    widgetPos.x = newPos.x + widgetPos.offSetX;
-                    widgetPos.y = newPos.y + widgetPos.offSetY;
-                    result[widgetID] = widgetPos;
-                }
-            } else {
-                result[id] = newPos;
-            }
-
-            if (newPos.distanceX || newPos.distanceY) {
-                distances.push({
-                    x: newPos.distanceX,
-                    y: newPos.distanceY
-                });
-            }
-        }
-
-        return {
-            positions: result,
-            distances: distances
-        };
-    }
-
-    _getDistributedPositions(type, boxes, boundingBox) {
-        var positions = {};
-
-        boxes.sort(function (a, b) {
-            if (type == "vertical") {
-                return a.y - b.y;
-            } else {
-                return a.x - b.x;
-            }
-        });
-        var sum = 0;
-        for (let i = 0; i < boxes.length; i++) {
-            var box = boxes[i];
-            if (type == "vertical") {
-                sum += box.h;
-            } else {
-                sum += box.w;
-            }
-        }
-        var last = boxes[boxes.length - 1];
-        if (type == "vertical") {
-            sum = boundingBox.h - sum;
-        } else {
-            sum = boundingBox.w - sum;
-        }
-
-        var space = sum / (boxes.length - 1);
-        last = 0;
-        var lastBox = null;
-        for (let i = 0; i < boxes.length; i++) {
-            let widget = boxes[i];
-
-            let widgetPos = {
-                x: widget.x,
-                y: widget.y,
-                h: widget.h,
-                w: widget.w,
-                children: widget.children
-            };
-            if (i == 0) {
-                if (type == "vertical") {
-                    widgetPos.y = boundingBox.y;
-                    last = widgetPos.y + widgetPos.h;
-                } else {
-                    widgetPos.x = boundingBox.x;
-                    last = widgetPos.x + widgetPos.w;
-                }
-            } else if (i == boxes.length - 1) {
-                if (type == "vertical") {
-                    widgetPos.y = Math.round(boundingBox.y + boundingBox.h - widget.h);
-                } else {
-                    widgetPos.x = Math.round(boundingBox.x + boundingBox.w - widget.w);
-                }
-            } else {
-                if (type == "vertical") {
-                    widgetPos.y = Math.round(last + space);
-                    last = Math.round(widgetPos.y + widgetPos.h);
-                } else {
-                    widgetPos.x = Math.round(last + space);
-                    last = Math.round(widgetPos.x + widgetPos.w);
-                }
-            }
-
-            /**
-             * Also store distance so we can show later!
-             */
-            if (lastBox) {
-                if (type == "vertical") {
-                    widgetPos.distanceY = {
-                        y: lastBox.y + lastBox.h,
-                        h: widgetPos.y - (lastBox.y + lastBox.h),
-                        x: Math.round(widgetPos.x + widgetPos.w / 2)
-                    };
-                } else {
-                    //console.debug("distHor", widgetPos.x - (lastBox.x +lastBox.w))
-                    widgetPos.distanceX = {
-                        x: lastBox.x + lastBox.w,
-                        w: widgetPos.x - (lastBox.x + lastBox.w),
-                        y: Math.round(widgetPos.y + widgetPos.h / 2)
-                    };
-                }
-            }
-
-            positions[widget.id] = widgetPos;
-            lastBox = widgetPos;
-        }
-        return positions;
-    }
-
-
-    /**
-     * Get widget positions and bounding boxes for groups...
-     */
-    _getSelectionGroupPositions(ids) {
-        var groups = {};
-        for (var i = 0; i < ids.length; i++) {
-            var widgetID = ids[i];
-            var widget = this.model.widgets[widgetID];
-            var group = this.getParentGroup(widgetID);
-            if (group) {
-                if (!groups[group.id]) {
-                    var bbx = this.getBoundingBox(group.children);
-                    bbx.children = {};
-                    groups[group.id] = bbx;
-                }
-                groups[group.id].children[widgetID] = {
-                    x: widget.x,
-                    y: widget.y,
-                    h: widget.h,
-                    w: widget.w,
-                    offSetX: widget.x - bbx.x,
-                    offSetY: widget.y - bbx.y
-                };
-            } else {
-                groups[widgetID] = {
-                    x: widget.x,
-                    y: widget.y,
-                    h: widget.h,
-                    w: widget.w
-                };
-            }
-        }
-        return this.getArrayFromObject(groups, "id");
+        return DistributeUtil.distributedPositions(this.model, type, ids, boundingBox)
     }
 
 
@@ -556,16 +251,16 @@ export default class Core extends Evented {
      **********************************************************************/
 
     getGroupBoundingBox(ids) {
-        var result = {
+        const result = {
             x: 100000000,
             y: 100000000,
             w: 0,
             h: 0
         };
 
-        for (var i = 0; i < ids.length; i++) {
-            var id = ids[i];
-            var box = this.model.widgets[id];
+        for (let i = 0; i < ids.length; i++) {
+            const id = ids[i];
+            const box = this.model.widgets[id];
             if (box) {
                 result.x = Math.min(result.x, box.x);
                 result.y = Math.min(result.y, box.y);
@@ -641,29 +336,8 @@ export default class Core extends Evented {
         }
     }
 
-    getStyle(model) {
-        if (model.template) {
-            if (this.model.templates) {
-                var t = this.model.templates[model.template];
-                if (t) {
-                    /**
-                     * Merge in overwriten styles
-                     */
-                    let merged = lang.clone(t.style)
-                    if (model.style) {
-                        for (let key in model.style) {
-                            merged[key] = model.style[key]
-                        }
-                    } else {
-                        console.debug('Layout.getStyle() >  mdel has no style',)
-                    }
-                    return merged;
-                } else {
-                    console.warn("Layout.getStyle() > No template found for widget", model.id, " with template ", model.template);
-                }
-            }
-        }
-        return model.style;
+    getStyle(element) {
+        return ModelUtil.getStyle(element, this.model)
     }
 
 
@@ -741,9 +415,47 @@ export default class Core extends Evented {
         return result;
     }
 
+    getGroupHierarchy (id) {
+        const result = []
+        let group = this.getParentGroup(id)
+        if (group) {
+          result.push(group.id)
+          while (group) {
+            group = this.getParentGroup(group.id)
+            if (group) {
+              result.unshift(group.id)
+            }
+          }
+        }
+        return result
+    }
+
+    getCommonParentGroup(selection) {
+		const parentGroups = new Set()
+		let result = null
+		for (let i = 0; i < selection.length; i++) {
+			const widgetID = selection[i];
+			const group = this.getParentGroup(widgetID);
+			if (group) {
+				result = group
+				parentGroups.add(group.id)
+			} else {
+				// no group, we need to create a new parent group
+				return
+			}
+			
+		}
+		// if we have one parentGroup we need to create a 
+		// new sub group
+		if(parentGroups.size === 1) {
+			return result
+		}
+	}
+
     getTopParentGroup(id) {
         let group = this.getParentGroup(id)
         if (group) {
+            let i = 0
             while (group) {
                 let parent = this.getParentGroup(group.id)
                 if (parent) {
@@ -754,6 +466,11 @@ export default class Core extends Evented {
                      * all children... not sure it this is needed
                      */
                     return group
+                }
+                i++
+                if (i > 32) {
+                    console.error('Core.getTopParentGroup() > To deep recursion for widget : ' + id, group)
+                    return null    
                 }
             }
         }
@@ -778,18 +495,16 @@ export default class Core extends Evented {
     }
 
     getAllGroupChildren(group) {
+        // FIXME: Use ModelUtil.getAllGroupChildren(group, this.model)
         if (!group.children) {
             return []
         }
         let result = group.children.slice(0)
-        /**
-         * Check all sub groups
-         */
         if (group.groups) {
             group.groups.forEach(subId => {
-                let sub = this.model.groups[subId]
+                const sub = this.model.groups[subId]
                 if (sub) {
-                    let children = this.getAllGroupChildren(sub)
+                    const children = this.getAllGroupChildren(sub)
                     result = result.concat(children)
                 } else {
                     console.warn('getAllGroupChildren() No sub group', subId)
@@ -800,10 +515,11 @@ export default class Core extends Evented {
     }
 
     getParentGroup(widgetID) {
+
         if (this.model.groups) {
-            for (var id in this.model.groups) {
-                var group = this.model.groups[id];
-                var i = group.children.indexOf(widgetID);
+            for (let id in this.model.groups) {
+                const group = this.model.groups[id];
+                const i = group.children.indexOf(widgetID);
                 if (i > -1) {
                     return group;
                 }
@@ -822,17 +538,11 @@ export default class Core extends Evented {
     }
 
     getZoomed(v, zoom, round = true) {
-        if (round) {
-            return Math.round(v * zoom);
-        }
-        return v * zoom
+       return ModelUtil.getZoomed(v, zoom, round)
     }
 
     getZoomedCeil(v, zoom, round = true) {
-        if (round) {
-            return Math.ceil(v * zoom);
-        }
-        return v * zoom
+       return ModelUtil.getZoomedCeil(v, zoom, round)
     }
 
     getUnZoomed(v, zoom) {
@@ -840,33 +550,7 @@ export default class Core extends Evented {
     }
 
     getZoomedBox(box, zoomX, zoomY, round = true) {
-        if (box.x) {
-            box.x = this.getZoomed(box.x, zoomX, round);
-        }
-
-        if (box.y) {
-            box.y = this.getZoomed(box.y, zoomY, round);
-        }
-
-        /**
-         * Since 2.2.5 we use ceil for w and h
-         */
-        if (box.w) {
-            box.w = this.getZoomedCeil(box.w, zoomX, round);
-        }
-
-        if (box.h) {
-            box.h = this.getZoomedCeil(box.h, zoomY, round);
-        }
-
-        if (box.min) {
-            box.min.h = this.getZoomed(box.min.h, zoomY, round);
-            box.min.w = this.getZoomed(box.min.w, zoomX, round);
-        }
-
-        box.isZoomed = true;
-
-        return box;
+        return ModelUtil.getZoomedBox(box, zoomX, zoomY, round)
     }
 
     getZoomedBoxCopy (box, zoomX, zoomY) {
@@ -951,7 +635,7 @@ export default class Core extends Evented {
         if (!zoomY) {
             zoomY = zoomX;
         }
-        var zoomedModel = lang.clone(model);
+        const zoomedModel = lang.clone(model);
         zoomedModel.isZoomed = true;
 
         this.getZoomedBox(zoomedModel.screenSize, zoomX, zoomY);
@@ -961,7 +645,7 @@ export default class Core extends Evented {
         }
 
         for (let id in zoomedModel.screens) {
-            var zoomedScreen = this.getZoomedBox(
+            const zoomedScreen = this.getZoomedBox(
                 zoomedModel.screens[id],
                 zoomX,
                 zoomY
@@ -976,16 +660,16 @@ export default class Core extends Evented {
              * As an alternative we could stop using Math.round() ...
              */
             for (let i = 0; i < zoomedScreen.children.length; i++) {
-                let wid = zoomedScreen.children[i];
-                let zoomWidget = zoomedModel.widgets[wid];
-                let orgWidget = model.widgets[wid];
+                const wid = zoomedScreen.children[i];
+                const zoomWidget = zoomedModel.widgets[wid];
+                const orgWidget = model.widgets[wid];
                 if (orgWidget) {
                     /**
                      * When we copy a screen we might not have the org widget yet
                      */
-                    var orgScreen = model.screens[zoomedScreen.id];
-                    var difX = this.getZoomed(orgWidget.x - orgScreen.x, zoomX);
-                    var difY = this.getZoomed(orgWidget.y - orgScreen.y, zoomY);
+                    const orgScreen = model.screens[zoomedScreen.id];
+                    const difX = this.getZoomed(orgWidget.x - orgScreen.x, zoomX);
+                    const difY = this.getZoomed(orgWidget.y - orgScreen.y, zoomY);
                     if (orgWidget.parentWidget) {
                         if (zoomWidget.x >= 0) {
                             zoomWidget.x = zoomedScreen.x + difX;
@@ -1002,7 +686,7 @@ export default class Core extends Evented {
         }
 
         for (let id in zoomedModel.lines) {
-            let line = zoomedModel.lines[id];
+            const line = zoomedModel.lines[id];
             for (let i = 0; i < line.points.length; i++) {
                 this.getZoomedBox(line.points[i], zoomX, zoomY);
             }
@@ -1011,7 +695,7 @@ export default class Core extends Evented {
         /**
          * Now do inheritance here
          */
-        var inheritedModel = this.createInheritedModel(zoomedModel);
+        const inheritedModel = this.createInheritedModel(zoomedModel);
 
         return inheritedModel;
     }
@@ -1021,7 +705,7 @@ export default class Core extends Evented {
         /**
          * Build lookup map for overwrites
          */
-        var overwritenWidgets = {};
+        const overwritenWidgets = {};
         for (let screenID in model.screens) {
             let screen = model.screens[screenID];
             overwritenWidgets[screenID] = {};
@@ -1034,8 +718,8 @@ export default class Core extends Evented {
             }
         }
 
-
-        var inModel = lang.clone(model);
+        // Todo: we could check if the model is zoomed and not clone...
+        let inModel = lang.clone(model);
         inModel.inherited = true;
 
 
@@ -1136,6 +820,7 @@ export default class Core extends Evented {
 
                                         if (overwritenWidget) {
                                             //console.debug("inheried() ",overwritenWidgetID,  overwritenWidget.style.background)
+                               
                                             overwritenWidget.props = this.mixin(lang.clone(parentWidget.props), overwritenWidget.props, true);
                                             overwritenWidget.style = this.mixin(lang.clone(parentWidget.style), overwritenWidget.style, true);
                                             //console.debug("   ->", overwritenWidget.style.background, overwritenWidget.style._mixed.background)
@@ -1189,6 +874,11 @@ export default class Core extends Evented {
          * Inline designtokens. must come last, otherwise master screen widgets are not correctly filled.
          */
         inModel = ModelUtil.inlineModelDesignTokens(inModel)
+
+        /**
+         * Since 4.0.60 we want to inline also all template variants
+         */
+        inModel = ModelUtil.inlineAllTemplateVariants(inModel)
         return inModel;
     }
 
@@ -1216,12 +906,18 @@ export default class Core extends Evented {
     }
 
     createScreenSegmentModel(inModel) {
+        // TODO: why not build a lookup map (screenID, List[Widgets]), so 
+        // we don't have to do the forEach loop down?
         let screenSegments = []
         for (let widgetID in inModel.widgets) {
             let widget = inModel.widgets[widgetID]
             if (widget.type === 'ScreenSegment') {
                 screenSegments.push(widget)
             }
+        }
+        if (screenSegments.length < 0) {
+            // we could already step out in here
+            // return
         }
         for (let screenID in inModel.screens) {
             let screen = inModel.screens[screenID];
@@ -1252,23 +948,44 @@ export default class Core extends Evented {
 
     createContaineredModel(inModel) {
         for (let screenID in inModel.screens) {
-            let screen = inModel.screens[screenID];
+            const screen = inModel.screens[screenID];
             for (let i = 0; i < screen.children.length; i++) {
-                let widgetID = screen.children[i];
-                let widget = inModel.widgets[widgetID];
+                const widgetID = screen.children[i];
+                const widget = inModel.widgets[widgetID];
                 if (widget) {
                     if (widget.isContainer) {
-                        let children = this.getContainedChildWidgets(widget, inModel)
+                        let children = this.getContainedChildWidgets(widget, inModel, screen)
                         widget.children = children.map(w => w.id)
                     }
-                } else {
-                    /**
-                     * FIXME: This can happen for screen copies...
-                     */
-                    // console.warn('Core.createContaineredModel() > cannot find widgte', widgetID)
                 }
             }
         }
+        // containers do not work on canvas???
+    }
+
+    getContainedChildWidgets(container, model, scrn) {
+        const result = []
+        /*
+         * Loop over sorted list.
+         * TODO: make this faster. We could get the screen of the container,
+         * and then just loop over the screen children
+         * 
+         * //sortChildren(screen.children, model)
+         */
+        const sortedWidgets = this.sortChildren(scrn.children, model) //this.getOrderedWidgets(model.widgets) ////sortChildren(screen.children, model)
+        let found = false
+        for (let i = 0; i < sortedWidgets.length; i++) {
+            const widget = sortedWidgets[i]
+            if (container.id != widget.id) {
+                if (found && this._isContainedInBox(widget, container)) {
+                    widget.container = container.id
+                    result.push(widget)
+                }
+            } else {
+                found = true
+            }
+        }
+        return result;
     }
 
     static addContainerChildrenToModel(model) {
@@ -1411,8 +1128,8 @@ export default class Core extends Evented {
         /**
          * convert values to a sorted list!
          */
-        var list = [];
-        for (var id in values) {
+        const list = [];
+        for (let id in values) {
             list.push({
                 id: id,
                 z: values[id]
@@ -1420,11 +1137,11 @@ export default class Core extends Evented {
         }
         this.sortWidgetList(list);
 
-        var z = -1;
-        var lastZ = null;
-        var result = {};
-        for (var i = 0; i < list.length; i++) {
-            var w = list[i];
+        let z = 0;
+        let lastZ = null;
+        let result = {};
+        for (let i = 0; i < list.length; i++) {
+            let w = list[i];
             if (lastZ === null || lastZ != w.z) {
                 z++;
                 lastZ = w.z;
@@ -1436,10 +1153,10 @@ export default class Core extends Evented {
     }
 
     getMinZValue(widgets) {
-        var min = 100000;
-        var l = 0;
-        for (var id in widgets) {
-            var w = widgets[id];
+        let min = 100000;
+        let l = 0;
+        for (let id in widgets) {
+            const w = widgets[id];
             min = Math.min(w.z, min);
             l++;
         }
@@ -1451,10 +1168,10 @@ export default class Core extends Evented {
     }
 
     getMaxZValue(widgets) {
-        var max = -10000;
-        var l = 0;
-        for (var id in widgets) {
-            var w = widgets[id];
+        let max = -10000;
+        let l = 0;
+        for (let id in widgets) {
+            const w = widgets[id];
             max = Math.max(w.z, max);
             l++;
         }
@@ -1466,9 +1183,9 @@ export default class Core extends Evented {
     }
 
     getZValues(widgets) {
-        var values = {};
-        for (var id in widgets) {
-            var widget = widgets[id];
+        const values = {};
+        for (let id in widgets) {
+            const widget = widgets[id];
             this.fixMissingZValue(widget);
             values[id] = widget.z;
         }
@@ -1495,11 +1212,10 @@ export default class Core extends Evented {
     /**
      * Get children
      */
-
     getOrderedWidgets(widgets, useIds = true) {
-        var result = [];
-        for (var id in widgets) {
-            var widget = widgets[id];
+        const result = [];
+        for (let id in widgets) {
+            const widget = widgets[id];
             if (widget) {
                 this.fixMissingZValue(widget);
                 result.push(widget);
@@ -1518,10 +1234,10 @@ export default class Core extends Evented {
         if (!model) {
             model = this.model
         }
-        var result = [];
-        for (var i = 0; i < children.length; i++) {
-            var widgetID = children[i];
-            var widget = model.widgets[widgetID];
+        const result = [];
+        for (let i = 0; i < children.length; i++) {
+            const widgetID = children[i];
+            const widget = model.widgets[widgetID];
             if (widget) {
                 this.fixMissingZValue(widget);
                 result.push(widget);
@@ -1554,7 +1270,7 @@ export default class Core extends Evented {
          * we have to check if style exists, because the Toolbar.onToolWidgetLayer()
          * call the method without styles.
          */
-        var isFixed = (w) => {
+        let isFixed = (w) => {
             if (w.style && w.style.fixed) {
                 return true;
             }
@@ -1562,8 +1278,8 @@ export default class Core extends Evented {
         };
 
         result.sort((a, b) => {
-            var aFix = isFixed(a);
-            var bFix = isFixed(b);
+            let aFix = isFixed(a);
+            let bFix = isFixed(b);
 
 
             /**
@@ -1687,9 +1403,9 @@ export default class Core extends Evented {
     }
 
     getLines(box, deep) {
-        var result = [];
+        const result = [];
 
-        var _ids = {};
+        const _ids = {};
 
         for (let id in this.model.lines) {
             let line = this.model.lines[id];
@@ -1699,7 +1415,7 @@ export default class Core extends Evented {
             }
         }
 
-        if (box.children && deep) {
+        if (box && box.children && deep) {
             for (let i = 0; i < box.children.length; i++) {
                 let childID = box.children[i];
                 for (let id in this.model.lines) {
@@ -1741,7 +1457,7 @@ export default class Core extends Evented {
      * group the bounding box!
      */
     getFromBox(line) {
-        var fromPos = this.model.widgets[line.from];
+        let fromPos = this.model.widgets[line.from];
 
         if (!fromPos) {
             fromPos = this.model.screens[line.from];
@@ -1751,9 +1467,10 @@ export default class Core extends Evented {
             /**
              * no widget, must be a group
              */
-            var group = this.model.groups[line.from];
+            const group = this.model.groups[line.from];
             if (group) {
-                fromPos = this.getBoundingBox(group.children);
+                const children = this.getAllGroupChildren(group)
+                fromPos = this.getBoundingBox(children);
             }
         }
 

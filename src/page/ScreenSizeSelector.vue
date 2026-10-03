@@ -22,42 +22,22 @@ export default {
     return {
       value: null,
       types: {
-        "IPhone X / 11 / 12": {
+        "Smartphone": {
           type: "smartphone",
           screenSize: { w: 375, h: 812 },
           factor: 2
         },
-        "IPhone 11 / 12 Max": {
+        "Smartphone (Max)": {
           type: "smartphone",
           screenSize: { w: 414, h: 896 },
           factor: 2
         },
-        "IPhone 6 / 7 / 8": {
-          type: "smartphone",
-          screenSize: { w: 375, h: 667 },
-          factor: 2
-        },
-        "IPhone 6 / 7 / 8+": {
-          type: "smartphone",
-          screenSize: { w: 414, h: 736 },
-          factor: 2
-        },
-        "IPhone 5 / 6SE": {
-          type: "smartphone",
-          screenSize: { w: 320, h: 568 },
-          factor: 2
-        },
-        "Galaxy S6": {
-          type: "smartphone",
-          screenSize: { w: 360, h: 640 },
-          factor: 3
-        },
-        "IPad (Vertical)": {
+        "Tablet (Vertical)": {
           type: "tablet",
           screenSize: { w: 768, h: 1024 },
           factor: 2
         },
-        "IPad (Horizontal)": {
+        "Tablet (Horizontal)": {
           type: "tablet",
           screenSize: { w: 1024, h: 768 },
           factor: 2
@@ -68,7 +48,7 @@ export default {
   },
   components: {},
   methods: {
-    postCreate: function() {
+    postCreate () {
       this.logger = new Logger("ScreenSizeSelector");
       this.logger.log(2, "postCreate", "enter >" + this.mode);
 
@@ -122,10 +102,10 @@ export default {
       this._checks["custom"] = c;
       this._divs["custom"] = custom;
       this.cntr.appendChild(parent);
-      this.onTypePress("IPhone X / 11 / 12");
+      this.onTypePress("Smartphone");
     },
 
-    onCustomSelected: function() {
+    onCustomSelected () {
       this.cleanup();
       this._checks["custom"].setValue(true);
       css.add(this._divs["custom"], "MatcScreenSizeItemSelected");
@@ -144,16 +124,21 @@ export default {
       this.$emit("change", this.getValue());
     },
 
-    onTypePress: function(type) {
+    onTypePress (type) {
       this.cleanup();
-      this._checks[type].setValue(true);
-      css.add(this._divs[type], "MatcScreenSizeItemSelected");
-      this.value = this.types[type];
-      this._isCustom = false;
-      this.$emit("change", this.getValue());
+      if (this._checks[type]) {
+        this._checks[type].setValue(true);
+        css.add(this._divs[type], "MatcScreenSizeItemSelected");
+        this.value = this.types[type];
+        this._isCustom = false;
+        this.$emit("change", this.getValue());
+      } else {
+        console.warn("onTypePress() > Not supported type: ", type)
+      }
+      
     },
 
-    setValue: function(m) {
+    setValue (m) {
       var selected = null;
       for (var id in this.types) {
         var type = this.types[id];
@@ -176,7 +161,7 @@ export default {
       }
     },
 
-    getValue: function() {
+    getValue () {
       if (this._isCustom) {
         // Fix for Jessica
         let type = 'smartphone'
@@ -194,7 +179,7 @@ export default {
       return this.value;
     },
 
-    cleanup: function() {
+    cleanup () {
       for (var t in this._checks) {
         this._checks[t].setValue(false);
         css.remove(this._divs[t], "MatcScreenSizeItemSelected");
